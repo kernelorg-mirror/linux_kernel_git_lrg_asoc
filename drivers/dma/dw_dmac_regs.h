@@ -107,9 +107,22 @@ struct dw_dma_regs {
 #define dma_writel_native writel
 #endif
 
+#define DW_DMAC_IO_DEBUG
+
+#ifdef DW_DMAC_IO_DEBUG
+/* To access the registers in early stage of probe */
+#define dma_read_byaddr(addr, name) ({					\
+	unsigned int val;						\
+	val = readl((addr) + offsetof(struct dw_dma_regs, name));	\
+	pr_debug("dw_dmac: dma read by addr: " #name "[%p] 0x%08x\n",	\
+		 (addr), (u32)val);					\
+	val;								\
+})
+#else
 /* To access the registers in early stage of probe */
 #define dma_read_byaddr(addr, name) \
 	dma_readl_native((addr) + offsetof(struct dw_dma_regs, name))
+#endif
 
 /* Bitfields in DW_PARAMS */
 #define DW_PARAMS_NR_CHAN	8		/* number of channels */
@@ -222,10 +235,22 @@ __dwc_regs(struct dw_dma_chan *dwc)
 	return dwc->ch_regs;
 }
 
+#ifdef DW_DMAC_IO_DEBUG
+#define channel_readl(dwc, name) ({					\
+	unsigned int val = readl(&(__dwc_regs(dwc)->name));		\
+	pr_debug("dw_dmac: chan readl: " #name " 0x%08x\n", (u32)val);	\
+	val;								\
+})
+#define channel_writel(dwc, name, val) ({				\
+	pr_debug("dw_dmac: chan writel: " #name " 0x%08x\n", (u32)val);	\
+	writel((val), &(__dwc_regs(dwc)->name));			\
+})
+#else
 #define channel_readl(dwc, name) \
 	dma_readl_native(&(__dwc_regs(dwc)->name))
 #define channel_writel(dwc, name, val) \
 	dma_writel_native((val), &(__dwc_regs(dwc)->name))
+#endif
 
 static inline struct dw_dma_chan *to_dw_dma_chan(struct dma_chan *chan)
 {
@@ -257,10 +282,22 @@ static inline struct dw_dma_regs __iomem *__dw_regs(struct dw_dma *dw)
 	return dw->regs;
 }
 
+#ifdef DW_DMAC_IO_DEBUG
+#define dma_readl(dw, name) ({						\
+	unsigned int val = readl(&(__dw_regs(dw)->name));		\
+	pr_debug("dw_dmac: dma readl: " #name " 0x%08x\n", (u32)val);	\
+	val;								\
+})
+#define dma_writel(dw, name, val) ({					\
+	pr_debug("dw_dmac: dma writel: " #name " 0x%08x\n", (u32)val);	\
+	writel((val), &(__dw_regs(dw)->name));				\
+})
+#else
 #define dma_readl(dw, name) \
 	dma_readl_native(&(__dw_regs(dw)->name))
 #define dma_writel(dw, name, val) \
 	dma_writel_native((val), &(__dw_regs(dw)->name))
+#endif
 
 #define channel_set_bit(dw, reg, mask) \
 	dma_writel(dw, reg, ((mask) << 8) | (mask))
