@@ -127,8 +127,10 @@ static int i2c_device_probe(struct device *dev)
 					client->flags & I2C_CLIENT_WAKE);
 	dev_dbg(dev, "probe\n");
 
+	acpi_dev_pm_attach(dev, true);
 	status = driver->probe(client, i2c_match_id(driver->id_table, client));
 	if (status) {
+		acpi_dev_pm_detach(dev, true);
 		client->driver = NULL;
 		i2c_set_clientdata(client, NULL);
 	}
@@ -156,6 +158,7 @@ static int i2c_device_remove(struct device *dev)
 		client->driver = NULL;
 		i2c_set_clientdata(client, NULL);
 	}
+	acpi_dev_pm_detach(dev, true);
 	return status;
 }
 
