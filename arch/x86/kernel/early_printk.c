@@ -206,7 +206,8 @@ static inline void early_console_register(struct console *con, int keep_early)
 int __init __acpi_early_console_start(struct acpi_debug_port *info)
 {
 #ifdef CONFIG_EARLY_PRINTK_INTEL_MID_SPI
-	if (info->port_type == ACPI_DBG2_SERIAL_PORT
+	if ((info->port_type == ACPI_DBG2_SERIAL_PORT ||
+	     info->port_type == ACPI_DBG2_INTEL_SERIAL)
 	    && info->port_subtype == ACPI_DBG2_INTEL_MID_SPI
 	    && info->register_count > 0) {
 		mid_spi_early_console_init((u32)(info->registers[0].address));
