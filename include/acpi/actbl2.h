@@ -360,6 +360,7 @@ struct acpi_dbg2_device {
 
 #define ACPI_DBG2_16550_COMPATIBLE  0x0000
 #define ACPI_DBG2_16550_SUBSET      0x0001
+#define ACPI_DBG2_INTEL_MID_SPI     0x0002
 
 #define ACPI_DBG2_1394_STANDARD     0x0000
 

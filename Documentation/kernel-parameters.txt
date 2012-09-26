@@ -762,6 +762,7 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			earlyprintk=xen
 			earlyprintk=serial[,ttySn[,baudrate]]
 			earlyprintk=ttySn[,baudrate]
+			earlyprintk=mrst
 			earlyprintk=dbgp[debugController#]
 			earlyprintk=acpi[debugController#]
 

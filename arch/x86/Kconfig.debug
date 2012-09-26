@@ -43,9 +43,32 @@ config EARLY_PRINTK
 	  with klogd/syslogd or the X server. You should normally N here,
 	  unless you want to debug such a crash.
 
+config EARLY_PRINTK_INTEL_MID_SPI
+	bool "Early printk for Intel MID SPI UART port"
+	depends on EARLY_PRINTK && X86
+	---help---
+	  Write kernel log output directly into the MID SPI UART debug port.
+
+	  Intel MID platforms are using DesignWare SPI UART as its debug
+	  console.  This option does not introduce actual early console into
+	  the kernel binary, but is required by a real early console
+	  implementation (EARLY_PRINTK_INTEL_MID or EARLY_PRINTK_ACPI).
+	  You should normally N here unless you need to do kernel booting
+	  development.
+
 config EARLY_PRINTK_INTEL_MID
 	bool "Early printk for Intel MID platform support"
 	depends on EARLY_PRINTK && X86_INTEL_MID
+	select EARLY_PRINTK_INTEL_MID_SPI
+	---help---
+	  Write kernel log output directly into the MID SPI UART debug port.
+
+	  Intel MID platforms are always equipped with SPI debug ports and
+	  USB OTG debug ports. To enable these debugging facilities, you
+	  need to pass "earlyprintk=mrst" parameter to the kernel through
+	  boot loaders.  Please see "Documentation/kernel-parameter.txt" for
+	  details.  You should normally N here unless you need to do kernel
+	  booting development.
 
 config EARLY_PRINTK_DBGP
 	bool "Early printk via EHCI debug port"
