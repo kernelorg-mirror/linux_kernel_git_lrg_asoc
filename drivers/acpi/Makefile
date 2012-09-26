@@ -50,6 +50,8 @@ ifdef CONFIG_ACPI_VIDEO
 acpi-y				+= video_detect.o
 endif
 
+obj-$(CONFIG_EARLY_PRINTK_ACPI)	+= early_printk.o
+
 # These are (potentially) separate modules
 
 # IPMI may be used by other drivers, so it has to initialise before them

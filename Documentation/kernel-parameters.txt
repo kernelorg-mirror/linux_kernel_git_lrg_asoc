@@ -763,6 +763,7 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			earlyprintk=serial[,ttySn[,baudrate]]
 			earlyprintk=ttySn[,baudrate]
 			earlyprintk=dbgp[debugController#]
+			earlyprintk=acpi[debugController#]
 
 			Append ",keep" to not disable it when the real console
 			takes over.
