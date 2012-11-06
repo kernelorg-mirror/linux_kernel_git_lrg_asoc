@@ -109,6 +109,17 @@ config ACPI_PROC_EVENT
 	  Say Y here to retain the old behaviour.  Say N if your
 	  user-space is newer than kernel 2.6.23 (September 2007).
 
+config ACPICA_DEBUGFS
+	bool "Debugfs entries for ACPICA"
+	default n
+	help
+	  These entries include:
+	  1. Time measurement of the initialization steps:
+	     ACPICA defines several boot steps. This build option
+	     enables the measurement and recording for the
+	     execution time of these steps.
+	  If unsure, say N here.
+
 config ACPI_AC
 	tristate "AC Adapter"
 	depends on X86

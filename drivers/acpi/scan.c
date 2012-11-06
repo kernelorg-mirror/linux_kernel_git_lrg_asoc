@@ -1797,6 +1797,7 @@ int __init acpi_scan_init(void)
 	 * Enumerate devices in the ACPI namespace.
 	 */
 	result = acpi_bus_scan(ACPI_ROOT_OBJECT);
+	result = ACPI_INIT_STEP(bus_scan, ACPI_ROOT_OBJECT);
 	if (result)
 		goto out;
 
@@ -1805,12 +1806,13 @@ int __init acpi_scan_init(void)
 		goto out;
 
 	result = acpi_bus_scan_fixed();
+	result = ACPI_INIT_STEP(bus_scan_fixed);
 	if (result) {
 		acpi_device_unregister(acpi_root);
 		goto out;
 	}
 
-	acpi_update_all_gpes();
+	ACPICA_INIT_STEP(update_all_gpes);
 
 	acpi_pci_root_hp_init();
 
