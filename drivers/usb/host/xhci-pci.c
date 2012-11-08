@@ -34,6 +34,8 @@
 #define PCI_VENDOR_ID_ETRON		0x1b6f
 #define PCI_DEVICE_ID_ASROCK_P67	0x7023
 
+#define PCI_DEVICE_ID_LYNXPOINT_XHCI	0x8c31
+
 static const char hcd_name[] = "xhci_hcd";
 
 /* called after powerup, by probe or system-pm "wakeup" */
@@ -88,8 +90,16 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (pdev->vendor == PCI_VENDOR_ID_AMD && usb_amd_find_chipset_info())
 		xhci->quirks |= XHCI_AMD_PLL_FIX;
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL) {
-		xhci->quirks |= XHCI_LPM_SUPPORT;
+		xhci_dbg(xhci, "Intel xHCI revision is %u.\n", pdev->revision);
 		xhci->quirks |= XHCI_INTEL_HOST;
+		/* Link PM works on Panther Point, and Lynx Point C0. */
+		if (pdev->device != PCI_DEVICE_ID_LYNXPOINT_XHCI ||
+				pdev->revision > 2) {
+			xhci_dbg(xhci, "Enabling LPM\n");
+			xhci->quirks |= XHCI_LPM_SUPPORT;
+		} else {
+			xhci_dbg(xhci, "Disabling LPM\n");
+		}
 	}
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL &&
 			pdev->device == PCI_DEVICE_ID_INTEL_PANTHERPOINT_XHCI) {

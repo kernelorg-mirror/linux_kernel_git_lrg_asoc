@@ -2073,7 +2073,7 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 	if ((xhci->hci_version >= 0x100) && (major_revision != 0x03)) {
 		xhci_dbg(xhci, "xHCI 1.0: support USB2 software lpm\n");
 		xhci->sw_lpm_support = 1;
-		if (temp & XHCI_HLC) {
+		if ((temp & XHCI_HLC) && (xhci->quirks & XHCI_LPM_SUPPORT)) {
 			xhci_dbg(xhci, "xHCI 1.0: support USB2 hardware lpm\n");
 			xhci->hw_lpm_support = 1;
 		}
