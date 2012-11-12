@@ -191,6 +191,8 @@ static void sdhci_reset(struct sdhci_host *host, u8 mask)
 
 	sdhci_writeb(host, mask, SDHCI_SOFTWARE_RESET);
 
+	mdelay(1);
+
 	if (mask & SDHCI_RESET_ALL)
 		host->clock = 0;
 
