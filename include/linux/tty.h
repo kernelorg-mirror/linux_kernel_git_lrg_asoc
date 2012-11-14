@@ -659,4 +659,15 @@ do {									\
 } while (0)
 
 
+#ifdef CONFIG_ACPI_UART
+int acpi_uart_get_peripheral_type(struct device *dev,
+	char *buf, size_t size);
+#else
+static inline int acpi_uart_get_peripheral_type(struct device *dev,
+	char *buf, size_t size)
+{
+	return -ENODEV;
+}
+#endif
+
 #endif

@@ -197,6 +197,12 @@ config ACPI_I2C
 	help
 	  ACPI I2C enumeration support.
 
+config ACPI_UART
+	def_tristate TTY
+	depends on TTY
+	help
+	  ACPI UART enumeration support.
+
 config ACPI_PROCESSOR
 	tristate "Processor"
 	select THERMAL
