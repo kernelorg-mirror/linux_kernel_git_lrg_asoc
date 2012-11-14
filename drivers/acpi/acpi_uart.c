@@ -23,31 +23,31 @@ struct acpi_uart_buf {
 };
 
 struct acpi_uart_enum {
-	void *context;
+	acpi_status (*procfunc)(struct acpi_device *,
+				struct acpi_resource_uart_serialbus *,
+				void *);
+	void *procdata;
+	bool handle_resources;
 	acpi_status status;
 
 	struct acpi_device *adev;
 };
-
-static acpi_status
-acpi_uart_enum_pnpids(struct acpi_device *adev,
-		      struct acpi_resource_uart_serialbus *sb,
-		      void *context);
 
 static int acpi_uart_enum_resources(struct acpi_resource *ares,
 				    void *context)
 {
 	struct acpi_uart_enum *ctx = context;
 	struct acpi_resource_uart_serialbus *sb;
+	int ret = ctx->handle_resources ? 0 : 1;
 
 	if (ares->type != ACPI_RESOURCE_TYPE_SERIAL_BUS)
-		return 1;
+		return ret;
 	sb = &ares->data.uart_serial_bus;
 	if (sb->type != ACPI_RESOURCE_SERIAL_TYPE_UART)
-		return 1;
+		return ret;
 
-	ctx->status = acpi_uart_enum_pnpids(ctx->adev, sb, ctx->context);
-	return 1;
+	ctx->status = ctx->procfunc(ctx->adev, sb, ctx->procdata);
+	return ret;
 }
 
 static acpi_status acpi_uart_enum_devices(acpi_handle handle, u32 level,
@@ -62,6 +62,8 @@ static acpi_status acpi_uart_enum_devices(acpi_handle handle, u32 level,
 		return AE_OK;
 	if (acpi_bus_get_status(adev) || !adev->status.present)
 		return AE_OK;
+	if (!ctx->procfunc)
+		return AE_OK;
 
 	/* Enumerate resources. */
 	ctx->adev = adev;
@@ -74,8 +76,13 @@ static acpi_status acpi_uart_enum_devices(acpi_handle handle, u32 level,
 	return ctx->status;
 }
 
-static int acpi_uart_walk_port(struct device *parent,
-			       void *context)
+static int
+acpi_uart_walk_port(struct device *parent,
+		    bool handle_resources,
+		    acpi_status (*procfunc)(struct acpi_device *,
+					    struct acpi_resource_uart_serialbus *,
+					    void *),
+		    void *procdata)
 {
 	acpi_handle handle;
 	acpi_status status;
@@ -85,7 +92,9 @@ static int acpi_uart_walk_port(struct device *parent,
 	if (!handle)
 		return -ENODEV;
 
-	ctx.context = context;
+	ctx.handle_resources = handle_resources;
+	ctx.procfunc = procfunc;
+	ctx.procdata = procdata;
 
 	status = acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, 1,
 				     acpi_uart_enum_devices, NULL,
@@ -126,7 +135,8 @@ int acpi_uart_get_peripheral_type(struct device *dev,
 	int len = 0;
 	struct acpi_uart_buf ctx = { buf, size, &len };
 
-	ret = acpi_uart_walk_port(dev->parent, &ctx);
+	ret = acpi_uart_walk_port(dev->parent, false,
+				  acpi_uart_enum_pnpids, &ctx);
 	if (ret < 0)
 		return ret;
 
