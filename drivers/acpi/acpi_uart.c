@@ -22,6 +22,11 @@ struct acpi_uart_buf {
 	int *len;
 };
 
+struct acpi_uart_attr {
+	struct ktermios *termios;
+	unsigned int *mctrl;
+};
+
 struct acpi_uart_enum {
 	acpi_status (*procfunc)(struct acpi_device *,
 				struct acpi_resource_uart_serialbus *,
@@ -143,3 +148,92 @@ int acpi_uart_get_peripheral_type(struct device *dev,
 	return len;
 }
 EXPORT_SYMBOL_GPL(acpi_uart_get_peripheral_type);
+
+static acpi_status
+acpi_uart_enum_termios(struct acpi_device *adev,
+		       struct acpi_resource_uart_serialbus *sb,
+		       void *context)
+{
+	struct acpi_uart_attr *ctx = context;
+	struct ktermios *termios = ctx->termios;
+	unsigned int mctrl;
+
+	memset(termios, 0, sizeof(struct ktermios));
+	mctrl = 0;
+
+	/* data bits */
+	switch (sb->data_bits) {
+	case ACPI_UART_5_DATA_BITS:
+		termios->c_cflag |= CS5;
+		break;
+	case ACPI_UART_6_DATA_BITS:
+		termios->c_cflag |= CS6;
+		break;
+	case ACPI_UART_7_DATA_BITS:
+		termios->c_cflag |= CS7;
+		break;
+	case ACPI_UART_8_DATA_BITS:
+	default:
+		termios->c_cflag |= CS8;
+		break;
+	}
+	/* parity */
+	if (sb->parity == ACPI_UART_PARITY_EVEN)
+		termios->c_cflag |= PARENB;
+	else if (sb->parity == ACPI_UART_PARITY_ODD)
+		termios->c_cflag |= (PARENB | PARODD);
+	/* baud rate */
+	tty_termios_encode_baud_rate(termios,
+				     sb->default_baud_rate,
+				     sb->default_baud_rate);
+	/* stop bits */
+	if (sb->stop_bits == ACPI_UART_2_STOP_BITS)
+		termios->c_cflag |= CSTOPB;
+	/* HW control */
+	if (sb->flow_control & ACPI_UART_FLOW_CONTROL_HW)
+		termios->c_cflag |= CRTSCTS;
+	/* SW control */
+	if (sb->flow_control & ACPI_UART_FLOW_CONTROL_XON_XOFF)
+		termios->c_iflag |= (IXON | IXOFF);
+
+	/* endianess */
+	if (sb->endian == ACPI_UART_LITTLE_ENDIAN)
+		mctrl |= TIOCM_LE;
+	/* terminal lines */
+	if (sb->lines_enabled & ACPI_UART_DATA_TERMINAL_READY)
+		mctrl |= TIOCM_DTR;
+	if (sb->lines_enabled & ACPI_UART_REQUEST_TO_SEND)
+		mctrl |= TIOCM_RTS;
+	/* modem lines */
+	if (sb->lines_enabled & ACPI_UART_CLEAR_TO_SEND)
+		mctrl |= TIOCM_CTS;
+	if (sb->lines_enabled & ACPI_UART_CARRIER_DETECT)
+		mctrl |= TIOCM_CAR;
+	if (sb->lines_enabled & ACPI_UART_RING_INDICATOR)
+		mctrl |= TIOCM_RNG;
+	if (sb->lines_enabled & ACPI_UART_DATA_SET_READY)
+		mctrl |= TIOCM_DSR;
+	*ctx->mctrl = mctrl;
+
+	return AE_OK;
+}
+
+/**
+ * acpi_uart_get_peripheral_attr - get peripheral attributes
+ * @dev: the tty class device
+ * @termios: the termios settings
+ * @mctrl: the mctrl settings
+ *
+ * Obtain UART peripheral attributes.  Return 0 on success, -errno on
+ * failure.
+ */
+int acpi_uart_get_peripheral_attr(struct device *dev,
+				  struct ktermios *termios,
+				  unsigned int *mctrl)
+{
+	struct acpi_uart_attr ctx = { termios, mctrl };
+
+	return acpi_uart_walk_port(dev->parent, false,
+				   acpi_uart_enum_termios, &ctx);
+}
+EXPORT_SYMBOL_GPL(acpi_uart_get_peripheral_attr);

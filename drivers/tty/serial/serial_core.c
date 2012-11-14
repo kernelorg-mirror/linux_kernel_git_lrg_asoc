@@ -459,7 +459,10 @@ static void uart_change_speed(struct tty_struct *tty, struct uart_state *state,
 	else
 		set_bit(ASYNCB_CHECK_CD, &port->flags);
 
+	if (old_termios)
+		*old_termios = port->termios;
 	uport->ops->set_termios(uport, termios, old_termios);
+	port->termios = *termios;
 }
 
 static inline int __uart_put_char(struct uart_port *port,
@@ -2528,6 +2531,56 @@ static ssize_t uart_get_attr_peripheral_type(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "uart\n");
 }
 
+static ssize_t uart_get_attr_peripheral_attr(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int len;
+	struct tty_port *port = dev_get_drvdata(dev);
+	struct ktermios termios;
+
+	termios = port->termios;
+
+	/* baud rate */
+	len = sprintf(buf, "%u ", tty_termios_baud_rate(&termios));
+
+	/* data bits */
+	switch (termios.c_cflag & CSIZE) {
+	case CS5:
+		len += sprintf(buf+len, "5");
+		break;
+	case CS6:
+		len += sprintf(buf+len, "6");
+		break;
+	case CS7:
+		len += sprintf(buf+len, "7");
+		break;
+	case CS8:
+	default:
+		len += sprintf(buf+len, "8");
+		break;
+	}
+
+	/* parity */
+	if (termios.c_cflag & PARODD)
+		len += sprintf(buf+len, "O");
+	else if (termios.c_cflag & PARENB)
+		len += sprintf(buf+len, "E");
+	else
+		len += sprintf(buf+len, "N");
+
+	/* stop bits */
+	len += sprintf(buf+len, "%d", termios.c_cflag & CSTOPB ? 1 : 0);
+
+	/* HW/SW control */
+	if (termios.c_cflag & CRTSCTS)
+		len += sprintf(buf+len, " HW");
+	if ((termios.c_iflag & (IXON|IXOFF|IXANY)) != 0)
+		len += sprintf(buf+len, " SW");
+
+	len += sprintf(buf+len, "\n");
+	return len;
+}
+
 static DEVICE_ATTR(type, S_IRUSR | S_IRGRP, uart_get_attr_type, NULL);
 static DEVICE_ATTR(line, S_IRUSR | S_IRGRP, uart_get_attr_line, NULL);
 static DEVICE_ATTR(port, S_IRUSR | S_IRGRP, uart_get_attr_port, NULL);
@@ -2542,6 +2595,7 @@ static DEVICE_ATTR(io_type, S_IRUSR | S_IRGRP, uart_get_attr_io_type, NULL);
 static DEVICE_ATTR(iomem_base, S_IRUSR | S_IRGRP, uart_get_attr_iomem_base, NULL);
 static DEVICE_ATTR(iomem_reg_shift, S_IRUSR | S_IRGRP, uart_get_attr_iomem_reg_shift, NULL);
 static DEVICE_ATTR(peripheral_type, S_IRUSR | S_IRGRP, uart_get_attr_peripheral_type, NULL);
+static DEVICE_ATTR(peripheral_attr, S_IRUSR | S_IRGRP, uart_get_attr_peripheral_attr, NULL);
 
 static struct attribute *tty_dev_attrs[] = {
 	&dev_attr_type.attr,
@@ -2558,6 +2612,7 @@ static struct attribute *tty_dev_attrs[] = {
 	&dev_attr_iomem_base.attr,
 	&dev_attr_iomem_reg_shift.attr,
 	&dev_attr_peripheral_type.attr,
+	&dev_attr_peripheral_attr.attr,
 	NULL,
 	};
 
