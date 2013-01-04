@@ -1324,12 +1324,52 @@ ce4100_serial_setup(struct serial_private *priv,
 	return ret;
 }
 
+static bool vlv_dma_filter(struct dma_chan *chan, void *param)
+{
+	return chan->chan_id == *(int*)param;
+}
+
+#define PCI_DEVICE_ID_INTEL_VLV2_UART1	0x0f0a
+#define PCI_DEVICE_ID_INTEL_VLV2_UART2	0x0f0c
+
 static int
 vlv_serial_setup(struct serial_private *priv,
 		const struct pciserial_board *board,
 		struct uart_8250_port *port, int idx)
 {
+	struct uart_8250_dma *dma;
 	int ret;
+
+	dma = devm_kzalloc(port->port.dev, sizeof(*dma), GFP_KERNEL);
+	if (!dma)
+		return -ENOMEM;
+
+	switch (priv->dev->device) {
+	case PCI_DEVICE_ID_INTEL_VLV2_UART1:
+		dma->rx_chan_id = 3;
+		dma->tx_chan_id = 2;
+		break;
+	case PCI_DEVICE_ID_INTEL_VLV2_UART2:
+		dma->rx_chan_id = 5;
+		dma->tx_chan_id = 4;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	dma->rxconf.direction = DMA_DEV_TO_MEM;
+	dma->rxconf.src_addr_width = 1;
+	dma->rxconf.slave_id = dma->rx_chan_id;
+	dma->rxconf.src_maxburst = 16;
+
+	dma->txconf.direction = DMA_MEM_TO_DEV;
+	dma->txconf.dst_addr_width = 1;
+	dma->txconf.slave_id = dma->tx_chan_id;
+	dma->rxconf.dst_maxburst = 16;
+
+	dma->fn = vlv_dma_filter;
+	dma->rx_param = &dma->rx_chan_id;
+	dma->tx_param = &dma->tx_chan_id;
 
 	ret = pci_default_setup(priv, board, port, idx);
 	port->port.iotype = UPIO_MEM;
@@ -1337,6 +1377,7 @@ vlv_serial_setup(struct serial_private *priv,
 	port->port.flags = (port->port.flags | UPF_FIXED_PORT | UPF_FIXED_TYPE);
 	port->port.fifosize = 64;
 	port->tx_loadsz = 64;
+	port->dma = dma;
 
 	return ret;
 }
@@ -1570,8 +1611,6 @@ pci_wch_ch353_setup(struct serial_private *priv,
 #define PCIE_DEVICE_ID_NEO_2_OX_IBM	0x00F6
 #define PCI_DEVICE_ID_PLX_CRONYX_OMEGA	0xc001
 #define PCI_DEVICE_ID_INTEL_PATSBURG_KT 0x1d3d
-#define PCI_DEVICE_ID_INTEL_VLV2_UART1	0x0f0a
-#define PCI_DEVICE_ID_INTEL_VLV2_UART2	0x0f0c
 #define PCI_VENDOR_ID_WCH		0x4348
 #define PCI_DEVICE_ID_WCH_CH353_4S	0x3453
 #define PCI_DEVICE_ID_WCH_CH353_2S1PF	0x5046
