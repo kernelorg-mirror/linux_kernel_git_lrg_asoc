@@ -98,6 +98,8 @@ static int dw_i2c_acpi_configure(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id dw_i2c_acpi_match[] = {
+	{ "80860F41", 0 },
+	{ "INT33B1", 0 },
 	{ "INT33C2", 0 },
 	{ "INT33C3", 0 },
 	{ }
