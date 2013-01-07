@@ -1331,6 +1331,8 @@ static bool vlv_dma_filter(struct dma_chan *chan, void *param)
 
 #define PCI_DEVICE_ID_INTEL_VLV2_UART1	0x0f0a
 #define PCI_DEVICE_ID_INTEL_VLV2_UART2	0x0f0c
+#define PCI_DEVICE_ID_INTEL_HSW_UART1	0x9c63
+#define PCI_DEVICE_ID_INTEL_HSW_UART2	0x9c64
 
 static int
 vlv_serial_setup(struct serial_private *priv,
@@ -1347,11 +1349,21 @@ vlv_serial_setup(struct serial_private *priv,
 	switch (priv->dev->device) {
 	case PCI_DEVICE_ID_INTEL_VLV2_UART1:
 		dma->rx_chan_id = 3;
+		dma->rxconf.slave_id = dma->rx_chan_id;
 		dma->tx_chan_id = 2;
+		dma->txconf.slave_id = dma->tx_chan_id;
 		break;
 	case PCI_DEVICE_ID_INTEL_VLV2_UART2:
 		dma->rx_chan_id = 5;
+		dma->rxconf.slave_id = dma->rx_chan_id;
 		dma->tx_chan_id = 4;
+		dma->txconf.slave_id = dma->tx_chan_id;
+		break;
+	case PCI_DEVICE_ID_INTEL_HSW_UART1:
+		dma->rx_chan_id = 5;
+		dma->rxconf.slave_id = 21;
+		dma->tx_chan_id = 4;
+		dma->txconf.slave_id = 20;
 		break;
 	default:
 		return -EINVAL;
@@ -1359,12 +1371,10 @@ vlv_serial_setup(struct serial_private *priv,
 
 	dma->rxconf.direction = DMA_DEV_TO_MEM;
 	dma->rxconf.src_addr_width = 1;
-	dma->rxconf.slave_id = dma->rx_chan_id;
 	dma->rxconf.src_maxburst = 16;
 
 	dma->txconf.direction = DMA_MEM_TO_DEV;
 	dma->txconf.dst_addr_width = 1;
-	dma->txconf.slave_id = dma->tx_chan_id;
 	dma->rxconf.dst_maxburst = 16;
 
 	dma->fn = vlv_dma_filter;
@@ -1727,6 +1737,20 @@ static struct pci_serial_quirk pci_serial_quirks[] __refdata = {
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.setup		= vlv_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_HSW_UART1,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= vlv_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_HSW_UART2,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= pci_default_setup,
 	},
 	/*
 	 * ITE
@@ -2500,6 +2524,7 @@ enum pci_board_num_t {
 	pbn_ADDIDATA_PCIe_8_3906250,
 	pbn_ce4100_1_115200,
 	pbn_vlv,
+	hsw_vlv,
 	pbn_omegapci,
 	pbn_NETMOS9900_2s_115200,
 	pbn_brcm_trumanage,
@@ -3240,6 +3265,13 @@ static struct pciserial_board pci_boards[] = {
 		.flags		= FL_BASE0,
 		.num_ports	= 1,
 		.base_baud	= 2764800,
+		.uart_offset	= 0x80,
+		.reg_shift      = 2,
+	},
+	[hsw_vlv] = {
+		.flags		= FL_BASE0,
+		.num_ports	= 1,
+		.base_baud	= 6250000,
 		.uart_offset	= 0x80,
 		.reg_shift      = 2,
 	},
@@ -4891,6 +4923,15 @@ static struct pci_device_id serial_pci_tbl[] = {
 		PCI_ANY_ID,  PCI_ANY_ID,
 		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
 		pbn_vlv },
+	/* Intel Haswell-ULT */
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HSW_UART1,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		hsw_vlv },
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HSW_UART2,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		hsw_vlv },
 
 	/*
 	 * Cronyx Omega PCI
