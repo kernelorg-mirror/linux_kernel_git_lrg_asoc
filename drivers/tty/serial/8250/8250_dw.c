@@ -388,6 +388,8 @@ static const struct of_device_id dw8250_of_match[] = {
 MODULE_DEVICE_TABLE(of, dw8250_of_match);
 
 static const struct acpi_device_id dw8250_acpi_match[] = {
+	{ "80860F0A", 44236800 },
+	{ "INT33BC", 44236800 },
 	{ "INT33C4", 100000000 },
 	{ "INT33C5", 100000000 },
 	{ },
