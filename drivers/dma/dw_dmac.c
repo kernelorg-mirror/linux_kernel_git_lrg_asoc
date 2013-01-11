@@ -1022,10 +1022,11 @@ set_runtime_config(struct dma_chan *chan, struct dma_slave_config *sconfig)
 static inline void dwc_chan_pause(struct dw_dma_chan *dwc)
 {
 	u32 cfglo = channel_readl(dwc, CFG_LO);
+	unsigned int count = 100;	/* 100us timeout */
 
 	channel_writel(dwc, CFG_LO, cfglo | DWC_CFGL_CH_SUSP);
-	while (!(channel_readl(dwc, CFG_LO) & DWC_CFGL_FIFO_EMPTY))
-		cpu_relax();
+	while (!(channel_readl(dwc, CFG_LO) & DWC_CFGL_FIFO_EMPTY) && --count)
+		udelay(1);
 
 	dwc->paused = true;
 }
