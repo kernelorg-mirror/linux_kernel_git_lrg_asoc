@@ -224,6 +224,14 @@ config GPIO_TS5500
 	  blocks of the TS-5500: DIO1, DIO2 and the LCD port, and the TS-5600
 	  LCD port.
 
+config GPIO_VALLEYVIEW2
+	bool "Intel Valleyview2 GPIO support"
+	depends on ACPI
+	select IRQ_DOMAIN
+	help
+	  driver for memory mapped GPIO functionality on Intel Valleyview2 PCH chipset
+	  Requires ACPI device enumeration code to set up a platform device.
+
 config GPIO_VT8500
 	bool "VIA/Wondermedia SoC GPIO Support"
 	depends on ARCH_VT8500
