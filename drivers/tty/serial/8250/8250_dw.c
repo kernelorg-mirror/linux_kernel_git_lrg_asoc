@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/pm_runtime.h>
+#include <linux/clk.h>
 
 #include "8250.h"
 
@@ -34,9 +35,6 @@
 #define DW_UART_USR	0x1f /* UART Status Register */
 #define DW_UART_CPR	0xf4 /* Component Parameter Register */
 #define DW_UART_UCV	0xf8 /* UART Component Version */
-
-/* Intel Low Power Subsystem specific */
-#define LPSS_PRV_CLOCK_PARAMS 0x800
 
 /* Component Parameter Register bits */
 #define DW_UART_CPR_ABP_DATA_WIDTH	(3 << 0)
@@ -58,6 +56,7 @@
 struct dw8250_data {
 	int	last_lcr;
 	int	line;
+	struct clk *clk;
 };
 
 static void dw8250_serial_out(struct uart_port *p, int offset, int value)
@@ -217,19 +216,14 @@ dw8250_acpi_walk_resource(struct acpi_resource *res, void *data)
 
 static int dw8250_probe_acpi(struct uart_port *p)
 {
-	const struct acpi_device_id *id;
+	struct dw8250_data *data = p->private_data;
 	acpi_status status;
-	u32 reg;
-
-	id = acpi_match_device(p->dev->driver->acpi_match_table, p->dev);
-	if (!id)
-		return -ENODEV;
 
 	p->iotype = UPIO_MEM32;
 	p->serial_in = dw8250_serial_in32;
 	p->serial_out = dw8250_serial_out32;
 	p->regshift = 2;
-	p->uartclk = (unsigned int)id->driver_data;
+	p->uartclk = clk_get_rate(data->clk);
 
 	status = acpi_walk_resources(ACPI_HANDLE(p->dev), METHOD_NAME__CRS,
 				     dw8250_acpi_walk_resource, p);
@@ -237,12 +231,6 @@ static int dw8250_probe_acpi(struct uart_port *p)
 		dev_err_ratelimited(p->dev, "%s failed \"%s\"\n", __func__,
 				    acpi_format_exception(status));
 		return -ENODEV;
-	}
-
-	/* Fix Haswell issue where the clocks do not get enabled */
-	if (!strcmp(id->id, "INT33C4") || !strcmp(id->id, "INT33C5")) {
-		reg = readl(p->membase + LPSS_PRV_CLOCK_PARAMS);
-		writel(reg | 1, p->membase + LPSS_PRV_CLOCK_PARAMS);
 	}
 
 	return 0;
@@ -308,9 +296,17 @@ static int dw8250_probe(struct platform_device *pdev)
 	if (!uart.port.membase)
 		return -ENOMEM;
 
+	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
 	uart.port.iotype = UPIO_MEM;
 	uart.port.serial_in = dw8250_serial_in;
 	uart.port.serial_out = dw8250_serial_out;
+	uart.port.private_data = data;
+
+	data->clk = devm_clk_get(&pdev->dev, NULL);
+	clk_prepare_enable(data->clk);
 
 	dw8250_setup_port(&uart);
 
@@ -325,12 +321,6 @@ static int dw8250_probe(struct platform_device *pdev)
 	} else {
 		return -ENODEV;
 	}
-
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
-	uart.port.private_data = data;
 
 	data->line = serial8250_register_8250_port(&uart);
 	if (data->line < 0)
@@ -351,6 +341,7 @@ static int dw8250_remove(struct platform_device *pdev)
 	pm_runtime_get_sync(&pdev->dev);
 
 	serial8250_unregister_port(data->line);
+	clk_disable_unprepare(data->clk);
 
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_put_noidle(&pdev->dev);
@@ -359,27 +350,49 @@ static int dw8250_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int dw8250_suspend(struct platform_device *pdev, pm_message_t state)
+static int dw8250_suspend(struct device *dev)
 {
-	struct dw8250_data *data = platform_get_drvdata(pdev);
+	struct dw8250_data *data = dev_get_drvdata(dev);
 
 	serial8250_suspend_port(data->line);
 
 	return 0;
 }
 
-static int dw8250_resume(struct platform_device *pdev)
+static int dw8250_resume(struct device *dev)
 {
-	struct dw8250_data *data = platform_get_drvdata(pdev);
+	struct dw8250_data *data = dev_get_drvdata(dev);
 
 	serial8250_resume_port(data->line);
 
 	return 0;
 }
-#else
-#define dw8250_suspend NULL
-#define dw8250_resume NULL
 #endif /* CONFIG_PM */
+
+#ifdef CONFIG_PM_RUNTIME
+static int dw8250_runtime_suspend(struct device *dev)
+{
+	struct dw8250_data *data = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(data->clk);
+
+	return 0;
+}
+
+static int dw8250_runtime_resume(struct device *dev)
+{
+	struct dw8250_data *data = dev_get_drvdata(dev);
+
+	clk_prepare_enable(data->clk);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops dw8250_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(dw8250_suspend, dw8250_resume)
+	SET_RUNTIME_PM_OPS(dw8250_runtime_suspend, dw8250_runtime_resume, NULL)
+};
 
 static const struct of_device_id dw8250_of_match[] = {
 	{ .compatible = "snps,dw-apb-uart" },
@@ -388,10 +401,10 @@ static const struct of_device_id dw8250_of_match[] = {
 MODULE_DEVICE_TABLE(of, dw8250_of_match);
 
 static const struct acpi_device_id dw8250_acpi_match[] = {
-	{ "80860F0A", 44236800 },
-	{ "INT33BC", 44236800 },
-	{ "INT33C4", 100000000 },
-	{ "INT33C5", 100000000 },
+	{ "80860F0A", 0 },
+	{ "INT33BC", 0 },
+	{ "INT33C4", 0 },
+	{ "INT33C5", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, dw8250_acpi_match);
@@ -400,13 +413,12 @@ static struct platform_driver dw8250_platform_driver = {
 	.driver = {
 		.name		= "dw-apb-uart",
 		.owner		= THIS_MODULE,
+		.pm		= &dw8250_pm_ops,
 		.of_match_table	= dw8250_of_match,
 		.acpi_match_table = ACPI_PTR(dw8250_acpi_match),
 	},
 	.probe			= dw8250_probe,
 	.remove			= dw8250_remove,
-	.suspend		= dw8250_suspend,
-	.resume			= dw8250_resume,
 };
 
 module_platform_driver(dw8250_platform_driver);
