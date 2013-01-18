@@ -26,6 +26,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/pm_runtime.h>
 
 #include "8250.h"
 
@@ -111,6 +112,18 @@ static int dw8250_handle_irq(struct uart_port *p)
 	}
 
 	return 0;
+}
+
+static void
+dw8250_do_pm(struct uart_port *port, unsigned int state, unsigned int old)
+{
+	if (!state)
+		pm_runtime_get_sync(port->dev);
+
+	serial8250_do_pm(port, state, old);
+
+	if (state)
+		pm_runtime_put_sync_suspend(port->dev);
 }
 
 static int dw8250_probe_of(struct uart_port *p)
@@ -286,6 +299,7 @@ static int dw8250_probe(struct platform_device *pdev)
 	uart.port.mapbase = regs->start;
 	uart.port.irq = irq->start;
 	uart.port.handle_irq = dw8250_handle_irq;
+	uart.port.pm = dw8250_do_pm;
 	uart.port.type = PORT_8250;
 	uart.port.flags = UPF_SHARE_IRQ | UPF_BOOT_AUTOCONF | UPF_FIXED_PORT;
 	uart.port.dev = &pdev->dev;
@@ -324,6 +338,9 @@ static int dw8250_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, data);
 
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+
 	return 0;
 }
 
@@ -331,7 +348,12 @@ static int dw8250_remove(struct platform_device *pdev)
 {
 	struct dw8250_data *data = platform_get_drvdata(pdev);
 
+	pm_runtime_get_sync(&pdev->dev);
+
 	serial8250_unregister_port(data->line);
+
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_put_noidle(&pdev->dev);
 
 	return 0;
 }
