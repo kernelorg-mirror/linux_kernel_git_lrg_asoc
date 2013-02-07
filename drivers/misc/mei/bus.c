@@ -421,3 +421,25 @@ int mei_register_event_cb(struct mei_device *device,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mei_register_event_cb);
+
+void mei_bus_rx_event(struct mei_cl *cl)
+{
+	struct mei_device *device = cl->device;
+
+	if (!device || !device->event_cb)
+		return;
+
+	set_bit(MEI_EVENT_RX, &device->events);
+
+	schedule_work(&device->event_work);
+}
+
+int __init mei_bus_init(struct pci_dev *pdev)
+{
+	return bus_register(&mei_bus_type);
+}
+
+void __exit mei_bus_exit(void)
+{
+	bus_unregister(&mei_bus_type);
+}

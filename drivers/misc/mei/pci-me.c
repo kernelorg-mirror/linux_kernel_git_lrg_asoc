@@ -197,7 +197,6 @@ static int mei_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	mei_pdev = pdev;
 	pci_set_drvdata(pdev, dev);
 
-
 	schedule_delayed_work(&dev->timer_work, HZ);
 
 	mutex_unlock(&mei_mutex);
@@ -389,7 +388,25 @@ static struct pci_driver mei_driver = {
 	.driver.pm = MEI_PM_OPS,
 };
 
-module_pci_driver(mei_driver);
+static int __init mei_init(void)
+{
+	int err;
+
+	err = mei_bus_init(mei_pdev);
+	if (err)
+		return err;
+
+	return pci_register_driver(&mei_driver);
+}
+
+static void __exit mei_exit(void)
+{
+	pci_unregister_driver(&mei_driver);
+	mei_bus_exit();
+}
+
+module_init(mei_init);
+module_exit(mei_exit);
 
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("Intel(R) Management Engine Interface");
