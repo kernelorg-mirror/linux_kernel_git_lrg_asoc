@@ -106,4 +106,7 @@ typedef void (*mei_event_cb_t)(struct mei_device *device,
 int mei_register_event_cb(struct mei_device *device,
 			  mei_event_cb_t read_cb, void *context);
 
+void *mei_get_clientdata(const struct mei_device *device);
+void mei_set_clientdata(struct mei_device *device, void *data);
+
 #endif /* _LINUX_MEI_BUS_H */

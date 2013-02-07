@@ -440,6 +440,18 @@ int mei_register_event_cb(struct mei_device *device,
 }
 EXPORT_SYMBOL_GPL(mei_register_event_cb);
 
+void *mei_get_clientdata(const struct mei_device *device)
+{
+	return dev_get_drvdata(&device->dev);
+}
+EXPORT_SYMBOL_GPL(mei_get_clientdata);
+
+void mei_set_clientdata(struct mei_device *device, void *data)
+{
+	dev_set_drvdata(&device->dev, data);
+}
+EXPORT_SYMBOL_GPL(mei_set_clientdata);
+
 void mei_bus_rx_event(struct mei_cl *cl)
 {
 	struct mei_device *device = cl->device;
