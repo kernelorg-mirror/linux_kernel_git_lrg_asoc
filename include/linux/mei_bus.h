@@ -89,10 +89,21 @@ struct mei_driver {
 	int (*remove)(struct mei_device *dev);
 };
 
+#define MEI_EVENT_RX 0
+#define MEI_EVENT_TX 1
+
 int __mei_driver_register(struct mei_driver *driver, struct module *owner);
 #define mei_driver_register(driver)             \
 	__mei_driver_register(driver, THIS_MODULE)
 
 void mei_driver_unregister(struct mei_driver *driver);
+
+int mei_send(struct mei_device *device, u8 *buf, size_t length);
+int mei_recv(struct mei_device *device, u8 *buf, size_t length);
+
+typedef void (*mei_event_cb_t)(struct mei_device *device,
+			       u32 events, void *context);
+int mei_register_event_cb(struct mei_device *device,
+			  mei_event_cb_t read_cb, void *context);
 
 #endif /* _LINUX_MEI_BUS_H */

@@ -268,6 +268,23 @@ struct mei_hw_ops {
 struct mei_device *mei_add_device(struct mei_host *mei_host,
 				  uuid_le uuid, char *name);
 void mei_remove_device(struct mei_device *device);
+int __mei_send(struct mei_cl *cl, u8 *buf, size_t length);
+int __mei_recv(struct mei_cl *cl, u8 *buf, size_t length);
+
+/**
+ * struct mei_transport_ops - MEI device transport ops
+ * This structure allows ME host clients to implement technology
+ * specific transport layers.
+ *
+ * @send: Tx hook for the device. This allows ME host clients to trap
+ *	the device driver buffers before actually physically pushing it to the ME.
+ * @recv: Rx hook for the device. This allows ME host clients to trap the
+ *	ME buffers before forwarding them to the device driver.
+ */
+struct mei_transport_ops {
+	int (*send)(struct mei_device *device, u8 *buf, size_t length);
+	int (*recv)(struct mei_device *device, u8 *buf, size_t length);
+};
 
 /**
  * struct mei_device - MEI device handle
@@ -279,6 +296,10 @@ void mei_remove_device(struct mei_device *device);
  * @dev: linux driver model device pointer
  * @uuid: me client uuid
  * @cl: mei client
+ * @ops: ME transport ops
+ * @event_cb: Drivers register this callback to get asynchronous ME
+ *	events (e.g. Rx buffer pending) notifications.
+ * @events: Events bitmask sent to the driver.
  * @priv_data: client private data
  */
 struct mei_device {
@@ -286,6 +307,13 @@ struct mei_device {
 
 	uuid_le uuid;
 	struct mei_cl *cl;
+
+	const struct mei_transport_ops *ops;
+
+	struct work_struct event_work;
+	mei_event_cb_t event_cb;
+	void *event_context;
+	unsigned long events;
 
 	void *priv_data;
 };
