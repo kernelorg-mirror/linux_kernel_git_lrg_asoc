@@ -42,6 +42,8 @@ struct mei_nfc_dev {
 	u8 fw_ivn;
 	u8 vendor_id;
 	u8 radio_type;
+
+	char *bus_name;
 };
 
 static struct mei_nfc_dev nfc_dev;
@@ -68,6 +70,39 @@ static void mei_nfc_free(struct mei_nfc_dev *ndev)
 		mei_cl_unlink(ndev->cl_info);
 		kfree(ndev->cl_info);
 	}
+}
+
+static int mei_nfc_build_bus_name(struct mei_nfc_dev *ndev)
+{
+	struct mei_host *dev;
+
+	if (!ndev->cl)
+		return -ENODEV;
+
+	dev = ndev->cl->dev;
+
+	switch (ndev->vendor_id) {
+	case MEI_NFC_VENDOR_INSIDE:
+		switch (ndev->radio_type) {
+		case MEI_NFC_VENDOR_INSIDE_UREAD:
+			ndev->bus_name = "microread";
+			return 0;
+
+		default:
+			dev_err(&dev->pdev->dev, "Unknow radio type 0x%x\n",
+				ndev->radio_type);
+
+			return -EINVAL;
+		}
+
+	default:
+		dev_err(&dev->pdev->dev, "Unknow vendor ID 0x%x\n",
+			ndev->vendor_id);
+
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int mei_nfc_connect(struct mei_nfc_dev *ndev)
@@ -191,6 +226,7 @@ err:
 static void mei_nfc_init(struct work_struct *work)
 {
 	struct mei_host *dev;
+	struct mei_device *device;
 	struct mei_nfc_dev *ndev;
 	struct mei_cl *cl_info, *cl;
 	int ret;
@@ -241,6 +277,23 @@ static void mei_nfc_init(struct work_struct *work)
 		dev_err(&dev->pdev->dev, "Could not connect to NFC");
 		return;
 	}
+
+	if (mei_nfc_build_bus_name(ndev) < 0) {
+		dev_err(&dev->pdev->dev,
+			"Could not build the bus ID name\n");
+		return;
+	}
+
+	device = mei_add_device(dev, mei_nfc_guid,
+				    ndev->bus_name);
+	if (!device) {
+		dev_err(&dev->pdev->dev,
+			"Could not add the NFC device to the MEI bus\n");
+
+		goto err;
+	}
+
+	device->priv_data = ndev;
 
 	return;
 
@@ -322,6 +375,9 @@ err:
 void mei_nfc_host_exit(void)
 {
 	struct mei_nfc_dev *ndev = &nfc_dev;
+
+	if (ndev->cl && ndev->cl->device)
+		mei_remove_device(ndev->cl->device);
 
 	mei_nfc_free(ndev);
 }
