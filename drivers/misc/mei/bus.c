@@ -117,17 +117,37 @@ static struct device_type mei_client_type = {
 	.release	= mei_client_dev_release,
 };
 
+static struct mei_cl *mei_bus_find_mei_cl_by_uuid(struct mei_host *mei_dev,
+						  uuid_le uuid)
+{
+	struct mei_cl *cl, *next;
+
+	list_for_each_entry_safe(cl, next,
+				 &mei_dev->device_list, device_link) {
+		if (!uuid_le_cmp(uuid, cl->device_uuid))
+			return cl;
+	}
+
+	return NULL;
+}
+
 struct mei_device *mei_add_device(struct mei_host *mei_host,
 				  uuid_le uuid, char *name)
 {
 	struct mei_device *device;
+	struct mei_cl *cl;
 	int status;
+
+	cl = mei_bus_find_mei_cl_by_uuid(mei_host, uuid);
+	if (cl == NULL)
+		return NULL;
 
 	device = kzalloc(sizeof(struct mei_device), GFP_KERNEL);
 	if (!device)
 		return NULL;
 
 	device->uuid = uuid;
+	device->cl = cl;
 
 	device->dev.parent = &mei_host->pdev->dev;
 	device->dev.bus = &mei_bus_type;
@@ -136,19 +156,17 @@ struct mei_device *mei_add_device(struct mei_host *mei_host,
 	dev_set_name(&device->dev, "%s", name);
 
 	status = device_register(&device->dev);
-	if (status)
-		goto out_err;
+	if (status) {
+		kfree(device);
+		dev_err(device->dev.parent, "Failed to register MEI device\n");
+		return NULL;
+	}
+
+	cl->device = device;
 
 	dev_dbg(&device->dev, "client %s registered\n", name);
 
 	return device;
-
-out_err:
-	dev_err(device->dev.parent, "Failed to register MEI client\n");
-
-	kfree(device);
-
-	return NULL;
 }
 EXPORT_SYMBOL_GPL(mei_add_device);
 
@@ -346,9 +364,10 @@ out:
 
 int mei_send(struct mei_device *device, u8 *buf, size_t length)
 {
-	struct mei_cl *cl = NULL;
+	struct mei_cl *cl = device->cl;
 
-	/* TODO: hook between mei_bus_client and mei_cl */
+	if (cl == NULL)
+		return -ENODEV;
 
 	if (device->ops && device->ops->send)
 		return device->ops->send(device, buf, length);
@@ -359,9 +378,10 @@ EXPORT_SYMBOL_GPL(mei_send);
 
 int mei_recv(struct mei_device *device, u8 *buf, size_t length)
 {
-	struct mei_cl *cl = NULL;
+	struct mei_cl *cl =  device->cl;
 
-	/* TODO: hook between mei_bus_client and mei_cl */
+	if (cl == NULL)
+		return -ENODEV;
 
 	if (device->ops && device->ops->recv)
 		return device->ops->recv(device, buf, length);

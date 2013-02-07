@@ -210,6 +210,11 @@ struct mei_cl {
 	enum mei_file_transaction_states writing_state;
 	int sm_state;
 	struct mei_cl_cb *read_cb;
+
+	/* MEI bus data */
+	struct mei_device *device;
+	struct list_head device_link;
+	uuid_le device_uuid;
 };
 
 /** struct mei_hw_ops
@@ -419,6 +424,9 @@ struct mei_host {
 	bool iamthif_canceled;
 
 	struct work_struct init_work;
+
+	/* List of bus devices */
+	struct list_head device_list;
 
 	const struct mei_hw_ops *ops;
 	char hw[0] __aligned(sizeof(void *));
