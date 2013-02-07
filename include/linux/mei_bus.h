@@ -89,4 +89,10 @@ struct mei_driver {
 	int (*remove)(struct mei_device *dev);
 };
 
+int __mei_driver_register(struct mei_driver *driver, struct module *owner);
+#define mei_driver_register(driver)             \
+	__mei_driver_register(driver, THIS_MODULE)
+
+void mei_driver_unregister(struct mei_driver *driver);
+
 #endif /* _LINUX_MEI_BUS_H */
