@@ -15,6 +15,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/device.h>
@@ -39,11 +40,15 @@ struct mei_nfc_dev {
 	struct mei_cl *cl;
 	struct mei_cl *cl_info;
 	struct work_struct init_work;
+	wait_queue_head_t send_wq;
 	u8 fw_ivn;
 	u8 vendor_id;
 	u8 radio_type;
 
 	char *bus_name;
+
+	u16 req_id;
+	u16 recv_req_id;
 };
 
 static struct mei_nfc_dev nfc_dev;
@@ -223,6 +228,74 @@ err:
 	return ret;
 }
 
+static int mei_nfc_send(struct mei_device *device, u8 *buf, size_t length)
+{
+	struct mei_host *dev;
+	struct mei_nfc_dev *ndev;
+	struct mei_nfc_hci_hdr *hdr;
+	u8 *mei_buf;
+	int err;
+
+	ndev = (struct mei_nfc_dev *) device->priv_data;
+	dev = ndev->cl->dev;
+
+	mei_buf = kzalloc(length + MEI_NFC_HEADER_SIZE, GFP_KERNEL);
+	if (!mei_buf)
+		return -ENOMEM;
+
+	hdr = (struct mei_nfc_hci_hdr *) mei_buf;
+	hdr->cmd = MEI_NFC_CMD_HCI_SEND;
+	hdr->status = 0;
+	hdr->req_id = ndev->req_id;
+	hdr->reserved = 0;
+	hdr->data_size = length;
+
+	memcpy(mei_buf + MEI_NFC_HEADER_SIZE, buf, length);
+
+	err = __mei_send(ndev->cl, mei_buf, length + MEI_NFC_HEADER_SIZE);
+
+	kfree(mei_buf);
+
+	if (!wait_event_interruptible_timeout(ndev->send_wq,
+				ndev->recv_req_id == ndev->req_id, HZ)) {
+		dev_err(&dev->pdev->dev, "NFC MEI command timeout\n");
+		err = -ETIMEDOUT;
+	} else {
+		ndev->req_id++;
+	}
+
+	return err;
+}
+
+static int mei_nfc_recv(struct mei_device *device, u8 *buf, size_t length)
+{
+	struct mei_nfc_dev *ndev;
+	struct mei_nfc_hci_hdr *hci_hdr;
+	int received_length;
+
+	ndev = (struct mei_nfc_dev *) device->priv_data;
+
+	received_length = __mei_recv(ndev->cl, buf, length);
+	if (received_length < 0)
+		return received_length;
+
+	hci_hdr = (struct mei_nfc_hci_hdr *) buf;
+
+	if (hci_hdr->cmd == MEI_NFC_CMD_HCI_SEND) {
+		ndev->recv_req_id = hci_hdr->req_id;
+		wake_up(&ndev->send_wq);
+
+		return 0;
+	}
+
+	return received_length;
+}
+
+static struct mei_transport_ops nfc_ops = {
+	.send = mei_nfc_send,
+	.recv = mei_nfc_recv,
+};
+
 static void mei_nfc_init(struct work_struct *work)
 {
 	struct mei_host *dev;
@@ -294,6 +367,7 @@ static void mei_nfc_init(struct work_struct *work)
 	}
 
 	device->priv_data = ndev;
+	device->ops = &nfc_ops;
 
 	return;
 
@@ -360,8 +434,10 @@ int mei_nfc_host_init(struct mei_host *dev)
 
 	ndev->cl_info = cl_info;
 	ndev->cl = cl;
+	ndev->req_id = 1;
 
 	INIT_WORK(&ndev->init_work, mei_nfc_init);
+	init_waitqueue_head(&ndev->send_wq);
 	schedule_work(&ndev->init_work);
 
 	return 0;
