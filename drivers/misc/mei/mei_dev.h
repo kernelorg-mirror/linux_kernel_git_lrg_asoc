@@ -273,6 +273,7 @@ struct mei_hw_ops {
 struct mei_device *mei_add_device(struct mei_host *mei_host,
 				  uuid_le uuid, char *name);
 void mei_remove_device(struct mei_device *device);
+int __mei_async_send(struct mei_cl *cl, u8 *buf, size_t length);
 int __mei_send(struct mei_cl *cl, u8 *buf, size_t length);
 int __mei_recv(struct mei_cl *cl, u8 *buf, size_t length);
 
