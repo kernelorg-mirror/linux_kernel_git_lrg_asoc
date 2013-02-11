@@ -194,7 +194,7 @@ struct mei_cl_cb {
 /* MEI client instance carried as file->pirvate_data*/
 struct mei_cl {
 	struct list_head link;
-	struct mei_device *dev;
+	struct mei_host *dev;
 	enum file_state state;
 	wait_queue_head_t tx_wait;
 	wait_queue_head_t rx_wait;
@@ -237,34 +237,34 @@ struct mei_cl {
  */
 struct mei_hw_ops {
 
-	void (*host_set_ready) (struct mei_device *dev);
-	bool (*host_is_ready) (struct mei_device *dev);
+	void (*host_set_ready) (struct mei_host *dev);
+	bool (*host_is_ready) (struct mei_host *dev);
 
-	bool (*hw_is_ready) (struct mei_device *dev);
-	void (*hw_reset) (struct mei_device *dev, bool enable);
-	void (*hw_config) (struct mei_device *dev);
+	bool (*hw_is_ready) (struct mei_host *dev);
+	void (*hw_reset) (struct mei_host *dev, bool enable);
+	void (*hw_config) (struct mei_host *dev);
 
-	void (*intr_clear) (struct mei_device *dev);
-	void (*intr_enable) (struct mei_device *dev);
-	void (*intr_disable) (struct mei_device *dev);
+	void (*intr_clear) (struct mei_host *dev);
+	void (*intr_enable) (struct mei_host *dev);
+	void (*intr_disable) (struct mei_host *dev);
 
-	int (*hbuf_free_slots) (struct mei_device *dev);
-	bool (*hbuf_is_ready) (struct mei_device *dev);
-	size_t (*hbuf_max_len) (const struct mei_device *dev);
+	int (*hbuf_free_slots) (struct mei_host *dev);
+	bool (*hbuf_is_ready) (struct mei_host *dev);
+	size_t (*hbuf_max_len) (const struct mei_host *dev);
 
-	int (*write)(struct mei_device *dev,
+	int (*write)(struct mei_host *dev,
 		     struct mei_msg_hdr *hdr,
 		     unsigned char *buf);
 
-	int (*rdbuf_full_slots)(struct mei_device *dev);
+	int (*rdbuf_full_slots)(struct mei_host *dev);
 
-	u32 (*read_hdr)(const struct mei_device *dev);
-	int (*read) (struct mei_device *dev,
+	u32 (*read_hdr)(const struct mei_host *dev);
+	int (*read) (struct mei_host *dev,
 		     unsigned char *buf, unsigned long len);
 };
 
 /**
- * struct mei_device -  MEI private device struct
+ * struct mei_host -  MEI private host struct
 
  * @mem_addr - mem mapped base register address
 
@@ -273,7 +273,7 @@ struct mei_hw_ops {
  * @wr_msg - the buffer for hbm control messages
  * @wr_ext_msg - the buffer for hbm control responses (set in read cycle)
  */
-struct mei_device {
+struct mei_host {
 	struct pci_dev *pdev;	/* pointer to pci device struct */
 	/*
 	 * lists of queues
@@ -378,144 +378,144 @@ static inline unsigned long mei_secs_to_jiffies(unsigned long sec)
 /*
  * mei init function prototypes
  */
-void mei_device_init(struct mei_device *dev);
-void mei_reset(struct mei_device *dev, int interrupts);
-int mei_hw_init(struct mei_device *dev);
+void mei_device_init(struct mei_host *dev);
+void mei_reset(struct mei_host *dev, int interrupts);
+int mei_hw_init(struct mei_host *dev);
 
 /*
  *  MEI interrupt functions prototype
  */
 
 void mei_timer(struct work_struct *work);
-int mei_irq_read_handler(struct mei_device *dev,
+int mei_irq_read_handler(struct mei_host *dev,
 		struct mei_cl_cb *cmpl_list, s32 *slots);
 
-int mei_irq_write_handler(struct mei_device *dev, struct mei_cl_cb *cmpl_list);
+int mei_irq_write_handler(struct mei_host *dev, struct mei_cl_cb *cmpl_list);
 
 void mei_irq_complete_handler(struct mei_cl *cl, struct mei_cl_cb *cb_pos);
 
 /*
  * AMTHIF - AMT Host Interface Functions
  */
-void mei_amthif_reset_params(struct mei_device *dev);
+void mei_amthif_reset_params(struct mei_host *dev);
 
-int mei_amthif_host_init(struct mei_device *dev);
+int mei_amthif_host_init(struct mei_host *dev);
 
-int mei_amthif_write(struct mei_device *dev, struct mei_cl_cb *priv_cb);
+int mei_amthif_write(struct mei_host *dev, struct mei_cl_cb *priv_cb);
 
-int mei_amthif_read(struct mei_device *dev, struct file *file,
+int mei_amthif_read(struct mei_host *dev, struct file *file,
 		char __user *ubuf, size_t length, loff_t *offset);
 
-unsigned int mei_amthif_poll(struct mei_device *dev,
+unsigned int mei_amthif_poll(struct mei_host *dev,
 		struct file *file, poll_table *wait);
 
-int mei_amthif_release(struct mei_device *dev, struct file *file);
+int mei_amthif_release(struct mei_host *dev, struct file *file);
 
-struct mei_cl_cb *mei_amthif_find_read_list_entry(struct mei_device *dev,
+struct mei_cl_cb *mei_amthif_find_read_list_entry(struct mei_host *dev,
 						struct file *file);
 
-void mei_amthif_run_next_cmd(struct mei_device *dev);
+void mei_amthif_run_next_cmd(struct mei_host *dev);
 
 
-int mei_amthif_irq_write_complete(struct mei_device *dev, s32 *slots,
+int mei_amthif_irq_write_complete(struct mei_host *dev, s32 *slots,
 			struct mei_cl_cb *cb, struct mei_cl_cb *cmpl_list);
 
-void mei_amthif_complete(struct mei_device *dev, struct mei_cl_cb *cb);
+void mei_amthif_complete(struct mei_host *dev, struct mei_cl_cb *cb);
 int mei_amthif_irq_read_message(struct mei_cl_cb *complete_list,
-		struct mei_device *dev, struct mei_msg_hdr *mei_hdr);
-int mei_amthif_irq_read(struct mei_device *dev, s32 *slots);
+		struct mei_host *dev, struct mei_msg_hdr *mei_hdr);
+int mei_amthif_irq_read(struct mei_host *dev, s32 *slots);
 
 
-int mei_wd_send(struct mei_device *dev);
-int mei_wd_stop(struct mei_device *dev);
-int mei_wd_host_init(struct mei_device *dev);
+int mei_wd_send(struct mei_host *dev);
+int mei_wd_stop(struct mei_host *dev);
+int mei_wd_host_init(struct mei_host *dev);
 /*
  * mei_watchdog_register  - Registering watchdog interface
  *   once we got connection to the WD Client
  * @dev - mei device
  */
-void mei_watchdog_register(struct mei_device *dev);
+void mei_watchdog_register(struct mei_host *dev);
 /*
  * mei_watchdog_unregister  - Unregistering watchdog interface
  * @dev - mei device
  */
-void mei_watchdog_unregister(struct mei_device *dev);
+void mei_watchdog_unregister(struct mei_host *dev);
 
 /*
  * Register Access Function
  */
 
-static inline void mei_hw_config(struct mei_device *dev)
+static inline void mei_hw_config(struct mei_host *dev)
 {
 	dev->ops->hw_config(dev);
 }
-static inline void mei_hw_reset(struct mei_device *dev, bool enable)
+static inline void mei_hw_reset(struct mei_host *dev, bool enable)
 {
 	dev->ops->hw_reset(dev, enable);
 }
 
-static inline void mei_clear_interrupts(struct mei_device *dev)
+static inline void mei_clear_interrupts(struct mei_host *dev)
 {
 	dev->ops->intr_clear(dev);
 }
 
-static inline void mei_enable_interrupts(struct mei_device *dev)
+static inline void mei_enable_interrupts(struct mei_host *dev)
 {
 	dev->ops->intr_enable(dev);
 }
 
-static inline void mei_disable_interrupts(struct mei_device *dev)
+static inline void mei_disable_interrupts(struct mei_host *dev)
 {
 	dev->ops->intr_disable(dev);
 }
 
-static inline void mei_host_set_ready(struct mei_device *dev)
+static inline void mei_host_set_ready(struct mei_host *dev)
 {
 	dev->ops->host_set_ready(dev);
 }
-static inline bool mei_host_is_ready(struct mei_device *dev)
+static inline bool mei_host_is_ready(struct mei_host *dev)
 {
 	return dev->ops->host_is_ready(dev);
 }
-static inline bool mei_hw_is_ready(struct mei_device *dev)
+static inline bool mei_hw_is_ready(struct mei_host *dev)
 {
 	return dev->ops->hw_is_ready(dev);
 }
 
-static inline bool mei_hbuf_is_ready(struct mei_device *dev)
+static inline bool mei_hbuf_is_ready(struct mei_host *dev)
 {
 	return dev->ops->hbuf_is_ready(dev);
 }
 
-static inline int mei_hbuf_empty_slots(struct mei_device *dev)
+static inline int mei_hbuf_empty_slots(struct mei_host *dev)
 {
 	return dev->ops->hbuf_free_slots(dev);
 }
 
-static inline size_t mei_hbuf_max_len(const struct mei_device *dev)
+static inline size_t mei_hbuf_max_len(const struct mei_host *dev)
 {
 	return dev->ops->hbuf_max_len(dev);
 }
 
-static inline int mei_write_message(struct mei_device *dev,
+static inline int mei_write_message(struct mei_host *dev,
 			struct mei_msg_hdr *hdr,
 			unsigned char *buf)
 {
 	return dev->ops->write(dev, hdr, buf);
 }
 
-static inline u32 mei_read_hdr(const struct mei_device *dev)
+static inline u32 mei_read_hdr(const struct mei_host *dev)
 {
 	return dev->ops->read_hdr(dev);
 }
 
-static inline void mei_read_slots(struct mei_device *dev,
+static inline void mei_read_slots(struct mei_host *dev,
 		     unsigned char *buf, unsigned long len)
 {
 	dev->ops->read(dev, buf, len);
 }
 
-static inline int mei_count_full_read_slots(struct mei_device *dev)
+static inline int mei_count_full_read_slots(struct mei_host *dev)
 {
 	return dev->ops->rdbuf_full_slots(dev);
 }

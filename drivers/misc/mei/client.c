@@ -31,7 +31,7 @@
  * @dev: mei device
  * returns me client index or -ENOENT if not found
  */
-int mei_me_cl_by_uuid(const struct mei_device *dev, const uuid_le *uuid)
+int mei_me_cl_by_uuid(const struct mei_host *dev, const uuid_le *uuid)
 {
 	int i, res = -ENOENT;
 
@@ -57,7 +57,7 @@ int mei_me_cl_by_uuid(const struct mei_device *dev, const uuid_le *uuid)
  * returns index on success, -ENOENT on failure.
  */
 
-int mei_me_cl_by_id(struct mei_device *dev, u8 client_id)
+int mei_me_cl_by_id(struct mei_host *dev, u8 client_id)
 {
 	int i;
 	for (i = 0; i < dev->me_clients_num; i++)
@@ -209,7 +209,7 @@ int mei_cl_flush_queues(struct mei_cl *cl)
  * @cl: host client to be initialized
  * @dev: mei device
  */
-void mei_cl_init(struct mei_cl *cl, struct mei_device *dev)
+void mei_cl_init(struct mei_cl *cl, struct mei_host *dev)
 {
 	memset(cl, 0, sizeof(struct mei_cl));
 	init_waitqueue_head(&cl->wait);
@@ -227,7 +227,7 @@ void mei_cl_init(struct mei_cl *cl, struct mei_device *dev)
  * @dev: mei device
  * returns  The allocated file or NULL on failure
  */
-struct mei_cl *mei_cl_allocate(struct mei_device *dev)
+struct mei_cl *mei_cl_allocate(struct mei_host *dev)
 {
 	struct mei_cl *cl;
 
@@ -248,7 +248,7 @@ struct mei_cl *mei_cl_allocate(struct mei_device *dev)
  */
 struct mei_cl_cb *mei_cl_find_read_cb(struct mei_cl *cl)
 {
-	struct mei_device *dev = cl->dev;
+	struct mei_host *dev = cl->dev;
 	struct mei_cl_cb *cb = NULL;
 	struct mei_cl_cb *next = NULL;
 
@@ -268,7 +268,7 @@ struct mei_cl_cb *mei_cl_find_read_cb(struct mei_cl *cl)
  */
 int mei_cl_link(struct mei_cl *cl, int id)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	if (WARN_ON(!cl || !cl->dev))
 		return -EINVAL;
@@ -305,7 +305,7 @@ int mei_cl_link(struct mei_cl *cl, int id)
  */
 int mei_cl_unlink(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl *pos, *next;
 
 	/* don't shout on error exit path */
@@ -332,8 +332,8 @@ int mei_cl_unlink(struct mei_cl *cl)
 
 void mei_host_client_init(struct work_struct *work)
 {
-	struct mei_device *dev = container_of(work,
-					      struct mei_device, init_work);
+	struct mei_host *dev = container_of(work,
+					      struct mei_host, init_work);
 	struct mei_client_properties *client_props;
 	int i;
 
@@ -376,7 +376,7 @@ void mei_host_client_init(struct work_struct *work)
  */
 int mei_cl_disconnect(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl_cb *cb;
 	int rets, err;
 
@@ -448,7 +448,7 @@ free:
  */
 bool mei_cl_is_other_connecting(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl *pos;
 	struct mei_cl *next;
 
@@ -478,7 +478,7 @@ bool mei_cl_is_other_connecting(struct mei_cl *cl)
  */
 int mei_cl_connect(struct mei_cl *cl, struct file *file)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl_cb *cb;
 	long timeout = mei_secs_to_jiffies(MEI_CL_CONNECT_TIMEOUT);
 	int rets;
@@ -543,7 +543,7 @@ out:
  */
 int mei_cl_flow_ctrl_creds(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	int i;
 
 	if (WARN_ON(!cl || !cl->dev))
@@ -584,7 +584,7 @@ int mei_cl_flow_ctrl_creds(struct mei_cl *cl)
  */
 int mei_cl_flow_ctrl_reduce(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	int i;
 
 	if (WARN_ON(!cl || !cl->dev))
@@ -622,7 +622,7 @@ int mei_cl_flow_ctrl_reduce(struct mei_cl *cl)
  */
 int mei_cl_read_start(struct mei_cl *cl)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl_cb *cb;
 	int rets;
 	int i;
@@ -682,7 +682,7 @@ err:
  * @dev - mei device
  */
 
-void mei_cl_all_disconnect(struct mei_device *dev)
+void mei_cl_all_disconnect(struct mei_host *dev)
 {
 	struct mei_cl *cl, *next;
 
@@ -700,7 +700,7 @@ void mei_cl_all_disconnect(struct mei_device *dev)
  *
  * @dev  - mei device
  */
-void mei_cl_all_read_wakeup(struct mei_device *dev)
+void mei_cl_all_read_wakeup(struct mei_host *dev)
 {
 	struct mei_cl *cl, *next;
 	list_for_each_entry_safe(cl, next, &dev->file_list, link) {
@@ -716,7 +716,7 @@ void mei_cl_all_read_wakeup(struct mei_device *dev)
 
  * @dev - mei device
  */
-void mei_cl_all_write_clear(struct mei_device *dev)
+void mei_cl_all_write_clear(struct mei_host *dev)
 {
 	struct mei_cl_cb *cb, *next;
 

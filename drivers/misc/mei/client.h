@@ -24,8 +24,8 @@
 
 #include "mei_dev.h"
 
-int mei_me_cl_by_uuid(const struct mei_device *dev, const uuid_le *cuuid);
-int mei_me_cl_by_id(struct mei_device *dev, u8 client_id);
+int mei_me_cl_by_uuid(const struct mei_host *dev, const uuid_le *cuuid);
+int mei_me_cl_by_id(struct mei_host *dev, u8 client_id);
 
 /*
  * MEI IO Functions
@@ -51,8 +51,8 @@ void mei_io_list_flush(struct mei_cl_cb *list, struct mei_cl *cl);
  * MEI Host Client Functions
  */
 
-struct mei_cl *mei_cl_allocate(struct mei_device *dev);
-void mei_cl_init(struct mei_cl *cl, struct mei_device *dev);
+struct mei_cl *mei_cl_allocate(struct mei_host *dev);
+void mei_cl_init(struct mei_cl *cl, struct mei_host *dev);
 
 
 int mei_cl_link(struct mei_cl *cl, int id);
@@ -94,9 +94,9 @@ int mei_cl_connect(struct mei_cl *cl, struct file *file);
 void mei_host_client_init(struct work_struct *work);
 
 
-void mei_cl_all_disconnect(struct mei_device *dev);
-void mei_cl_all_read_wakeup(struct mei_device *dev);
-void mei_cl_all_write_clear(struct mei_device *dev);
+void mei_cl_all_disconnect(struct mei_host *dev);
+void mei_cl_all_read_wakeup(struct mei_host *dev);
+void mei_cl_all_write_clear(struct mei_host *dev);
 
 
 #endif /* _MEI_CLIENT_H_ */

@@ -30,7 +30,7 @@
  *
  * returns none.
  */
-static void mei_hbm_me_cl_allocate(struct mei_device *dev)
+static void mei_hbm_me_cl_allocate(struct mei_host *dev)
 {
 	struct mei_me_client *clients;
 	int b;
@@ -128,7 +128,7 @@ static bool is_treat_specially_client(struct mei_cl *cl,
  *
  * @dev: the device structure
  */
-void mei_hbm_start_req(struct mei_device *dev)
+void mei_hbm_start_req(struct mei_host *dev)
 {
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
 	struct hbm_host_version_request *start_req;
@@ -161,7 +161,7 @@ void mei_hbm_start_req(struct mei_device *dev)
  *
  * returns none.
  */
-static void mei_hbm_enum_clients_req(struct mei_device *dev)
+static void mei_hbm_enum_clients_req(struct mei_host *dev)
 {
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
 	struct hbm_host_enum_request *enum_req;
@@ -191,7 +191,7 @@ static void mei_hbm_enum_clients_req(struct mei_device *dev)
  * returns none.
  */
 
-static int mei_hbm_prop_req(struct mei_device *dev)
+static int mei_hbm_prop_req(struct mei_host *dev)
 {
 
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
@@ -246,7 +246,7 @@ static int mei_hbm_prop_req(struct mei_device *dev)
  * @mei_hdr - mei message header
  * @data - hbm message body buffer
  */
-static void mei_hbm_stop_req_prepare(struct mei_device *dev,
+static void mei_hbm_stop_req_prepare(struct mei_host *dev,
 		struct mei_msg_hdr *mei_hdr, unsigned char *data)
 {
 	struct hbm_host_stop_request *req =
@@ -268,7 +268,7 @@ static void mei_hbm_stop_req_prepare(struct mei_device *dev,
  *
  * This function returns -EIO on write failure
  */
-int mei_hbm_cl_flow_control_req(struct mei_device *dev, struct mei_cl *cl)
+int mei_hbm_cl_flow_control_req(struct mei_host *dev, struct mei_cl *cl)
 {
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
 	const size_t len = sizeof(struct hbm_flow_control);
@@ -288,7 +288,7 @@ int mei_hbm_cl_flow_control_req(struct mei_device *dev, struct mei_cl *cl)
  * @file: private data ot the file object.
  * @flow: flow control.
  */
-static void mei_hbm_add_single_flow_creds(struct mei_device *dev,
+static void mei_hbm_add_single_flow_creds(struct mei_host *dev,
 				  struct hbm_flow_control *flow)
 {
 	struct mei_me_client *client;
@@ -316,7 +316,7 @@ static void mei_hbm_add_single_flow_creds(struct mei_device *dev,
  * @dev: the device structure
  * @flow_control: flow control response bus message
  */
-static void mei_hbm_cl_flow_control_res(struct mei_device *dev,
+static void mei_hbm_cl_flow_control_res(struct mei_host *dev,
 		struct hbm_flow_control *flow_control)
 {
 	struct mei_cl *cl = NULL;
@@ -350,7 +350,7 @@ static void mei_hbm_cl_flow_control_res(struct mei_device *dev,
  *
  * This function returns -EIO on write failure
  */
-int mei_hbm_cl_disconnect_req(struct mei_device *dev, struct mei_cl *cl)
+int mei_hbm_cl_disconnect_req(struct mei_host *dev, struct mei_cl *cl)
 {
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
 	const size_t len = sizeof(struct hbm_client_connect_request);
@@ -367,7 +367,7 @@ int mei_hbm_cl_disconnect_req(struct mei_device *dev, struct mei_cl *cl)
  * @dev: the device structure
  * @rs: disconnect response bus message
  */
-static void mei_hbm_cl_disconnect_res(struct mei_device *dev,
+static void mei_hbm_cl_disconnect_res(struct mei_host *dev,
 		struct hbm_client_connect_response *rs)
 {
 	struct mei_cl *cl;
@@ -411,7 +411,7 @@ static void mei_hbm_cl_disconnect_res(struct mei_device *dev,
  *
  * returns -EIO on write failure
  */
-int mei_hbm_cl_connect_req(struct mei_device *dev, struct mei_cl *cl)
+int mei_hbm_cl_connect_req(struct mei_host *dev, struct mei_cl *cl)
 {
 	struct mei_msg_hdr *mei_hdr = &dev->wr_msg.hdr;
 	const size_t len = sizeof(struct hbm_client_connect_request);
@@ -428,7 +428,7 @@ int mei_hbm_cl_connect_req(struct mei_device *dev, struct mei_cl *cl)
  * @dev: the device structure
  * @rs: connect response bus message
  */
-static void mei_hbm_cl_connect_res(struct mei_device *dev,
+static void mei_hbm_cl_connect_res(struct mei_host *dev,
 		struct hbm_client_connect_response *rs)
 {
 
@@ -483,7 +483,7 @@ static void mei_hbm_cl_connect_res(struct mei_device *dev,
  * @dev: the device structure.
  * @disconnect_req: disconnect request bus message from the me
  */
-static void mei_hbm_fw_disconnect_req(struct mei_device *dev,
+static void mei_hbm_fw_disconnect_req(struct mei_host *dev,
 		struct hbm_client_connect_request *disconnect_req)
 {
 	struct mei_cl *cl, *next;
@@ -518,7 +518,7 @@ static void mei_hbm_fw_disconnect_req(struct mei_device *dev,
  * @dev: the device structure
  * @mei_hdr: header of bus message
  */
-void mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr)
+void mei_hbm_dispatch(struct mei_host *dev, struct mei_msg_hdr *hdr)
 {
 	struct mei_bus_message *mei_msg;
 	struct mei_me_client *me_client;

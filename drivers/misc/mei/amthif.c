@@ -47,7 +47,7 @@ const uuid_le mei_amthif_guid  = UUID_LE(0x12f80028, 0xb4b7, 0x4b2d,
  *
  * @dev: the device structure
  */
-void mei_amthif_reset_params(struct mei_device *dev)
+void mei_amthif_reset_params(struct mei_host *dev)
 {
 	/* reset iamthif parameters. */
 	dev->iamthif_current_cb = NULL;
@@ -65,7 +65,7 @@ void mei_amthif_reset_params(struct mei_device *dev)
  * @dev: the device structure
  *
  */
-int mei_amthif_host_init(struct mei_device *dev)
+int mei_amthif_host_init(struct mei_host *dev)
 {
 	struct mei_cl *cl = &dev->iamthif_cl;
 	unsigned char *msg_buf;
@@ -129,7 +129,7 @@ int mei_amthif_host_init(struct mei_device *dev)
  *
  * returns   returned a list entry on success, NULL on failure.
  */
-struct mei_cl_cb *mei_amthif_find_read_list_entry(struct mei_device *dev,
+struct mei_cl_cb *mei_amthif_find_read_list_entry(struct mei_host *dev,
 						struct file *file)
 {
 	struct mei_cl_cb *pos = NULL;
@@ -162,7 +162,7 @@ struct mei_cl_cb *mei_amthif_find_read_list_entry(struct mei_device *dev,
  *  zero if no data to read,
  *  negative on failure.
  */
-int mei_amthif_read(struct mei_device *dev, struct file *file,
+int mei_amthif_read(struct mei_host *dev, struct file *file,
 	       char __user *ubuf, size_t length, loff_t *offset)
 {
 	int rets;
@@ -274,7 +274,7 @@ out:
  * returns 0 on success, <0 on failure.
  *
  */
-static int mei_amthif_send_cmd(struct mei_device *dev, struct mei_cl_cb *cb)
+static int mei_amthif_send_cmd(struct mei_host *dev, struct mei_cl_cb *cb)
 {
 	struct mei_msg_hdr mei_hdr;
 	int ret;
@@ -348,7 +348,7 @@ static int mei_amthif_send_cmd(struct mei_device *dev, struct mei_cl_cb *cb)
  * returns 0 on success, <0 on failure.
  *
  */
-int mei_amthif_write(struct mei_device *dev, struct mei_cl_cb *cb)
+int mei_amthif_write(struct mei_host *dev, struct mei_cl_cb *cb)
 {
 	int ret;
 
@@ -378,7 +378,7 @@ int mei_amthif_write(struct mei_device *dev, struct mei_cl_cb *cb)
  *
  * returns 0 on success, <0 on failure.
  */
-void mei_amthif_run_next_cmd(struct mei_device *dev)
+void mei_amthif_run_next_cmd(struct mei_host *dev)
 {
 	struct mei_cl_cb *pos = NULL;
 	struct mei_cl_cb *next = NULL;
@@ -414,7 +414,7 @@ void mei_amthif_run_next_cmd(struct mei_device *dev)
 }
 
 
-unsigned int mei_amthif_poll(struct mei_device *dev,
+unsigned int mei_amthif_poll(struct mei_host *dev,
 		struct file *file, poll_table *wait)
 {
 	unsigned int mask = 0;
@@ -443,7 +443,7 @@ unsigned int mei_amthif_poll(struct mei_device *dev,
  *
  * returns 0, OK; otherwise, error.
  */
-int mei_amthif_irq_write_complete(struct mei_device *dev, s32 *slots,
+int mei_amthif_irq_write_complete(struct mei_host *dev, s32 *slots,
 			struct mei_cl_cb *cb, struct mei_cl_cb *cmpl_list)
 {
 	struct mei_msg_hdr mei_hdr;
@@ -512,7 +512,7 @@ int mei_amthif_irq_write_complete(struct mei_device *dev, s32 *slots,
  * returns 0 on success, <0 on failure.
  */
 int mei_amthif_irq_read_message(struct mei_cl_cb *complete_list,
-		struct mei_device *dev, struct mei_msg_hdr *mei_hdr)
+		struct mei_host *dev, struct mei_msg_hdr *mei_hdr)
 {
 	struct mei_cl_cb *cb;
 	unsigned char *buffer;
@@ -564,7 +564,7 @@ int mei_amthif_irq_read_message(struct mei_cl_cb *complete_list,
  *
  * returns 0, OK; otherwise, error.
  */
-int mei_amthif_irq_read(struct mei_device *dev, s32 *slots)
+int mei_amthif_irq_read(struct mei_host *dev, s32 *slots)
 {
 
 	if (((*slots) * sizeof(u32)) < (sizeof(struct mei_msg_hdr)
@@ -593,7 +593,7 @@ int mei_amthif_irq_read(struct mei_device *dev, s32 *slots)
  * @dev: the device structure.
  * @cb_pos: callback block.
  */
-void mei_amthif_complete(struct mei_device *dev, struct mei_cl_cb *cb)
+void mei_amthif_complete(struct mei_host *dev, struct mei_cl_cb *cb)
 {
 	if (dev->iamthif_canceled != 1) {
 		dev->iamthif_state = MEI_IAMTHIF_READ_COMPLETE;
@@ -627,7 +627,7 @@ void mei_amthif_complete(struct mei_device *dev, struct mei_cl_cb *cb)
  *
  * returns true if callback removed from the list, false otherwise
  */
-static bool mei_clear_list(struct mei_device *dev,
+static bool mei_clear_list(struct mei_host *dev,
 		const struct file *file, struct list_head *mei_cb_list)
 {
 	struct mei_cl_cb *cb_pos = NULL;
@@ -667,7 +667,7 @@ static bool mei_clear_list(struct mei_device *dev,
  *
  * returns true if callback removed from the list, false otherwise
  */
-static bool mei_clear_lists(struct mei_device *dev, struct file *file)
+static bool mei_clear_lists(struct mei_host *dev, struct file *file)
 {
 	bool removed = false;
 
@@ -708,7 +708,7 @@ static bool mei_clear_lists(struct mei_device *dev, struct file *file)
 *
 *  returns 0 on success, <0 on error
 */
-int mei_amthif_release(struct mei_device *dev, struct file *file)
+int mei_amthif_release(struct mei_host *dev, struct file *file)
 {
 	if (dev->open_handle_count > 0)
 		dev->open_handle_count--;

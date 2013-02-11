@@ -56,7 +56,7 @@ static int mei_open(struct inode *inode, struct file *file)
 	struct miscdevice *misc = file->private_data;
 	struct pci_dev *pdev;
 	struct mei_cl *cl;
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	int err;
 
@@ -117,7 +117,7 @@ static int mei_release(struct inode *inode, struct file *file)
 {
 	struct mei_cl *cl = file->private_data;
 	struct mei_cl_cb *cb;
-	struct mei_device *dev;
+	struct mei_host *dev;
 	int rets = 0;
 
 	if (WARN_ON(!cl || !cl->dev))
@@ -193,7 +193,7 @@ static ssize_t mei_read(struct file *file, char __user *ubuf,
 	struct mei_cl *cl = file->private_data;
 	struct mei_cl_cb *cb_pos = NULL;
 	struct mei_cl_cb *cb = NULL;
-	struct mei_device *dev;
+	struct mei_host *dev;
 	int i;
 	int rets;
 	int err;
@@ -343,7 +343,7 @@ static ssize_t mei_write(struct file *file, const char __user *ubuf,
 	struct mei_cl *cl = file->private_data;
 	struct mei_cl_cb *write_cb = NULL;
 	struct mei_msg_hdr mei_hdr;
-	struct mei_device *dev;
+	struct mei_host *dev;
 	unsigned long timeout = 0;
 	int rets;
 	int i;
@@ -516,7 +516,7 @@ err:
 static int mei_ioctl_connect_client(struct file *file,
 			struct mei_connect_client_data *data)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_client *client;
 	struct mei_cl *cl;
 	int i;
@@ -611,7 +611,7 @@ end:
  */
 static long mei_ioctl(struct file *file, unsigned int cmd, unsigned long data)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_cl *cl = file->private_data;
 	struct mei_connect_client_data *connect_data = NULL;
 	int rets;
@@ -697,7 +697,7 @@ static long mei_compat_ioctl(struct file *file,
 static unsigned int mei_poll(struct file *file, poll_table *wait)
 {
 	struct mei_cl *cl = file->private_data;
-	struct mei_device *dev;
+	struct mei_host *dev;
 	unsigned int mask = 0;
 
 	if (WARN_ON(!cl || !cl->dev))

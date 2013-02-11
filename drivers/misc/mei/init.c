@@ -42,7 +42,7 @@ const char *mei_dev_state_str(int state)
 #undef MEI_DEV_STATE
 }
 
-void mei_device_init(struct mei_device *dev)
+void mei_device_init(struct mei_host *dev)
 {
 	/* setup our list array */
 	INIT_LIST_HEAD(&dev->file_list);
@@ -65,7 +65,7 @@ void mei_device_init(struct mei_device *dev)
  *
  * returns 0 on success, <0 on failure.
  */
-int mei_hw_init(struct mei_device *dev)
+int mei_hw_init(struct mei_host *dev)
 {
 	int ret = 0;
 
@@ -133,7 +133,7 @@ err:
  * @dev: the device structure
  * @interrupts_enabled: if interrupt should be enabled after reset.
  */
-void mei_reset(struct mei_device *dev, int interrupts_enabled)
+void mei_reset(struct mei_host *dev, int interrupts_enabled)
 {
 	bool unexpected;
 

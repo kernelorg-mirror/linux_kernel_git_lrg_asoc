@@ -34,7 +34,7 @@ struct mei_me_hw {
 
 #define to_me_hw(dev) (struct mei_me_hw *)((dev)->hw)
 
-struct mei_device *mei_me_dev_init(struct pci_dev *pdev);
+struct mei_host *mei_me_dev_init(struct pci_dev *pdev);
 
 /* get slots (dwords) from a message length + header (bytes) */
 static inline unsigned char mei_data2slots(size_t length)

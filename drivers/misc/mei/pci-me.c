@@ -121,7 +121,7 @@ static bool mei_quirk_probe(struct pci_dev *pdev,
  */
 static int mei_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_me_hw *hw;
 	int err;
 
@@ -235,7 +235,7 @@ end:
  */
 static void mei_remove(struct pci_dev *pdev)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 	struct mei_me_hw *hw;
 
 	if (mei_pdev != pdev)
@@ -307,7 +307,7 @@ static void mei_remove(struct pci_dev *pdev)
 static int mei_pci_suspend(struct device *device)
 {
 	struct pci_dev *pdev = to_pci_dev(device);
-	struct mei_device *dev = pci_get_drvdata(pdev);
+	struct mei_host *dev = pci_get_drvdata(pdev);
 	int err;
 
 	if (!dev)
@@ -335,7 +335,7 @@ static int mei_pci_suspend(struct device *device)
 static int mei_pci_resume(struct device *device)
 {
 	struct pci_dev *pdev = to_pci_dev(device);
-	struct mei_device *dev;
+	struct mei_host *dev;
 	int err;
 
 	dev = pci_get_drvdata(pdev);

@@ -47,7 +47,7 @@ const uuid_le mei_wd_guid = UUID_LE(0x05B79A6F, 0x4628, 0x4D7F, 0x89,
 						0x9D, 0xA9, 0x15, 0x14, 0xCB,
 						0x32, 0xAB);
 
-static void mei_wd_set_start_timeout(struct mei_device *dev, u16 timeout)
+static void mei_wd_set_start_timeout(struct mei_host *dev, u16 timeout)
 {
 	dev_dbg(&dev->pdev->dev, "wd: set timeout=%d.\n", timeout);
 	memcpy(dev->wd_data, mei_start_wd_params, MEI_WD_HDR_SIZE);
@@ -62,7 +62,7 @@ static void mei_wd_set_start_timeout(struct mei_device *dev, u16 timeout)
  *         -EIO if write has failed
  *         0 on success
  */
-int mei_wd_host_init(struct mei_device *dev)
+int mei_wd_host_init(struct mei_host *dev)
 {
 	struct mei_cl *cl = &dev->wd_cl;
 	int i;
@@ -112,7 +112,7 @@ int mei_wd_host_init(struct mei_device *dev)
  *	-EIO when message send fails
  *	-EINVAL when invalid message is to be sent
  */
-int mei_wd_send(struct mei_device *dev)
+int mei_wd_send(struct mei_host *dev)
 {
 	struct mei_msg_hdr hdr;
 
@@ -141,7 +141,7 @@ int mei_wd_send(struct mei_device *dev)
  *	-EIO when message send fails
  *	-EINVAL when invalid message is to be sent
  */
-int mei_wd_stop(struct mei_device *dev)
+int mei_wd_stop(struct mei_host *dev)
 {
 	int ret;
 
@@ -204,7 +204,7 @@ out:
 static int mei_wd_ops_start(struct watchdog_device *wd_dev)
 {
 	int err = -ENODEV;
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	dev = watchdog_get_drvdata(wd_dev);
 	if (!dev)
@@ -242,7 +242,7 @@ end_unlock:
  */
 static int mei_wd_ops_stop(struct watchdog_device *wd_dev)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	dev = watchdog_get_drvdata(wd_dev);
 	if (!dev)
@@ -265,7 +265,7 @@ static int mei_wd_ops_stop(struct watchdog_device *wd_dev)
 static int mei_wd_ops_ping(struct watchdog_device *wd_dev)
 {
 	int ret = 0;
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	dev = watchdog_get_drvdata(wd_dev);
 	if (!dev)
@@ -319,7 +319,7 @@ end:
  */
 static int mei_wd_ops_set_timeout(struct watchdog_device *wd_dev, unsigned int timeout)
 {
-	struct mei_device *dev;
+	struct mei_host *dev;
 
 	dev = watchdog_get_drvdata(wd_dev);
 	if (!dev)
@@ -366,7 +366,7 @@ static struct watchdog_device amt_wd_dev = {
 };
 
 
-void mei_watchdog_register(struct mei_device *dev)
+void mei_watchdog_register(struct mei_host *dev)
 {
 	if (watchdog_register_device(&amt_wd_dev)) {
 		dev_err(&dev->pdev->dev,
@@ -379,7 +379,7 @@ void mei_watchdog_register(struct mei_device *dev)
 	watchdog_set_drvdata(&amt_wd_dev, dev);
 }
 
-void mei_watchdog_unregister(struct mei_device *dev)
+void mei_watchdog_unregister(struct mei_host *dev)
 {
 	if (watchdog_get_drvdata(&amt_wd_dev) == NULL)
 		return;

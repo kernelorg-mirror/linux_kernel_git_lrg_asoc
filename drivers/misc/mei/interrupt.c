@@ -81,7 +81,7 @@ static int _mei_irq_thread_state_ok(struct mei_cl *cl,
  * returns 0 on success, <0 on failure.
  */
 static int mei_irq_thread_read_client_message(struct mei_cl_cb *complete_list,
-		struct mei_device *dev,
+		struct mei_host *dev,
 		struct mei_msg_hdr *mei_hdr)
 {
 	struct mei_cl *cl;
@@ -148,7 +148,7 @@ quit:
  *
  * returns 0, OK; otherwise, error.
  */
-static int _mei_irq_thread_close(struct mei_device *dev, s32 *slots,
+static int _mei_irq_thread_close(struct mei_host *dev, s32 *slots,
 				struct mei_cl_cb *cb_pos,
 				struct mei_cl *cl,
 				struct mei_cl_cb *cmpl_list)
@@ -187,7 +187,7 @@ static int _mei_irq_thread_close(struct mei_device *dev, s32 *slots,
  *
  * returns 0, OK; otherwise, error.
  */
-static int _mei_irq_thread_read(struct mei_device *dev,	s32 *slots,
+static int _mei_irq_thread_read(struct mei_host *dev,	s32 *slots,
 			struct mei_cl_cb *cb_pos,
 			struct mei_cl *cl,
 			struct mei_cl_cb *cmpl_list)
@@ -224,7 +224,7 @@ static int _mei_irq_thread_read(struct mei_device *dev,	s32 *slots,
  *
  * returns 0, OK; otherwise, error.
  */
-static int _mei_irq_thread_ioctl(struct mei_device *dev, s32 *slots,
+static int _mei_irq_thread_ioctl(struct mei_host *dev, s32 *slots,
 			struct mei_cl_cb *cb_pos,
 			struct mei_cl *cl,
 			struct mei_cl_cb *cmpl_list)
@@ -260,7 +260,7 @@ static int _mei_irq_thread_ioctl(struct mei_device *dev, s32 *slots,
  *
  * returns 0, OK; otherwise, error.
  */
-static int mei_irq_thread_write_complete(struct mei_device *dev, s32 *slots,
+static int mei_irq_thread_write_complete(struct mei_host *dev, s32 *slots,
 			struct mei_cl_cb *cb, struct mei_cl_cb *cmpl_list)
 {
 	struct mei_msg_hdr mei_hdr;
@@ -319,7 +319,7 @@ static int mei_irq_thread_write_complete(struct mei_device *dev, s32 *slots,
  *
  * returns 0 on success, <0 on failure.
  */
-int mei_irq_read_handler(struct mei_device *dev,
+int mei_irq_read_handler(struct mei_host *dev,
 		struct mei_cl_cb *cmpl_list, s32 *slots)
 {
 	struct mei_msg_hdr *mei_hdr;
@@ -419,7 +419,7 @@ end:
  *
  * returns 0 on success, <0 on failure.
  */
-int mei_irq_write_handler(struct mei_device *dev,
+int mei_irq_write_handler(struct mei_host *dev,
 				struct mei_cl_cb *cmpl_list)
 {
 
@@ -577,8 +577,8 @@ void mei_timer(struct work_struct *work)
 	struct mei_cl_cb  *cb_pos = NULL;
 	struct mei_cl_cb  *cb_next = NULL;
 
-	struct mei_device *dev = container_of(work,
-					struct mei_device, timer_work.work);
+	struct mei_host *dev = container_of(work,
+					struct mei_host, timer_work.work);
 
 
 	mutex_lock(&dev->device_lock);

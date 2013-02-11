@@ -17,7 +17,7 @@
 #ifndef _MEI_HBM_H_
 #define _MEI_HBM_H_
 
-void mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr);
+void mei_hbm_dispatch(struct mei_host *dev, struct mei_msg_hdr *hdr);
 
 static inline void mei_hbm_hdr(struct mei_msg_hdr *hdr, size_t length)
 {
@@ -28,11 +28,11 @@ static inline void mei_hbm_hdr(struct mei_msg_hdr *hdr, size_t length)
 	hdr->reserved = 0;
 }
 
-void mei_hbm_start_req(struct mei_device *dev);
+void mei_hbm_start_req(struct mei_host *dev);
 
-int mei_hbm_cl_flow_control_req(struct mei_device *dev, struct mei_cl *cl);
-int mei_hbm_cl_disconnect_req(struct mei_device *dev, struct mei_cl *cl);
-int mei_hbm_cl_connect_req(struct mei_device *dev, struct mei_cl *cl);
+int mei_hbm_cl_flow_control_req(struct mei_host *dev, struct mei_cl *cl);
+int mei_hbm_cl_disconnect_req(struct mei_host *dev, struct mei_cl *cl);
+int mei_hbm_cl_connect_req(struct mei_host *dev, struct mei_cl *cl);
 
 
 #endif /* _MEI_HBM_H_ */
