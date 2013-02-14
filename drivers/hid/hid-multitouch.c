@@ -140,6 +140,7 @@ struct mt_device {
 #define MT_CLS_FLATFROG				0x0107
 #define MT_CLS_GENERALTOUCH_TWOFINGERS		0x0108
 #define MT_CLS_GENERALTOUCH_PWT_TENFINGERS	0x0109
+#define MT_CLS_ELAN				0x010a
 
 #define MT_DEFAULT_MAXCONTACT	10
 #define MT_MAX_MAXCONTACT	250
@@ -254,6 +255,7 @@ static struct mt_class mt_classes[] = {
 		.sn_move = 2048,
 		.maxcontacts = 40,
 	},
+	{ .name = MT_CLS_ELAN, .quirks = MT_QUIRK_NOT_SEEN_MEANS_UP, },
 	{ }
 };
 
@@ -363,6 +365,25 @@ static void mt_store_field(struct hid_usage *usage, struct mt_device *td,
 		return;
 
 	f->usages[f->length++] = usage->hid;
+}
+
+static __u8 *mt_report_fixup(struct hid_device *hdev, __u8 *buf,
+			     unsigned int *size)
+{
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct mt_class *cls = &td->mtclass;
+
+	/*
+	 * Elan touch panel should report "Usage" but instead it reports
+	 * "Usage Maximum" so fix it here.
+	 */
+	if (cls->name == MT_CLS_ELAN && *size > 10)
+		if (buf[8] == 0x29 && buf[9] == 0x22) {
+			buf[8] = 0x09;
+			hid_info(hdev, "Fixing up Elan report descriptor\n");
+		}
+
+	return buf;
 }
 
 static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
@@ -1262,6 +1283,10 @@ static const struct hid_device_id mt_devices[] = {
 		MT_USB_DEVICE(USB_VENDOR_ID_ZYTRONIC,
 			USB_DEVICE_ID_ZYTRONIC_ZXY100) },
 
+	/* Elan touch panel */
+	{ .driver_data = MT_CLS_ELAN,
+		HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, 0x04f3, 0x200a) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 	{ }
@@ -1278,6 +1303,7 @@ static struct hid_driver mt_driver = {
 	.id_table = mt_devices,
 	.probe = mt_probe,
 	.remove = mt_remove,
+	.report_fixup = mt_report_fixup,
 	.input_mapping = mt_input_mapping,
 	.input_mapped = mt_input_mapped,
 	.input_configured = mt_input_configured,
