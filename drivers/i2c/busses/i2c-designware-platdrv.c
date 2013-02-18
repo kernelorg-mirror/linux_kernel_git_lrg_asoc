@@ -34,6 +34,7 @@
 #include <linux/sched.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 #include <linux/of_i2c.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
@@ -135,6 +136,10 @@ static int dw_i2c_probe(struct platform_device *pdev)
 		goto err_free_mem;
 	}
 	clk_prepare_enable(dev->clk);
+
+	if (pdev->dev.of_node)
+		of_property_read_u32(pdev->dev.of_node, "sda-hold-time",
+						&dev->sda_hold_time);
 
 	dev->functionality =
 		I2C_FUNC_I2C |
