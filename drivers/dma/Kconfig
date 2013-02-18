@@ -83,7 +83,6 @@ config INTEL_IOP_ADMA
 
 config DW_DMAC
 	tristate "Synopsys DesignWare AHB DMA support"
-	depends on HAVE_CLK
 	select DMA_ENGINE
 	default y if CPU_AT32AP7000
 	help
@@ -100,6 +99,15 @@ config DW_DMAC_BIG_ENDIAN_IO
 	  like the Atmel AVR32 architecture.
 
 	  If unsure, use the default setting.
+
+config DW_DMAC_PCI
+	tristate "Synopsys DesignWare AHB DMA support (PCI bus)"
+	depends on PCI
+	select DW_DMAC
+	help
+	  Support the Synopsys DesignWare AHB DMA controller on the platfroms
+	  that provide it as a PCI device. For example, Intel Medfield has
+	  integrated this GPDMA controller.
 
 config AT_HDMAC
 	tristate "Atmel AHB DMA support"
@@ -325,6 +333,10 @@ config DMA_ENGINE
 
 config DMA_VIRTUAL_CHANNELS
 	tristate
+
+config DMA_OF
+	def_bool y
+	depends on OF
 
 comment "DMA Clients"
 	depends on DMA_ENGINE
