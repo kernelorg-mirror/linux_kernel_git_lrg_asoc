@@ -57,7 +57,9 @@ OPTIONS
 
 -s::
 --sort=::
-	Sort by key(s): pid, comm, dso, symbol, parent, srcline.
+	Sort by key(s): pid, comm, dso, symbol, parent, srcline,
+        dso_from, dso_to, symbol_to, symbol_from, mispredict,
+        abort, intx, local_weight, weight, transaction
 
 -p::
 --parent=<regex>::

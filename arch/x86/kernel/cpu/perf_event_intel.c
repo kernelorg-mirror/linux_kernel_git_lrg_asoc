@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 
+#include <asm/cpufeature.h>
 #include <asm/hardirq.h>
 #include <asm/apic.h>
 
@@ -131,6 +132,17 @@ static struct extra_reg intel_snb_extra_regs[] __read_mostly = {
 	INTEL_EVENT_EXTRA_REG(0xb7, MSR_OFFCORE_RSP_0, 0x3fffffffffull, RSP_0),
 	INTEL_EVENT_EXTRA_REG(0xbb, MSR_OFFCORE_RSP_1, 0x3fffffffffull, RSP_1),
 	EVENT_EXTRA_END
+};
+
+static struct event_constraint intel_hsw_event_constraints[] =
+{
+	FIXED_EVENT_CONSTRAINT(0x00c0, 0), /* INST_RETIRED.ANY */
+	FIXED_EVENT_CONSTRAINT(0x003c, 1), /* CPU_CLK_UNHALTED.CORE */
+	FIXED_EVENT_CONSTRAINT(0x0300, 2), /* CPU_CLK_UNHALTED.REF */
+	INTEL_EVENT_CONSTRAINT(0x48, 0x4), /* L1D_PEND_MISS.PENDING */
+	INTEL_UEVENT_CONSTRAINT(0x01c0, 0x2), /* INST_RETIRED.PREC_DIST */
+	INTEL_EVENT_CONSTRAINT(0xcd, 0x8), /* MEM_TRANS_RETIRED.LOAD_LATENCY */
+	EVENT_CONSTRAINT_END
 };
 
 static u64 intel_pmu_event_map(int hw_event)
@@ -815,7 +827,8 @@ static inline bool intel_pmu_needs_lbr_smpl(struct perf_event *event)
 		return true;
 
 	/* implicit branch sampling to correct PEBS skid */
-	if (x86_pmu.intel_cap.pebs_trap && event->attr.precise_ip > 1)
+	if (x86_pmu.intel_cap.pebs_trap && event->attr.precise_ip > 1 &&
+	    x86_pmu.intel_cap.pebs_format < 2)
 		return true;
 
 	return false;
@@ -1066,6 +1079,17 @@ static void intel_pmu_enable_event(struct perf_event *event)
 int intel_pmu_save_and_restart(struct perf_event *event)
 {
 	x86_perf_event_update(event);
+	/*
+	 * For a checkpointed counter always reset back to 0.  This
+	 * avoids a situation where the counter overflows, aborts the
+	 * transaction and is then set back to shortly before the
+	 * overflow, and overflows and aborts again.
+	 */
+	if (unlikely(event->hw.config & HSW_INTX_CHECKPOINTED)) {
+		/* No race with NMIs because the counter should not be armed */
+		wrmsrl(event->hw.event_base, 0);
+		local64_set(&event->hw.prev_count, 0);
+	}
 	return x86_perf_event_set_period(event);
 }
 
@@ -1109,16 +1133,6 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 
 	cpuc = &__get_cpu_var(cpu_hw_events);
 
-	/*
-	 * Some chipsets need to unmask the LVTPC in a particular spot
-	 * inside the nmi handler.  As a result, the unmasking was pushed
-	 * into all the nmi handlers.
-	 *
-	 * This handler doesn't seem to have any issues with the unmasking
-	 * so it was left at the top.
-	 */
-	apic_write(APIC_LVTPC, APIC_DM_NMI);
-
 	intel_pmu_disable_all();
 	handled = intel_pmu_drain_bts_buffer();
 	status = intel_pmu_get_status();
@@ -1149,6 +1163,15 @@ again:
 		x86_pmu.drain_pebs(regs);
 	}
 
+	/*
+ 	 * To avoid spurious interrupts with perf stat always reset checkpointed
+ 	 * counters.
+ 	 *
+	 * XXX move somewhere else.
+	 */
+	if (cpuc->events[2] && (cpuc->events[2]->hw.config & HSW_INTX_CHECKPOINTED))
+		status |= (1ULL << 2);
+
 	for_each_set_bit(bit, (unsigned long *)&status, X86_PMC_IDX_MAX) {
 		struct perf_event *event = cpuc->events[bit];
 
@@ -1178,6 +1201,11 @@ again:
 
 done:
 	intel_pmu_enable_all(0);
+	/*
+	 * Only unmask the NMI after the overflow counters
+	 * have been reset.
+	 */
+	apic_write(APIC_LVTPC, APIC_DM_NMI);
 	return handled;
 }
 
@@ -1585,6 +1613,61 @@ static void core_pmu_enable_all(int added)
 	}
 }
 
+static int hsw_hw_config(struct perf_event *event)
+{
+	int ret = intel_pmu_hw_config(event);
+
+	if (ret)
+		return ret;
+	/* PEBS cannot capture both */
+	if (event->attr.sample_type & PERF_SAMPLE_ADDR)
+		event->attr.sample_type &= ~PERF_SAMPLE_WEIGHT;
+	if (!boot_cpu_has(X86_FEATURE_RTM) && !boot_cpu_has(X86_FEATURE_HLE))
+		return 0;
+	event->hw.config |= event->attr.config & (HSW_INTX|HSW_INTX_CHECKPOINTED);
+
+	/* 
+	 * INTX/INTX-CP do not play well with PEBS or ANY thread mode.
+	 */
+	if ((event->hw.config & (HSW_INTX|HSW_INTX_CHECKPOINTED)) &&
+	     ((event->hw.config & ARCH_PERFMON_EVENTSEL_ANY) ||
+	      event->attr.precise_ip > 0))
+		return -EIO;
+	if (event->hw.config & HSW_INTX_CHECKPOINTED) {
+		/*
+		 * Sampling of checkpointed events can cause situations where
+		 * the CPU constantly aborts because of a overflow, which is
+		 * then checkpointed back and ignored. Forbid checkpointing
+		 * for sampling.
+		 *
+		 * But still allow a long sampling period, so that perf stat
+		 * from KVM works.
+		 */
+		if (event->attr.sample_period > 0 &&
+		    event->attr.sample_period < 0x7fffffff)
+			return -EIO;
+	}
+	return 0;
+}
+
+static struct event_constraint counter2_constraint = 
+			EVENT_CONSTRAINT(0, 0x4, 0);
+
+static struct event_constraint *
+hsw_get_event_constraints(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	struct event_constraint *c = intel_get_event_constraints(cpuc, event);
+
+	/* Handle special quirk on intx_checkpointed only in counter 2 */
+	if (event->hw.config & HSW_INTX_CHECKPOINTED) {
+		if (c->idxmsk64 & (1U << 2))
+			return &counter2_constraint;
+		return &emptyconstraint;
+	}
+
+	return c;
+}
+
 PMU_FORMAT_ATTR(event,	"config:0-7"	);
 PMU_FORMAT_ATTR(umask,	"config:8-15"	);
 PMU_FORMAT_ATTR(edge,	"config:18"	);
@@ -1592,6 +1675,8 @@ PMU_FORMAT_ATTR(pc,	"config:19"	);
 PMU_FORMAT_ATTR(any,	"config:21"	); /* v3 + */
 PMU_FORMAT_ATTR(inv,	"config:23"	);
 PMU_FORMAT_ATTR(cmask,	"config:24-31"	);
+PMU_FORMAT_ATTR(intx,	"config:32"	);
+PMU_FORMAT_ATTR(intx_cp,"config:33"	);
 
 static struct attribute *intel_arch_formats_attr[] = {
 	&format_attr_event.attr,
@@ -1749,6 +1834,23 @@ static struct attribute *intel_arch3_formats_attr[] = {
 	NULL,
 };
 
+/* Arch3 + TSX support */
+static struct attribute *intel_hsw_formats_attr[] __read_mostly = {
+	&format_attr_event.attr,
+	&format_attr_umask.attr,
+	&format_attr_edge.attr,
+	&format_attr_pc.attr,
+	&format_attr_any.attr,
+	&format_attr_inv.attr,
+	&format_attr_cmask.attr,
+	&format_attr_intx.attr,
+	&format_attr_intx_cp.attr,
+
+	&format_attr_offcore_rsp.attr, /* XXX do NHM/WSM + SNB breakout */
+	NULL,
+};
+
+
 static __initconst const struct x86_pmu intel_pmu = {
 	.name			= "Intel",
 	.handle_irq		= intel_pmu_handle_irq,
@@ -1901,6 +2003,54 @@ static __init void intel_nehalem_quirk(void)
 		pr_info("CPU erratum AAJ80 worked around\n");
 	}
 }
+
+/* Haswell special events */
+EVENT_ATTR_STR(tx-start,       tx_start,       "event=0xc9,umask=0x1");
+EVENT_ATTR_STR(tx-commit,      tx_commit,      "event=0xc9,umask=0x2");
+EVENT_ATTR_STR(tx-abort,       tx_abort,       "event=0xc9,umask=0x4,precise=2");
+EVENT_ATTR_STR(tx-abort-count, tx_abort_count, "event=0xc9,umask=0x4");
+/* alias */
+EVENT_ATTR_STR(tx-aborts,      tx_aborts,      "event=0xc9,umask=0x4,precise=2");
+EVENT_ATTR_STR(tx-capacity,    tx_capacity,    "event=0x54,umask=0x2");
+EVENT_ATTR_STR(tx-conflict,    tx_conflict,    "event=0x54,umask=0x1");
+EVENT_ATTR_STR(el-start,       el_start,       "event=0xc8,umask=0x1");
+EVENT_ATTR_STR(el-commit,      el_commit,      "event=0xc8,umask=0x2");
+EVENT_ATTR_STR(el-abort,       el_abort,       "event=0xc8,umask=0x4,precise=2");
+EVENT_ATTR_STR(el-abort-count, el_abort_count, "event=0xc8,umask=0x4");
+/* alias */
+EVENT_ATTR_STR(el-aborts,      el_aborts,      "event=0xc8,umask=0x4,precise=2");
+/* shared with tx-* */
+EVENT_ATTR_STR(el-capacity,    el_capacity,    "event=0x54,umask=0x2");
+/* shared with tx-* */
+EVENT_ATTR_STR(el-conflict,    el_conflict,    "event=0x54,umask=0x1");
+EVENT_ATTR_STR(cycles-t,       cycles_t,       "event=0x3c,intx=1");
+EVENT_ATTR_STR(cycles-ct,      cycles_ct,      "event=0x3c,intx=1,intx_cp=1");
+EVENT_ATTR_STR(instructions-t, instructions_t, "event=0xc0,intx=1");
+EVENT_ATTR_STR(instructions-ct,instructions_ct,"event=0xc0,intx=1,intx_cp=1");
+EVENT_ATTR_STR(instructions-p, instructions_p, "event=0xc0,umask=0x01,precise=2");
+
+static struct attribute *hsw_events_attrs[] = {
+	EVENT_PTR(tx_start),
+	EVENT_PTR(tx_commit),
+	EVENT_PTR(tx_abort),
+	EVENT_PTR(tx_aborts),
+	EVENT_PTR(tx_abort_count),
+	EVENT_PTR(tx_capacity),
+	EVENT_PTR(tx_conflict),
+	EVENT_PTR(el_start),
+	EVENT_PTR(el_commit),
+	EVENT_PTR(el_abort),
+	EVENT_PTR(el_aborts),
+	EVENT_PTR(el_abort_count),
+	EVENT_PTR(el_capacity),
+	EVENT_PTR(el_conflict),
+	EVENT_PTR(cycles_t),
+	EVENT_PTR(cycles_ct),
+	EVENT_PTR(instructions_t),
+	EVENT_PTR(instructions_ct),
+	EVENT_PTR(instructions_p),
+	NULL
+};
 
 __init int intel_pmu_init(void)
 {
@@ -2111,6 +2261,30 @@ __init int intel_pmu_init(void)
 		break;
 
 
+	case 60: /* Haswell Client */
+	case 70:
+	case 71:
+		memcpy(hw_cache_event_ids, snb_hw_cache_event_ids,
+		       sizeof(hw_cache_event_ids));
+
+		intel_pmu_lbr_init_nhm();
+
+		x86_pmu.event_constraints = intel_hsw_event_constraints;
+		x86_pmu.pebs_constraints = intel_hsw_pebs_event_constraints;
+		x86_pmu.extra_regs = intel_snb_extra_regs;
+		x86_pmu.pebs_aliases = intel_pebs_aliases_snb;
+		/* all extra regs are per-cpu when HT is on */
+		x86_pmu.er_flags |= ERF_HAS_RSP_1;
+		x86_pmu.er_flags |= ERF_NO_HT_SHARING;
+
+		x86_pmu.hw_config = hsw_hw_config;
+		x86_pmu.get_event_constraints = hsw_get_event_constraints;
+		x86_pmu.format_attrs = intel_hsw_formats_attr;
+		x86_pmu.memory_lat_events = intel_hsw_memory_latency_events;
+		x86_pmu.cpu_events = hsw_events_attrs;
+		pr_cont("Haswell events, ");
+		break;
+
 	default:
 		switch (x86_pmu.version) {
 		case 1:
@@ -2157,6 +2331,12 @@ __init int intel_pmu_init(void)
 			c->idxmsk64 |= (1ULL << x86_pmu.num_counters) - 1;
 			c->weight += x86_pmu.num_counters;
 		}
+	}
+
+	/* Support full width counters using alternative MSR range */
+	if (x86_pmu.intel_cap.fw_write) {
+		x86_pmu.max_period = x86_pmu.cntval_mask;
+		x86_pmu.perfctr = MSR_IA32_PMC0;
 	}
 
 	return 0;

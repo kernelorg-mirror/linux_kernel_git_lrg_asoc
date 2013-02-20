@@ -168,6 +168,7 @@ struct cpu_hw_events {
 	u64				perf_ctr_virt_mask;
 
 	void				*kfree_on_online;
+	u8				*memory_latency_events;
 };
 
 #define __EVENT_CONSTRAINT(c, n, m, w, o) {\
@@ -219,11 +220,14 @@ struct cpu_hw_events {
  *  - inv
  *  - edge
  *  - cnt-mask
+ *  - intx
+ *  - intx_cp
  *  The other filters are supported by fixed counters.
  *  The any-thread option is supported starting with v3.
  */
+#define FIXED_EVENT_FLAGS (X86_RAW_EVENT_MASK|HSW_INTX|HSW_INTX_CHECKPOINTED)
 #define FIXED_EVENT_CONSTRAINT(c, n)	\
-	EVENT_CONSTRAINT(c, (1ULL << (32+n)), X86_RAW_EVENT_MASK)
+	EVENT_CONSTRAINT(c, (1ULL << (32+n)), FIXED_EVENT_FLAGS)
 
 /*
  * Constraint on the Event code + UMask
@@ -275,6 +279,7 @@ union perf_capabilities {
 		u64	pebs_arch_reg:1;
 		u64	pebs_format:4;
 		u64	smm_freeze:1;
+		u64	fw_write:1;
 	};
 	u64	capabilities;
 };
@@ -355,6 +360,7 @@ struct x86_pmu {
 	struct attribute **format_attrs;
 
 	ssize_t		(*events_sysfs_show)(char *page, u64 config);
+	struct attribute **cpu_events;
 
 	/*
 	 * CPU Hotplug hooks
@@ -386,6 +392,7 @@ struct x86_pmu {
 	struct event_constraint *pebs_constraints;
 	void		(*pebs_aliases)(struct perf_event *event);
 	int 		max_pebs_events;
+	struct event_constraint *memory_lat_events;
 
 	/*
 	 * Intel LBR
@@ -418,6 +425,29 @@ do {									\
 
 #define ERF_NO_HT_SHARING	1
 #define ERF_HAS_RSP_1		2
+
+#define EVENT_VAR(_id)  event_attr_##_id
+#define EVENT_PTR(_id) &event_attr_##_id.attr.attr
+
+#define EVENT_ATTR(_name, _id)					\
+static struct perf_pmu_events_attr EVENT_VAR(_id) = {		\
+	.attr = __ATTR(_name, 0444, events_sysfs_show, NULL),	\
+	.id   =  PERF_COUNT_HW_##_id,				\
+	.event_str = NULL,					\
+};
+
+#define EVENT_ATTR_STR(_name, v, str)				  \
+static struct perf_pmu_events_attr event_attr_##v = {		  \
+	.attr      = __ATTR(_name, 0444, events_sysfs_show, NULL),\
+	.id        =  0,					  \
+	.event_str =  str,					  \
+};
+
+struct perf_pmu_events_attr {
+	struct device_attribute attr;
+	u64 id;
+	const char *event_str;
+};
 
 extern struct x86_pmu x86_pmu __read_mostly;
 
@@ -593,6 +623,10 @@ extern struct event_constraint intel_snb_pebs_event_constraints[];
 
 extern struct event_constraint intel_ivb_pebs_event_constraints[];
 
+extern struct event_constraint intel_hsw_pebs_event_constraints[];
+
+extern struct event_constraint intel_hsw_memory_latency_events[];
+
 struct event_constraint *intel_pebs_constraints(struct perf_event *event);
 
 void intel_pmu_pebs_enable(struct perf_event *event);
@@ -632,6 +666,9 @@ int p4_pmu_init(void);
 int p6_pmu_init(void);
 
 int knc_pmu_init(void);
+
+ssize_t events_sysfs_show(struct device *dev, struct device_attribute *attr,
+			  char *page);
 
 #else /* CONFIG_CPU_SUP_INTEL */
 
