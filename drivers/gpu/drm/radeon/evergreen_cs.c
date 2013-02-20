@@ -3079,8 +3079,8 @@ int evergreen_dma_cs_parse(struct radeon_cs_parser *p)
 				DRM_ERROR("bad DMA_PACKET_CONSTANT_FILL\n");
 				return -EINVAL;
 			}
-			dst_offset = ib[idx+1];
-			dst_offset |= ((u64)(ib[idx+3] & 0x00ff0000)) << 16;
+			dst_offset = radeon_get_ib_value(p, idx+1);
+			dst_offset |= ((u64)(radeon_get_ib_value(p, idx+3) & 0x00ff0000)) << 16;
 			if ((dst_offset + (count * 4)) > radeon_bo_size(dst_reloc->robj)) {
 				dev_warn(p->dev, "DMA constant fill buffer too small (%llu %lu)\n",
 					 dst_offset, radeon_bo_size(dst_reloc->robj));
