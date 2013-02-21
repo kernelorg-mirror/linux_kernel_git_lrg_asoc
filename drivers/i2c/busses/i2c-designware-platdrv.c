@@ -54,6 +54,25 @@ static u32 i2c_dw_get_clk_rate_khz(struct dw_i2c_dev *dev)
 }
 
 #ifdef CONFIG_ACPI
+static void dw_i2c_acpi_read_sda_hold(struct dw_i2c_dev *dev, acpi_string name,
+				      u32 *sda_hold)
+{
+	struct acpi_buffer buf = { ACPI_ALLOCATE_BUFFER, NULL };
+	acpi_handle handle = ACPI_HANDLE(dev->dev);
+	union acpi_object *obj;
+
+	if (ACPI_FAILURE(acpi_evaluate_object(handle, name, NULL, &buf)))
+		return;
+
+	obj = (union acpi_object *)buf.pointer;
+	if (obj->type == ACPI_TYPE_PACKAGE && obj->package.count == 3) {
+		const union acpi_object *objs = obj->package.elements;
+		*sda_hold = (u32)objs[2].integer.value;
+	}
+
+	kfree(buf.pointer);
+}
+
 static int dw_i2c_acpi_configure(struct platform_device *pdev)
 {
 	struct dw_i2c_dev *dev = platform_get_drvdata(pdev);
@@ -64,6 +83,17 @@ static int dw_i2c_acpi_configure(struct platform_device *pdev)
 	dev->adapter.nr = -1;
 	dev->tx_fifo_depth = 32;
 	dev->rx_fifo_depth = 32;
+
+	/*
+	 * Try to read the SDA_HOLD time from BIOS provided methods,
+	 * otherwise we use the defaults.
+	 */
+	dev->sda_hold_time = 9;
+	if (dev->master_cfg & DW_IC_CON_SPEED_FAST)
+		dw_i2c_acpi_read_sda_hold(dev, "FMCN", &dev->sda_hold_time);
+	else
+		dw_i2c_acpi_read_sda_hold(dev, "SSCN", &dev->sda_hold_time);
+
 	return 0;
 }
 
