@@ -188,9 +188,10 @@ static int dw_i2c_probe(struct platform_device *pdev)
 	of_i2c_register_devices(adap);
 	acpi_i2c_register_devices(adap);
 
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 1000);
+	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
-	pm_runtime_put(&pdev->dev);
 
 	return 0;
 
