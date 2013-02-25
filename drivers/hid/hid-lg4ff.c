@@ -207,7 +207,7 @@ static int hid_lg4ff_play(struct input_dev *dev, void *data, struct ff_effect *e
 		value[5] = 0x00;
 		value[6] = 0x00;
 
-		usbhid_submit_report(hid, report, USB_DIR_OUT);
+		hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 		break;
 	}
 	return 0;
@@ -230,7 +230,7 @@ static void hid_lg4ff_set_autocenter_default(struct input_dev *dev, u16 magnitud
 	value[5] = 0x00;
 	value[6] = 0x00;
 
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 }
 
 /* Sends autocentering command compatible with Formula Force EX */
@@ -250,7 +250,7 @@ static void hid_lg4ff_set_autocenter_ffex(struct input_dev *dev, u16 magnitude)
 	value[5] = 0x00;
 	value[6] = 0x00;
 
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 }
 
 /* Sends command to set range compatible with G25/G27/Driving Force GT */
@@ -270,7 +270,7 @@ static void hid_lg4ff_set_range_g25(struct hid_device *hid, u16 range)
 	value[5] = 0x00;
 	value[6] = 0x00;
 
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 }
 
 /* Sends commands to set range compatible with Driving Force Pro wheel */
@@ -299,7 +299,7 @@ static void hid_lg4ff_set_range_dfp(struct hid_device *hid, __u16 range)
 		report->field[0]->value[1] = 0x02;
 		full_range = 200;
 	}
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 
 	/* Prepare "fine" limit command */
 	value[0] = 0x81;
@@ -311,7 +311,7 @@ static void hid_lg4ff_set_range_dfp(struct hid_device *hid, __u16 range)
 	value[6] = 0x00;
 
 	if (range == 200 || range == 900) {	/* Do not apply any fine limit */
-		usbhid_submit_report(hid, report, USB_DIR_OUT);
+		hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 		return;
 	}
 
@@ -325,7 +325,7 @@ static void hid_lg4ff_set_range_dfp(struct hid_device *hid, __u16 range)
 	value[5] = (start_right & 0xe) << 4 | (start_left & 0xe);
 	value[6] = 0xff;
 
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 }
 
 static void hid_lg4ff_switch_native(struct hid_device *hid, const struct lg4ff_native_cmd *cmd)
@@ -339,7 +339,7 @@ static void hid_lg4ff_switch_native(struct hid_device *hid, const struct lg4ff_n
 		for (i = 0; i < 7; i++)
 			report->field[0]->value[i] = cmd->cmd[j++];
 
-		usbhid_submit_report(hid, report, USB_DIR_OUT);
+		hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 	}
 }
 
@@ -415,7 +415,7 @@ static void lg4ff_set_leds(struct hid_device *hid, __u8 leds)
 	value[4] = 0x00;
 	value[5] = 0x00;
 	value[6] = 0x00;
-	usbhid_submit_report(hid, report, USB_DIR_OUT);
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
 }
 
 static void lg4ff_led_set_brightness(struct led_classdev *led_cdev,

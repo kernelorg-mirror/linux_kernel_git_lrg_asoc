@@ -9,6 +9,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -21,6 +22,7 @@
 #include <linux/bitops.h>
 #include <linux/jiffies.h>
 #include <linux/of.h>
+#include <linux/acpi.h>
 #include <linux/i2c.h>
 #include <linux/i2c/at24.h>
 
@@ -479,6 +481,27 @@ static void at24_get_ofdata(struct i2c_client *client,
 { }
 #endif /* CONFIG_OF */
 
+#ifdef CONFIG_ACPI
+static struct acpi_device_id at24_acpi_match[] = {
+	{ "AT24", AT24_DEVICE_MAGIC(2048 / 8, 0) },
+	{ },
+};
+MODULE_DEVICE_TABLE(acpi, at24_acpi_match);
+#endif
+
+static kernel_ulong_t at24_get_driver_data(struct i2c_client *client,
+					   const struct i2c_device_id *id)
+{
+	const struct acpi_device_id *aid;
+
+	if (id)
+		return id->driver_data;
+
+	/* Find from ACPI match table then */
+	aid = acpi_match_device(ACPI_PTR(at24_acpi_match), &client->dev);
+	return aid ? aid->driver_data : 0;
+}
+
 static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct at24_platform_data chip;
@@ -492,11 +515,12 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (client->dev.platform_data) {
 		chip = *(struct at24_platform_data *)client->dev.platform_data;
 	} else {
-		if (!id->driver_data) {
+		magic = at24_get_driver_data(client, id);
+		if (!magic) {
 			err = -ENODEV;
 			goto err_out;
 		}
-		magic = id->driver_data;
+
 		chip.byte_len = BIT(magic & AT24_BITMASK(AT24_SIZE_BYTELEN));
 		magic >>= AT24_SIZE_BYTELEN;
 		chip.flags = magic & AT24_BITMASK(AT24_SIZE_FLAGS);
@@ -678,6 +702,7 @@ static struct i2c_driver at24_driver = {
 	.driver = {
 		.name = "at24",
 		.owner = THIS_MODULE,
+		.acpi_match_table = ACPI_PTR(at24_acpi_match),
 	},
 	.probe = at24_probe,
 	.remove = at24_remove,

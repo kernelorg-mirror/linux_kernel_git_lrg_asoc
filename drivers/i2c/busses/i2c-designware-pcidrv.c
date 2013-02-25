@@ -310,7 +310,8 @@ const struct pci_device_id *id)
 		goto err_free_irq;
 	}
 
-	pm_runtime_put_noidle(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 1000);
+	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_allow(&pdev->dev);
 
 	return 0;

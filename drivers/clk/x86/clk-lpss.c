@@ -97,3 +97,74 @@ struct clk *clk_register_lpss_gate(const char *name, const char *parent_name,
 
 	return clk;
 }
+
+static u8 clk_lpss_mux_get_parent(struct clk_hw *hw)
+{
+	struct clk_mux *mux = container_of(hw, struct clk_mux, hw);
+	return readl(mux->reg) & BIT(0);
+}
+
+static const struct clk_ops clk_lpss_mux_ops = {
+	.get_parent = clk_lpss_mux_get_parent,
+};
+
+/**
+ * clk_register_lpss_mux - register LPSS mux clock
+ * @name: name of this mux
+ * @parent_names: array of parent names for this clock
+ * @num_parents: number of parents in the array (max 2)
+ * @hid: ACPI _HID of the device
+ * @offset: LPSS PRV_CLOCK_PARAMS offset
+ *
+ * Creates a binary clock mux that selects between two parents. Most useful
+ * with the I2C clock. You cannot change the parent, only read it.
+ */
+struct clk *clk_register_lpss_mux(const char *name, const char **parent_names,
+				  u8 num_parents, const char *hid,
+				  unsigned offset)
+{
+	struct clk_init_data init = { };
+	struct resource res = { };
+	void __iomem *mmio_base;
+	struct clk_mux *mux;
+	acpi_status status;
+	struct clk *clk;
+
+	if (num_parents > 2)
+		return ERR_PTR(-EINVAL);
+
+	status = acpi_get_devices(hid, clk_lpss_find_mmio, NULL, (void **)&res);
+	if (ACPI_FAILURE(status) || !res.start)
+		return ERR_PTR(-ENODEV);
+
+	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
+	if (!mux)
+		return ERR_PTR(-ENOMEM);
+
+	init.name = name;
+	init.ops = &clk_lpss_mux_ops;
+	init.parent_names = parent_names;
+	init.num_parents = num_parents;
+
+	mmio_base = ioremap(res.start, resource_size(&res));
+	if (!mmio_base) {
+		clk = ERR_PTR(-ENOMEM);
+		goto fail_free;
+	}
+
+	mux->reg = mmio_base + offset;
+	mux->hw.init = &init;
+
+	clk = clk_register(NULL, &mux->hw);
+	if (IS_ERR(clk))
+		goto fail_unmap;
+
+	return clk;
+
+fail_unmap:
+	iounmap(mmio_base);
+fail_free:
+	kfree(mux);
+
+	return clk;
+}
