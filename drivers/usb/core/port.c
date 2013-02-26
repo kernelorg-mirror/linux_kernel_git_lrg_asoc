@@ -71,7 +71,7 @@ static void usb_port_device_release(struct device *dev)
 	kfree(port_dev);
 }
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef CONFIG_PM
 static int usb_port_runtime_resume(struct device *dev)
 {
 	struct usb_port *port_dev = to_usb_port(dev);
@@ -131,25 +131,68 @@ static int usb_port_runtime_suspend(struct device *dev)
 	set_bit(port1, hub->busy_bits);
 	retval = usb_hub_set_port_power(hdev, port1, false);
 	usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_C_CONNECTION);
-	usb_clear_port_feature(hdev, port1,	USB_PORT_FEAT_C_ENABLE);
+	usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_C_ENABLE);
 	clear_bit(port1, hub->busy_bits);
 	usb_autopm_put_interface(intf);
 	return retval;
 }
-#endif
+
+static int usb_port_system_suspend(struct device *dev)
+{
+	struct usb_port *port_dev = to_usb_port(dev);
+
+	if (!port_dev->power_is_on)
+		return 0;
+
+	if (port_dev->child) {
+		struct usb_device *udev = port_dev->child;
+
+		/*
+		 * usb port can't be powered off when dev's system
+		 * wakeup is enabled or persist is disabled.
+		 */
+		if (device_may_wakeup(&udev->dev)
+				|| !udev->persist_enabled)
+			return 0;
+
+		/*
+		 * usb port should be powered off after usb dev
+		 * being suspended.
+		 */
+		device_pm_wait_for_dev(dev, &port_dev->child->dev);
+	}
+
+	usb_port_runtime_suspend(dev);
+	return 0;
+}
+
+static int usb_port_system_resume(struct device *dev)
+{
+	struct usb_port *port_dev = to_usb_port(dev);
+
+	if (port_dev->power_is_on)
+		return 0;
+
+	return usb_port_runtime_resume(dev);
+}
 
 static const struct dev_pm_ops usb_port_pm_ops = {
+	.suspend =	usb_port_system_suspend,
+	.resume =	usb_port_system_resume,
 #ifdef CONFIG_PM_RUNTIME
 	.runtime_suspend =	usb_port_runtime_suspend,
 	.runtime_resume =	usb_port_runtime_resume,
 	.runtime_idle =		pm_generic_runtime_idle,
 #endif
 };
+#endif
 
 struct device_type usb_port_device_type = {
 	.name =		"usb_port",
 	.release =	usb_port_device_release,
+#if CONFIG_PM
 	.pm =		&usb_port_pm_ops,
+#endif
 };
 
 int usb_hub_create_port_device(struct usb_hub *hub, int port1)

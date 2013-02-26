@@ -3167,6 +3167,10 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	int		status;
 	u16		portchange, portstatus;
 
+	/* Wait for usb port system resume finishing */
+	if (!PMSG_IS_AUTO(msg))
+		device_pm_wait_for_dev(&udev->dev, &port_dev->dev);
+
 	if (port_dev->did_runtime_put) {
 		status = pm_runtime_get_sync(&port_dev->dev);
 		port_dev->did_runtime_put = false;
