@@ -17,9 +17,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
-#define PRV_CLOCK_PARAMS 0x800
-
-static int lpt_clk_probe(struct platform_device *pdev)
+static int lpss_clk_probe(struct platform_device *pdev)
 {
 	struct clk *clk;
 
@@ -31,18 +29,27 @@ static int lpt_clk_probe(struct platform_device *pdev)
 
 	/* Shared DMA clock */
 	clk_register_clkdev(clk, "hclk", "INTL9C60:00");
+	clk_register_clkdev(clk, "hclk", "INTL9C60:01");
+
+	/* PWM clock */
+	clk = clk_register_fixed_rate(NULL, "pwm_clk", "lpss_clk", 0, 25000000);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	clk_register_clkdev(clk, NULL, "80860F08:00");
+	clk_register_clkdev(clk, NULL, "80860F09:00");
 	return 0;
 }
 
-static struct platform_driver lpt_clk_driver = {
+static struct platform_driver lpss_clk_driver = {
 	.driver = {
-		.name = "clk-lpt",
+		.name = "clk-lpss",
 		.owner = THIS_MODULE,
 	},
-	.probe = lpt_clk_probe,
+	.probe = lpss_clk_probe,
 };
 
-int __init lpt_clk_init(void)
+int __init lpss_clk_init(void)
 {
-	return platform_driver_register(&lpt_clk_driver);
+	return platform_driver_register(&lpss_clk_driver);
 }

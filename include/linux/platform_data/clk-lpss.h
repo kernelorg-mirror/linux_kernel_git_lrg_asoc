@@ -13,6 +13,6 @@
 #ifndef __CLK_LPSS_H
 #define __CLK_LPSS_H
 
-extern int lpt_clk_init(void);
+extern int lpss_clk_init(void);
 
 #endif /* __CLK_LPSS_H */
