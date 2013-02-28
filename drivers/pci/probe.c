@@ -923,7 +923,8 @@ static void pci_read_irq(struct pci_dev *dev)
 	dev->pin = irq;
 	if (irq)
 		pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
-	dev->irq = irq;
+	if (irq < 255)
+		dev->irq = irq;
 }
 
 void set_pcie_port_type(struct pci_dev *pdev)
