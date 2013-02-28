@@ -18,8 +18,6 @@
  */
 #include <linux/device.h>
 #include <linux/hid.h>
-#include <linux/usb.h>
-#include "usbhid/usbhid.h"
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/mfd/core.h>
@@ -204,8 +202,8 @@ int sensor_hub_set_feature(struct hid_sensor_hub_device *hsdev, u32 report_id,
 		goto done_proc;
 	}
 	hid_set_field(report->field[field_index], 0, value);
-	usbhid_submit_report(hsdev->hdev, report, USB_DIR_OUT);
-	usbhid_wait_io(hsdev->hdev);
+	hid_hw_request(hsdev->hdev, report, HID_REQ_SET_REPORT);
+	hid_hw_wait(hsdev->hdev);
 
 done_proc:
 	mutex_unlock(&data->mutex);
@@ -227,8 +225,8 @@ int sensor_hub_get_feature(struct hid_sensor_hub_device *hsdev, u32 report_id,
 		ret = -EINVAL;
 		goto done_proc;
 	}
-	usbhid_submit_report(hsdev->hdev, report, USB_DIR_IN);
-	usbhid_wait_io(hsdev->hdev);
+	hid_hw_request(hsdev->hdev, report, HID_REQ_GET_REPORT);
+	hid_hw_wait(hsdev->hdev);
 	*value = report->field[field_index]->value[0];
 
 done_proc:
@@ -262,7 +260,7 @@ int sensor_hub_input_attr_get_raw_value(struct hid_sensor_hub_device *hsdev,
 		spin_unlock_irqrestore(&data->lock, flags);
 		goto err_free;
 	}
-	usbhid_submit_report(hsdev->hdev, report, USB_DIR_IN);
+	hid_hw_request(hsdev->hdev, report, HID_REQ_GET_REPORT);
 	spin_unlock_irqrestore(&data->lock, flags);
 	wait_for_completion_interruptible_timeout(&data->pending.ready, HZ*5);
 	switch (data->pending.raw_size) {
@@ -415,7 +413,7 @@ static int sensor_hub_raw_event(struct hid_device *hdev,
 			 report->id, size, report->type);
 	hid_dbg(hdev, "maxfield:%d\n", report->maxfield);
 	if (report->type != HID_INPUT_REPORT)
-		return 1;
+		return 0;
 
 	ptr = raw_data;
 	ptr++; /*Skip report id*/
@@ -605,15 +603,11 @@ static void sensor_hub_remove(struct hid_device *hdev)
 }
 
 static const struct hid_device_id sensor_hub_devices[] = {
-	{ HID_DEVICE(BUS_USB, HID_GROUP_SENSOR_HUB, HID_ANY_ID, HID_ANY_ID) },
+	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_SENSOR_HUB, HID_ANY_ID,
+		     HID_ANY_ID) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, sensor_hub_devices);
-
-static const struct hid_usage_id sensor_hub_grabbed_usages[] = {
-	{ HID_ANY_ID, HID_ANY_ID, HID_ANY_ID },
-	{ HID_ANY_ID - 1, HID_ANY_ID - 1, HID_ANY_ID - 1 }
-};
 
 static struct hid_driver sensor_hub_driver = {
 	.name = "hid-sensor-hub",

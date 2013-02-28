@@ -20,6 +20,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/eeprom.h>
 #include <linux/of.h>
+#include <linux/acpi.h>
 
 /*
  * NOTE: this is an *EEPROM* driver.  The vagaries of product naming
@@ -357,6 +358,164 @@ static int at25_np_to_chip(struct device *dev,
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
+
+/*
+ * Following is a sample how we can pass chip specific configuration from
+ * ACPI DSDT to the driver.
+ */
+
+/*
+Device (SPI1)
+{
+    ...
+    Device (EEP0)
+    {
+	Name (_ADR, 0)
+	Name (_HID, "ATML0002")
+	Name (_CID, "at25")
+	Name (_DDN, "at25 compatible SPI eeprom")
+
+	Name (RBUF, ResourceTemplate ()
+	{
+	    SPISerialBus(0, PolarityLow, FourWireMode, 8,
+		ControllerInitiated, 1000000, ClockPolarityLow,
+		ClockPhaseFirst, "\\_SB.PCI0.SPI1",)
+	})
+
+	Method (_DSM, 4, NotSerialized)
+	{
+	    Store (Package (6)
+		{
+		    "byte-len",
+		    1024,
+		    "addr-mode",
+		    2,
+		    "page-size",
+		    32
+		}, Local0)
+
+	    If (LEqual (Arg2, Zero))
+	    {
+		Store (Buffer (1)
+		    {
+			3,
+		    }, Local0)
+	    }
+
+	    Return (Local0)
+	}
+
+	Method (_CRS, 0, NotSerialized)
+	{
+	    Return (RBUF)
+	}
+
+	Method (_STA, 0, NotSerialized)
+	{
+	    Return (0x0F)
+	}
+    }
+*/
+static int at25_acpi_configure(struct spi_device *spi, struct spi_eeprom *chip)
+{
+	static u8 at25_dsm_guid[16];
+
+	struct acpi_buffer buf = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct acpi_object_list input;
+	struct acpi_device *adev;
+	union acpi_object params[4];
+	union acpi_object *obj;
+	acpi_handle handle, tmp;
+	acpi_status status;
+	int ret = 0, i;
+
+	handle = ACPI_HANDLE(&spi->dev);
+	if (!handle)
+		return -ENODEV;
+
+	ret = acpi_bus_get_device(handle, &adev);
+	if (ret)
+		return ret;
+
+	memset(chip, 0, sizeof(*chip));
+	strncpy(chip->name, acpi_device_name(adev), 10);
+
+	status = acpi_get_handle(handle, "_DSM", &tmp);
+	if (ACPI_FAILURE(status)) {
+		dev_info(&spi->dev, "failed to find _DSM using defaults\n");
+
+		chip->byte_len = 1024;
+		chip->flags = EE_ADDR2;
+		chip->page_size = 32;
+		return 0;
+	}
+
+	input.count = ARRAY_SIZE(params);
+	input.pointer = params;
+
+	/* Arg0: UUID */
+	params[0].type = ACPI_TYPE_BUFFER;
+	params[0].buffer.length = sizeof(at25_dsm_guid);
+	params[0].buffer.pointer = at25_dsm_guid;
+	/* Arg1: UUID revision */
+	params[1].type = ACPI_TYPE_INTEGER;
+	params[1].integer.value = 1;
+	/* Arg2: function index */
+	params[2].type = ACPI_TYPE_INTEGER;
+	params[2].integer.value = 2;
+	/* Arg3: parameters for function */
+	params[3].type = ACPI_TYPE_INTEGER;
+	params[3].integer.value = 0;
+
+	status = acpi_evaluate_object(handle, "_DSM", &input, &buf);
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
+
+	obj = (union acpi_object *)buf.pointer;
+
+	/* We expect a package with name/value pairs */
+	if (obj->type != ACPI_TYPE_PACKAGE || obj->package.count % 2) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	for (i = 0; i < obj->package.count; i += 2) {
+		union acpi_object *obj_name = &obj->package.elements[i];
+		union acpi_object *obj_val = &obj->package.elements[i + 1];
+
+		if (obj_name->type != ACPI_TYPE_STRING) {
+			ret = -EINVAL;
+			goto fail;
+		}
+
+		if (!strcmp(obj_name->string.pointer, "byte-len"))
+			chip->byte_len = obj_val->integer.value;
+		if (!strcmp(obj_name->string.pointer, "addr-mode"))
+			chip->flags = obj_val->integer.value;
+		if (!strcmp(obj_name->string.pointer, "page-size"))
+			chip->page_size = obj_val->integer.value;
+	}
+
+fail:
+	kfree(buf.pointer);
+	return ret;
+}
+
+static struct acpi_device_id at25_acpi_match[] = {
+	{ "AT25", 0 },
+	{},
+};
+
+MODULE_DEVICE_TABLE(acpi, at25_acpi_match);
+#else
+static inline int at25_acpi_configure(struct spi_device *spi,
+				      struct spi_eeprom *chip)
+{
+	return -ENODEV;
+}
+#endif /* CONFIG_ACPI */
+
 static int at25_probe(struct spi_device *spi)
 {
 	struct at25_data	*at25 = NULL;
@@ -373,9 +532,11 @@ static int at25_probe(struct spi_device *spi)
 			if (err)
 				goto fail;
 		} else {
-			dev_err(&spi->dev, "Error: no chip description\n");
-			err = -ENODEV;
-			goto fail;
+			err = at25_acpi_configure(spi, &chip);
+			if (err) {
+				dev_dbg(&spi->dev, "Error: no chip description\n");
+				goto fail;
+			}
 		}
 	} else
 		chip = *(struct spi_eeprom *)spi->dev.platform_data;
@@ -475,6 +636,7 @@ static struct spi_driver at25_driver = {
 	.driver = {
 		.name		= "at25",
 		.owner		= THIS_MODULE,
+		.acpi_match_table = ACPI_PTR(at25_acpi_match),
 	},
 	.probe		= at25_probe,
 	.remove		= at25_remove,

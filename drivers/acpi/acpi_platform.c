@@ -43,6 +43,17 @@ static const struct acpi_device_id acpi_platform_device_ids[] = {
 	{ "INT33C6", ACPI_PLATFORM_CLK },
 	{ "INT33C7", ACPI_PLATFORM_CLK },
 
+	/* ValleyView2 LPSS devices */
+	{ "80860F08", ACPI_PLATFORM_CLK },
+	{ "80860F09", ACPI_PLATFORM_CLK },
+	{ "80860F0A", ACPI_PLATFORM_CLK },
+	{ "80860F0E", ACPI_PLATFORM_CLK },
+	{ "80860F41", ACPI_PLATFORM_CLK },
+	{ "INT33B0", ACPI_PLATFORM_CLK },
+	{ "INT33B1", ACPI_PLATFORM_CLK },
+	{ "INT33B2", ACPI_PLATFORM_CLK },
+	{ "INT33BC", ACPI_PLATFORM_CLK },
+
 	{ }
 };
 
@@ -53,6 +64,15 @@ static int acpi_create_platform_clks(struct acpi_device *adev)
 	/* Create Lynxpoint LPSS clocks */
 	if (!pdev && !strncmp(acpi_device_hid(adev), "INT33C", 6)) {
 		pdev = platform_device_register_simple("clk-lpt", -1, NULL, 0);
+		if (IS_ERR(pdev))
+			return PTR_ERR(pdev);
+	}
+
+	/* Create ValleyView2 LPSS clocks */
+	if (!pdev && (!strncmp(acpi_device_hid(adev), "INT33B", 6) ||
+		      !strncmp(acpi_device_hid(adev), "80860F0", 7) ||
+		      !strncmp(acpi_device_hid(adev), "80860F4", 7))) {
+		pdev = platform_device_register_simple("clk-vlv2", -1, NULL, 0);
 		if (IS_ERR(pdev))
 			return PTR_ERR(pdev);
 	}

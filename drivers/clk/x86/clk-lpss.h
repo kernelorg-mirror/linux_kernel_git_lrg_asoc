@@ -22,12 +22,23 @@ extern struct clk *clk_register_lpss_gate(const char *name,
 					  const char *parent_name,
 					  const char *hid, const char *uid,
 					  unsigned offset);
+extern struct clk *clk_register_lpss_mux(const char *name,
+					 const char **parent_names,
+					 u8 num_parents, const char *hid,
+					 unsigned offset);
 #else
 static inline struct clk *clk_register_lpss_gate(const char *name,
 						 const char *parent_name,
 						 const char *hid,
 						 const char *uid,
 						 unsigned offset)
+{
+	return ERR_PTR(-ENODEV);
+}
+static inline struct clk *clk_register_lpss_mux(const char *name,
+						const char **parent_names,
+						u8 num_parents, const char *hid,
+						unsigned offset)
 {
 	return ERR_PTR(-ENODEV);
 }
