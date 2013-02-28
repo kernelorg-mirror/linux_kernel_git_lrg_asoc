@@ -1,0 +1,10 @@
+origin			git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+rafael_linux-pm		git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm.git#linux-next
+lenb_intel_idle		git://git.kernel.org/pub/scm/linux/kernel/git/lenb/linux.git#next
+drm-intel		git://people.freedesktop.org/~danvet/drm-intel#drm-intel-nightly
+tiwai_sound		git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git#for-next
+ak			git://git.kernel.org/pub/scm/linux/kernel/git/ak/linux-misc.git#hsw/pmu3
+rtd3			git://bee.sh.intel.com/git/rtd3/rtd3.git#rtd3-all
+mwesterb		git://otcgit.jf.intel.com/mwesterb/linux#lpss-next
+sameo_nfc-next		git://git.kernel.org/pub/scm/linux/kernel/git/sameo/nfc-next.git#master and topic/char-misc-next-mei
+sasharp			git://otcgit.jf.intel.com/sasharp/xhci.git
