@@ -1452,6 +1452,10 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 		}
 	}
 
+	/* mesh power save support */
+	if (ieee80211_vif_is_mesh(&rx->sdata->vif))
+		ieee80211_mps_rx_h_sta_process(sta, hdr);
+
 	/*
 	 * Drop (qos-)data::nullfunc frames silently, since they
 	 * are used only to control station power saving mode.
@@ -2090,7 +2094,10 @@ ieee80211_rx_h_mesh_fwding(struct ieee80211_rx_data *rx)
 	if (is_multicast_ether_addr(fwd_hdr->addr1)) {
 		IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, fwded_mcast);
 		memcpy(fwd_hdr->addr2, sdata->vif.addr, ETH_ALEN);
+		/* update power mode indication when forwarding */
+		ieee80211_mps_set_frame_flags(sdata, NULL, fwd_hdr);
 	} else if (!mesh_nexthop_lookup(fwd_skb, sdata)) {
+		/* mesh power mode flags updated in mesh_nexthop_lookup */
 		IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, fwded_unicast);
 	} else {
 		/* unable to resolve next hop */
@@ -2353,7 +2360,7 @@ ieee80211_rx_h_action(struct ieee80211_rx_data *rx)
 		    sdata->vif.type != NL80211_IFTYPE_ADHOC)
 			break;
 
-		/* verify action & smps_control are present */
+		/* verify action & smps_control/chanwidth are present */
 		if (len < IEEE80211_MIN_ACTION_SIZE + 2)
 			goto invalid;
 
@@ -2390,6 +2397,35 @@ ieee80211_rx_h_action(struct ieee80211_rx_data *rx)
 
 			rate_control_rate_update(local, sband, rx->sta,
 						 IEEE80211_RC_SMPS_CHANGED);
+			goto handled;
+		}
+		case WLAN_HT_ACTION_NOTIFY_CHANWIDTH: {
+			struct ieee80211_supported_band *sband;
+			u8 chanwidth = mgmt->u.action.u.ht_notify_cw.chanwidth;
+			bool old_40mhz, new_40mhz;
+
+			/* If it doesn't support 40 MHz it can't change ... */
+			if (!rx->sta->supports_40mhz)
+				goto handled;
+
+			old_40mhz = rx->sta->sta.ht_cap.cap &
+					IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+			new_40mhz = chanwidth == IEEE80211_HT_CHANWIDTH_ANY;
+
+			if (old_40mhz == new_40mhz)
+				goto handled;
+
+			if (new_40mhz)
+				rx->sta->sta.ht_cap.cap |=
+					IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+			else
+				rx->sta->sta.ht_cap.cap &=
+					~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+
+			sband = rx->local->hw.wiphy->bands[status->band];
+
+			rate_control_rate_update(local, sband, rx->sta,
+						 IEEE80211_RC_BW_CHANGED);
 			goto handled;
 		}
 		default:

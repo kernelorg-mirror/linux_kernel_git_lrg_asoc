@@ -805,6 +805,10 @@ u32 ieee802_11_parse_elems_crc(u8 *start, size_t len,
 			elems->peering = pos;
 			elems->peering_len = elen;
 			break;
+		case WLAN_EID_MESH_AWAKE_WINDOW:
+			if (elen >= 2)
+				elems->awake_window = (void *)pos;
+			break;
 		case WLAN_EID_PREQ:
 			elems->preq = pos;
 			elems->preq_len = elen;
@@ -1030,7 +1034,8 @@ u32 ieee80211_mandatory_rates(struct ieee80211_local *local,
 void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 			 u16 transaction, u16 auth_alg, u16 status,
 			 u8 *extra, size_t extra_len, const u8 *da,
-			 const u8 *bssid, const u8 *key, u8 key_len, u8 key_idx)
+			 const u8 *bssid, const u8 *key, u8 key_len, u8 key_idx,
+			 u32 tx_flags)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct sk_buff *skb;
@@ -1063,7 +1068,8 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 		WARN_ON(err);
 	}
 
-	IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT;
+	IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT |
+					tx_flags;
 	ieee80211_tx_skb(sdata, skb);
 }
 
@@ -1277,7 +1283,7 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 void ieee80211_send_probe_req(struct ieee80211_sub_if_data *sdata, u8 *dst,
 			      const u8 *ssid, size_t ssid_len,
 			      const u8 *ie, size_t ie_len,
-			      u32 ratemask, bool directed, bool no_cck,
+			      u32 ratemask, bool directed, u32 tx_flags,
 			      struct ieee80211_channel *channel, bool scan)
 {
 	struct sk_buff *skb;
@@ -1286,9 +1292,7 @@ void ieee80211_send_probe_req(struct ieee80211_sub_if_data *sdata, u8 *dst,
 					ssid, ssid_len,
 					ie, ie_len, directed);
 	if (skb) {
-		if (no_cck)
-			IEEE80211_SKB_CB(skb)->flags |=
-				IEEE80211_TX_CTL_NO_CCK_RATE;
+		IEEE80211_SKB_CB(skb)->flags |= tx_flags;
 		if (scan)
 			ieee80211_tx_skb_tid_band(sdata, skb, 7, channel->band);
 		else
@@ -1358,6 +1362,7 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 	struct ieee80211_chanctx *ctx;
 	struct sta_info *sta;
 	int res, i;
+	bool reconfig_due_to_wowlan = false;
 
 #ifdef CONFIG_PM
 	if (local->suspended)
@@ -1377,6 +1382,7 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		 * res is 1, which means the driver requested
 		 * to go through a regular reset on wakeup.
 		 */
+		reconfig_due_to_wowlan = true;
 	}
 #endif
 	/* everything else happens only if HW was up & running */
@@ -1526,11 +1532,20 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			  BSS_CHANGED_IDLE |
 			  BSS_CHANGED_TXPOWER;
 
+#ifdef CONFIG_PM
+		if (local->resuming && !reconfig_due_to_wowlan)
+			sdata->vif.bss_conf = sdata->suspend_bss_conf;
+#endif
+
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_STATION:
 			changed |= BSS_CHANGED_ASSOC |
 				   BSS_CHANGED_ARP_FILTER |
 				   BSS_CHANGED_PS;
+
+			if (sdata->u.mgd.dtim_period)
+				changed |= BSS_CHANGED_DTIM_PERIOD;
+
 			mutex_lock(&sdata->u.mgd.mtx);
 			ieee80211_bss_info_change_notify(sdata, changed);
 			mutex_unlock(&sdata->u.mgd.mtx);
@@ -1550,9 +1565,11 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 
 			/* fall through */
 		case NL80211_IFTYPE_MESH_POINT:
-			changed |= BSS_CHANGED_BEACON |
-				   BSS_CHANGED_BEACON_ENABLED;
-			ieee80211_bss_info_change_notify(sdata, changed);
+			if (sdata->vif.bss_conf.enable_beacon) {
+				changed |= BSS_CHANGED_BEACON |
+					   BSS_CHANGED_BEACON_ENABLED;
+				ieee80211_bss_info_change_notify(sdata, changed);
+			}
 			break;
 		case NL80211_IFTYPE_WDS:
 			break;
@@ -1632,7 +1649,8 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		mutex_lock(&local->sta_mtx);
 
 		list_for_each_entry(sta, &local->sta_list, list) {
-			ieee80211_sta_tear_down_BA_sessions(sta, true);
+			ieee80211_sta_tear_down_BA_sessions(
+					sta, AGG_STOP_LOCAL_REQUEST);
 			clear_sta_flag(sta, WLAN_STA_BLOCK_BA);
 		}
 
@@ -1646,10 +1664,11 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 	 * If this is for hw restart things are still running.
 	 * We may want to change that later, however.
 	 */
-	if (!local->suspended) {
+	if (!local->suspended || reconfig_due_to_wowlan)
 		drv_restart_complete(local);
+
+	if (!local->suspended)
 		return 0;
-	}
 
 #ifdef CONFIG_PM
 	/* first set suspended false, then resuming */
@@ -1864,7 +1883,7 @@ u8 *ieee80211_ie_build_ht_cap(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
 }
 
 u8 *ieee80211_ie_build_vht_cap(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,
-							   u32 cap)
+			       u32 cap)
 {
 	__le32 tmp;
 

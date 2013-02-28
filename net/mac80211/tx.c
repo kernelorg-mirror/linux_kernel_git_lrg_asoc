@@ -329,6 +329,8 @@ static void purge_old_ps_buffers(struct ieee80211_local *local)
 
 		if (sdata->vif.type == NL80211_IFTYPE_AP)
 			ps = &sdata->u.ap.ps;
+		else if (ieee80211_vif_is_mesh(&sdata->vif))
+			ps = &sdata->u.mesh.ps;
 		else
 			continue;
 
@@ -372,18 +374,20 @@ ieee80211_tx_h_multicast_ps_buf(struct ieee80211_tx_data *tx)
 	/*
 	 * broadcast/multicast frame
 	 *
-	 * If any of the associated stations is in power save mode,
+	 * If any of the associated/peer stations is in power save mode,
 	 * the frame is buffered to be sent after DTIM beacon frame.
 	 * This is done either by the hardware or us.
 	 */
 
-	/* powersaving STAs currently only in AP/VLAN mode */
+	/* powersaving STAs currently only in AP/VLAN/mesh mode */
 	if (tx->sdata->vif.type == NL80211_IFTYPE_AP ||
 	    tx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN) {
 		if (!tx->sdata->bss)
 			return TX_CONTINUE;
 
 		ps = &tx->sdata->bss->ps;
+	} else if (ieee80211_vif_is_mesh(&tx->sdata->vif)) {
+		ps = &tx->sdata->u.mesh.ps;
 	} else {
 		return TX_CONTINUE;
 	}
@@ -594,7 +598,8 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 			break;
 		}
 
-		if (unlikely(tx->key && tx->key->flags & KEY_FLAG_TAINTED))
+		if (unlikely(tx->key && tx->key->flags & KEY_FLAG_TAINTED &&
+			     !ieee80211_is_deauth(hdr->frame_control)))
 			return TX_DROP;
 
 		if (!skip_hw && tx->key &&
@@ -1472,12 +1477,14 @@ void ieee80211_xmit(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb,
 	hdr = (struct ieee80211_hdr *) skb->data;
 	info->control.vif = &sdata->vif;
 
-	if (ieee80211_vif_is_mesh(&sdata->vif) &&
-	    ieee80211_is_data(hdr->frame_control) &&
-	    !is_multicast_ether_addr(hdr->addr1) &&
-	    mesh_nexthop_resolve(skb, sdata)) {
-		/* skb queued: don't free */
-		return;
+	if (ieee80211_vif_is_mesh(&sdata->vif)) {
+		if (ieee80211_is_data(hdr->frame_control) &&
+		    is_unicast_ether_addr(hdr->addr1)) {
+			if (mesh_nexthop_resolve(skb, sdata))
+				return; /* skb queued: don't free */
+		} else {
+			ieee80211_mps_set_frame_flags(sdata, NULL, hdr);
+		}
 	}
 
 	ieee80211_set_qos_hdr(sdata, skb);
@@ -1787,16 +1794,16 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 			break;
 		/* fall through */
 	case NL80211_IFTYPE_AP:
+		if (sdata->vif.type == NL80211_IFTYPE_AP)
+			chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
+		if (!chanctx_conf)
+			goto fail_rcu;
 		fc |= cpu_to_le16(IEEE80211_FCTL_FROMDS);
 		/* DA BSSID SA */
 		memcpy(hdr.addr1, skb->data, ETH_ALEN);
 		memcpy(hdr.addr2, sdata->vif.addr, ETH_ALEN);
 		memcpy(hdr.addr3, skb->data + ETH_ALEN, ETH_ALEN);
 		hdrlen = 24;
-		if (sdata->vif.type == NL80211_IFTYPE_AP)
-			chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
-		if (!chanctx_conf)
-			goto fail_rcu;
 		band = chanctx_conf->def.chan->band;
 		break;
 	case NL80211_IFTYPE_WDS:
@@ -2264,9 +2271,8 @@ void ieee80211_tx_pending(unsigned long data)
 
 /* functions for drivers to get certain frames */
 
-static void ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
-				     struct ps_data *ps,
-				     struct sk_buff *skb)
+static void __ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
+				       struct ps_data *ps, struct sk_buff *skb)
 {
 	u8 *pos, *tim;
 	int aid0 = 0;
@@ -2328,6 +2334,31 @@ static void ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
 	}
 }
 
+static int ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
+				    struct ps_data *ps, struct sk_buff *skb)
+{
+	struct ieee80211_local *local = sdata->local;
+
+	/*
+	 * Not very nice, but we want to allow the driver to call
+	 * ieee80211_beacon_get() as a response to the set_tim()
+	 * callback. That, however, is already invoked under the
+	 * sta_lock to guarantee consistent and race-free update
+	 * of the tim bitmap in mac80211 and the driver.
+	 */
+	if (local->tim_in_locked_section) {
+		__ieee80211_beacon_add_tim(sdata, ps, skb);
+	} else {
+		unsigned long flags;
+
+		spin_lock_irqsave(&local->tim_lock, flags);
+		__ieee80211_beacon_add_tim(sdata, ps, skb);
+		spin_unlock_irqrestore(&local->tim_lock, flags);
+	}
+
+	return 0;
+}
+
 struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 					 struct ieee80211_vif *vif,
 					 u16 *tim_offset, u16 *tim_length)
@@ -2372,22 +2403,7 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 			memcpy(skb_put(skb, beacon->head_len), beacon->head,
 			       beacon->head_len);
 
-			/*
-			 * Not very nice, but we want to allow the driver to call
-			 * ieee80211_beacon_get() as a response to the set_tim()
-			 * callback. That, however, is already invoked under the
-			 * sta_lock to guarantee consistent and race-free update
-			 * of the tim bitmap in mac80211 and the driver.
-			 */
-			if (local->tim_in_locked_section) {
-				ieee80211_beacon_add_tim(sdata, &ap->ps, skb);
-			} else {
-				unsigned long flags;
-
-				spin_lock_irqsave(&local->tim_lock, flags);
-				ieee80211_beacon_add_tim(sdata, &ap->ps, skb);
-				spin_unlock_irqrestore(&local->tim_lock, flags);
-			}
+			ieee80211_beacon_add_tim(sdata, &ap->ps, skb);
 
 			if (tim_offset)
 				*tim_offset = beacon->head_len;
@@ -2435,12 +2451,14 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 				    2 + /* NULL SSID */
 				    2 + 8 + /* supported rates */
 				    2 + 3 + /* DS params */
+				    256 + /* TIM IE */
 				    2 + (IEEE80211_MAX_SUPP_RATES - 8) +
 				    2 + sizeof(struct ieee80211_ht_cap) +
 				    2 + sizeof(struct ieee80211_ht_operation) +
 				    2 + sdata->u.mesh.mesh_id_len +
 				    2 + sizeof(struct ieee80211_meshconf_ie) +
-				    sdata->u.mesh.ie_len);
+				    sdata->u.mesh.ie_len +
+				    2 + sizeof(__le16)); /* awake window */
 		if (!skb)
 			goto out;
 
@@ -2452,6 +2470,7 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 		eth_broadcast_addr(mgmt->da);
 		memcpy(mgmt->sa, sdata->vif.addr, ETH_ALEN);
 		memcpy(mgmt->bssid, sdata->vif.addr, ETH_ALEN);
+		ieee80211_mps_set_frame_flags(sdata, NULL, (void *) mgmt);
 		mgmt->u.beacon.beacon_int =
 			cpu_to_le16(sdata->vif.bss_conf.beacon_int);
 		mgmt->u.beacon.capab_info |= cpu_to_le16(
@@ -2465,12 +2484,14 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 
 		if (ieee80211_add_srates_ie(sdata, skb, true, band) ||
 		    mesh_add_ds_params_ie(skb, sdata) ||
+		    ieee80211_beacon_add_tim(sdata, &ifmsh->ps, skb) ||
 		    ieee80211_add_ext_srates_ie(sdata, skb, true, band) ||
 		    mesh_add_rsn_ie(skb, sdata) ||
 		    mesh_add_ht_cap_ie(skb, sdata) ||
 		    mesh_add_ht_oper_ie(skb, sdata) ||
 		    mesh_add_meshid_ie(skb, sdata) ||
 		    mesh_add_meshconf_ie(skb, sdata) ||
+		    mesh_add_awake_window_ie(skb, sdata) ||
 		    mesh_add_vendor_ies(skb, sdata)) {
 			pr_err("o11s: couldn't add ies!\n");
 			goto out;
@@ -2724,6 +2745,8 @@ ieee80211_get_buffered_bc(struct ieee80211_hw *hw,
 			goto out;
 
 		ps = &sdata->u.ap.ps;
+	} else if (ieee80211_vif_is_mesh(&sdata->vif)) {
+		ps = &sdata->u.mesh.ps;
 	} else {
 		goto out;
 	}

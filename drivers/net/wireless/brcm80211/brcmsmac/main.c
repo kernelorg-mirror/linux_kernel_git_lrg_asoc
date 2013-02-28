@@ -101,8 +101,6 @@
 #define DOT11_RTS_LEN			16
 #define DOT11_CTS_LEN			10
 #define DOT11_BA_BITMAP_LEN		128
-#define DOT11_MIN_BEACON_PERIOD		1
-#define DOT11_MAX_BEACON_PERIOD		0xFFFF
 #define DOT11_MAXNUMFRAGS		16
 #define DOT11_MAX_FRAG_LEN		2346
 
@@ -2466,6 +2464,7 @@ static void brcms_b_tx_fifo_resume(struct brcms_hardware *wlc_hw,
 static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool mute_tx)
 {
 	static const u8 null_ether_addr[ETH_ALEN] = {0, 0, 0, 0, 0, 0};
+	u8 *ethaddr = wlc_hw->wlc->pub->cur_etheraddr;
 
 	if (mute_tx) {
 		/* suspend tx fifos */
@@ -2475,8 +2474,7 @@ static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool mute_tx)
 		brcms_b_tx_fifo_suspend(wlc_hw, TX_AC_VI_FIFO);
 
 		/* zero the address match register so we do not send ACKs */
-		brcms_b_set_addrmatch(wlc_hw, RCM_MAC_OFFSET,
-				       null_ether_addr);
+		brcms_b_set_addrmatch(wlc_hw, RCM_MAC_OFFSET, null_ether_addr);
 	} else {
 		/* resume tx fifos */
 		brcms_b_tx_fifo_resume(wlc_hw, TX_DATA_FIFO);
@@ -2485,8 +2483,7 @@ static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool mute_tx)
 		brcms_b_tx_fifo_resume(wlc_hw, TX_AC_VI_FIFO);
 
 		/* Restore address */
-		brcms_b_set_addrmatch(wlc_hw, RCM_MAC_OFFSET,
-				       wlc_hw->etheraddr);
+		brcms_b_set_addrmatch(wlc_hw, RCM_MAC_OFFSET, ethaddr);
 	}
 
 	wlc_phy_mute_upd(wlc_hw->band->pi, mute_tx, 0);
@@ -5549,8 +5546,7 @@ int brcms_c_set_rateset(struct brcms_c_info *wlc, struct brcm_rateset *rs)
 
 int brcms_c_set_beacon_period(struct brcms_c_info *wlc, u16 period)
 {
-	if (period < DOT11_MIN_BEACON_PERIOD ||
-	    period > DOT11_MAX_BEACON_PERIOD)
+	if (period == 0)
 		return -EINVAL;
 
 	wlc->default_bss->beacon_period = period;
@@ -7402,8 +7398,12 @@ brcms_c_bss_update_probe_resp(struct brcms_c_info *wlc,
 			      struct brcms_bss_cfg *cfg,
 			      bool suspend)
 {
-	u16 prb_resp[BCN_TMPL_LEN / 2];
+	u16 *prb_resp;
 	int len = BCN_TMPL_LEN;
+
+	prb_resp = kmalloc(BCN_TMPL_LEN, GFP_ATOMIC);
+	if (!prb_resp)
+		return;
 
 	/*
 	 * write the probe response to hardware, or save in
@@ -7438,6 +7438,8 @@ brcms_c_bss_update_probe_resp(struct brcms_c_info *wlc,
 
 	if (suspend)
 		brcms_c_enable_mac(wlc);
+
+	kfree(prb_resp);
 }
 
 void brcms_c_update_probe_resp(struct brcms_c_info *wlc, bool suspend)
@@ -7617,7 +7619,7 @@ brcms_b_recv(struct brcms_hardware *wlc_hw, uint fifo, bool bound)
 
 	uint n = 0;
 	uint bound_limit = bound ? RXBND : -1;
-	bool morepending;
+	bool morepending = false;
 
 	skb_queue_head_init(&recv_frames);
 

@@ -191,8 +191,6 @@ struct mesh_rmc {
 #define IEEE80211_MESH_PEER_INACTIVITY_LIMIT (1800 * HZ)
 #define IEEE80211_MESH_HOUSEKEEPING_INTERVAL (60 * HZ)
 
-#define MESH_DEFAULT_BEACON_INTERVAL		1000 	/* in 1024 us units */
-
 #define MESH_PATH_EXPIRE (600 * HZ)
 
 /* Default maximum number of plinks per interface */
@@ -224,6 +222,8 @@ int mesh_add_meshid_ie(struct sk_buff *skb,
 		       struct ieee80211_sub_if_data *sdata);
 int mesh_add_rsn_ie(struct sk_buff *skb,
 		    struct ieee80211_sub_if_data *sdata);
+int mesh_add_awake_window_ie(struct sk_buff *skb,
+			     struct ieee80211_sub_if_data *sdata);
 int mesh_add_vendor_ies(struct sk_buff *skb,
 			struct ieee80211_sub_if_data *sdata);
 int mesh_add_ds_params_ie(struct sk_buff *skb,
@@ -243,6 +243,21 @@ void ieee80211_start_mesh(struct ieee80211_sub_if_data *sdata);
 void ieee80211_stop_mesh(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mesh_root_setup(struct ieee80211_if_mesh *ifmsh);
 const struct ieee80211_mesh_sync_ops *ieee80211_mesh_sync_ops_get(u8 method);
+
+/* mesh power save */
+void ieee80211_mps_local_status_update(struct ieee80211_sub_if_data *sdata);
+void ieee80211_mps_set_sta_local_pm(struct sta_info *sta,
+				    enum nl80211_mesh_power_mode pm);
+void ieee80211_mps_set_frame_flags(struct ieee80211_sub_if_data *sdata,
+				   struct sta_info *sta,
+				   struct ieee80211_hdr *hdr);
+void ieee80211_mps_sta_status_update(struct sta_info *sta);
+void ieee80211_mps_rx_h_sta_process(struct sta_info *sta,
+				    struct ieee80211_hdr *hdr);
+void ieee80211_mpsp_trigger_process(u8 *qc, struct sta_info *sta,
+				    bool tx, bool acked);
+void ieee80211_mps_frame_release(struct sta_info *sta,
+				 struct ieee802_11_elems *elems);
 
 /* Mesh paths */
 int mesh_nexthop_lookup(struct sk_buff *skb,
@@ -306,6 +321,20 @@ extern int mesh_paths_generation;
 
 #ifdef CONFIG_MAC80211_MESH
 extern int mesh_allocated;
+
+static inline
+u32 mesh_plink_inc_estab_count(struct ieee80211_sub_if_data *sdata)
+{
+	atomic_inc(&sdata->u.mesh.estab_plinks);
+	return mesh_accept_plinks_update(sdata);
+}
+
+static inline
+u32 mesh_plink_dec_estab_count(struct ieee80211_sub_if_data *sdata)
+{
+	atomic_dec(&sdata->u.mesh.estab_plinks);
+	return mesh_accept_plinks_update(sdata);
+}
 
 static inline int mesh_plink_free_count(struct ieee80211_sub_if_data *sdata)
 {
