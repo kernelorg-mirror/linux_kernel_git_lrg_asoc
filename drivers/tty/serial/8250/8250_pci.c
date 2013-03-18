@@ -1334,6 +1334,10 @@ static bool lpss_dma_filter(struct dma_chan *chan, void *param)
 #define PCI_DEVICE_ID_INTEL_HSW_UART1	0x9c63
 #define PCI_DEVICE_ID_INTEL_HSW_UART2	0x9c64
 
+#define LPSS_CLK_PARAMS			0x800
+#define LPSS_CLK_PARAMS_CLK_EN		(1 << 0)
+#define LPSS_CLK_PARAMS_CLK_UPDATE	(1 << 31)
+
 static int
 lpss_serial_setup(struct serial_private *priv,
 		const struct pciserial_board *board,
@@ -1388,6 +1392,10 @@ lpss_serial_setup(struct serial_private *priv,
 	port->port.fifosize = 64;
 	port->tx_loadsz = 64;
 	port->dma = dma;
+
+	/* Enable LPSS clk */
+	writel(LPSS_CLK_PARAMS_CLK_EN | LPSS_CLK_PARAMS_CLK_UPDATE,
+	       port->port.membase + LPSS_CLK_PARAMS);
 
 	return ret;
 }
@@ -3285,7 +3293,7 @@ static struct pciserial_board pci_boards[] = {
 	[pbn_byt] = {
 		.flags		= FL_BASE0,
 		.num_ports	= 1,
-		.base_baud	= 2764800,
+		.base_baud	= 6250000,
 		.uart_offset	= 0x80,
 		.reg_shift      = 2,
 	},
