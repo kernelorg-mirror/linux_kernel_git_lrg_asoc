@@ -1244,6 +1244,7 @@ static void dwc_free_chan_resources(struct dma_chan *chan)
 
 /*----------------------------------------------------------------------*/
 
+#ifdef CONFIG_OF
 struct dw_dma_of_filter_args {
 	struct dw_dma *dw;
 	unsigned int req;
@@ -1302,6 +1303,19 @@ static struct dma_chan *dw_dma_of_xlate(struct of_phandle_args *dma_spec,
 	/* TODO: there should be a simpler way to do this */
 	return dma_request_channel(cap, dw_dma_of_filter, &fargs);
 }
+
+static void dw_dma_of_controller_register(struct dw_dma *dw)
+{
+	struct device *dev = dw->dma.dev;
+	int err;
+
+	err = of_dma_controller_register(dev->of_node, dw_dma_of_xlate, dw);
+	if (err)
+		dev_err(dev, "could not register of_dma_controller\n");
+}
+#else /* !CONFIG_OF */
+static inline void dw_dma_of_controller_register(struct dw_dma *dw) {}
+#endif /* !CONFIG_OF */
 
 /* --------------------- Cyclic DMA API extensions -------------------- */
 
@@ -1843,13 +1857,8 @@ static int dw_probe(struct platform_device *pdev)
 
 	dma_async_device_register(&dw->dma);
 
-	if (pdev->dev.of_node) {
-		err = of_dma_controller_register(pdev->dev.of_node,
-						 dw_dma_of_xlate, dw);
-		if (err && err != -ENODEV)
-			dev_err(&pdev->dev,
-				"could not register of_dma_controller\n");
-	}
+	if (pdev->dev.of_node)
+		dw_dma_of_controller_register(dw);
 
 	return 0;
 }
