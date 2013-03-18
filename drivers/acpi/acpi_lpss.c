@@ -16,6 +16,7 @@
 #include <linux/clk-provider.h>
 #include <linux/err.h>
 #include <linux/io.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/clk-lpss.h>
 #include <linux/pm_runtime.h>
@@ -23,6 +24,16 @@
 #include "internal.h"
 
 ACPI_MODULE_NAME("acpi_lpss");
+
+static bool no_lpss;
+
+static int __init setup_no_lpss(char *str)
+{
+	no_lpss = true;
+	return 0;
+}
+
+__setup("acpi_no_lpss", setup_no_lpss);
 
 #define LPSS_CLK_SIZE	0x04
 #define LPSS_LTR_SIZE	0x18
@@ -244,6 +255,11 @@ static int acpi_lpss_create_device(struct acpi_device *adev,
 	struct resource_list_entry *rentry;
 	struct list_head resource_list;
 	int ret;
+
+	if (no_lpss) {
+		acpi_device_set_power(adev, ACPI_STATE_D3_COLD);
+		return 1;
+	}
 
 	dev_desc = (struct lpss_device_desc *)id->driver_data;
 	if (!dev_desc)
