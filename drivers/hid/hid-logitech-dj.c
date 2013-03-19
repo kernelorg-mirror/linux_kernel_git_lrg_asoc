@@ -474,7 +474,7 @@ static int logi_dj_recv_send_report(struct dj_receiver_dev *djrcv_dev,
 	for (i = 0; i < report->field[0]->report_count; i++)
 		report->field[0]->value[i] = data[i];
 
-	usbhid_submit_report(hdev, report, USB_DIR_OUT);
+	hid_hw_request(hdev, report, HID_REQ_SET_REPORT);
 
 	return 0;
 }
