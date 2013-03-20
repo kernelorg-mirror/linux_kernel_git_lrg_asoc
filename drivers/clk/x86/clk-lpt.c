@@ -30,7 +30,7 @@ static int lpt_clk_probe(struct platform_device *pdev)
 		return PTR_ERR(clk);
 
 	/* Shared DMA clock */
-	clk_register_clkdev(clk, "hclk", "INTL9C60.0.auto");
+	clk_register_clkdev(clk, "hclk", "INTL9C60:00");
 	return 0;
 }
 

@@ -47,6 +47,10 @@ struct lpss_private_data {
 	const struct lpss_device_desc *dev_desc;
 };
 
+static struct lpss_device_desc lpss_dev_desc = {
+	.clk_required = true,
+};
+
 static struct lpss_device_desc lpt_dev_desc = {
 	.clk_required = true,
 	.clk_parent = "lpss_clk",
@@ -60,6 +64,9 @@ static struct lpss_device_desc lpt_sdio_dev_desc = {
 };
 
 static const struct acpi_device_id acpi_lpss_device_ids[] = {
+	/* Generic LPSS devices */
+	{ "INTL9C60", (unsigned long)&lpss_dev_desc },
+
 	/* Lynxpoint LPSS devices */
 	{ "INT33C0", (unsigned long)&lpt_dev_desc },
 	{ "INT33C1", (unsigned long)&lpt_dev_desc },
