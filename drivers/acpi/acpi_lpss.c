@@ -102,6 +102,10 @@ static int register_device_clock(struct acpi_device *adev,
 	if (!lpss_clk_dev)
 		lpt_register_clock_device();
 
+	if (!dev_desc->prv_offset && dev_desc->clk_required)
+		/* There is no error when device uses fixed clock */
+		return 0;
+
 	if (!dev_desc->clk_parent || !pdata->mmio_base
 	    || pdata->mmio_size < dev_desc->prv_offset + LPSS_CLK_SIZE)
 		return -ENODATA;
