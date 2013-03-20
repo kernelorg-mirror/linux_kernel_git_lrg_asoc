@@ -54,6 +54,14 @@ enum dw_pci_ctl_id_t {
 	medfield_3,
 	medfield_4,
 	medfield_5,
+
+	byt_0,
+	byt_1,
+	byt_2,
+	byt_3,
+	byt_4,
+	byt_5,
+	byt_6,
 };
 
 struct dw_pci_controller {
@@ -131,6 +139,55 @@ static struct  dw_pci_controller  dw_pci_controllers[] = {
 		.tx_fifo_depth = 32,
 		.rx_fifo_depth = 32,
 		.clk_khz      = 25000,
+	},
+	[byt_0] = {
+		.bus_num	= 0,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_1] = {
+		.bus_num	= 1,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_2] = {
+		.bus_num	= 2,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_3] = {
+		.bus_num	= 3,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_4] = {
+		.bus_num	= 4,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_5] = {
+		.bus_num	= 5,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
+	},
+	[byt_6] = {
+		.bus_num	= 6,
+		.bus_cfg	= INTEL_MID_STD_CFG | DW_IC_CON_SPEED_FAST,
+		.tx_fifo_depth	= 32,
+		.rx_fifo_depth	= 32,
+		.clk_khz	= 100000,
 	},
 };
 static struct i2c_algorithm i2c_dw_algo = {
@@ -325,6 +382,14 @@ static DEFINE_PCI_DEVICE_TABLE(i2_designware_pci_ids) = {
 	{ PCI_VDEVICE(INTEL, 0x082C), medfield_0 },
 	{ PCI_VDEVICE(INTEL, 0x082D), medfield_1 },
 	{ PCI_VDEVICE(INTEL, 0x082E), medfield_2 },
+	/* BayTrail */
+	{ PCI_VDEVICE(INTEL, 0x0F41), byt_0 },
+	{ PCI_VDEVICE(INTEL, 0x0F42), byt_1 },
+	{ PCI_VDEVICE(INTEL, 0x0F43), byt_2 },
+	{ PCI_VDEVICE(INTEL, 0x0F44), byt_3 },
+	{ PCI_VDEVICE(INTEL, 0x0F45), byt_4 },
+	{ PCI_VDEVICE(INTEL, 0x0F46), byt_5 },
+	{ PCI_VDEVICE(INTEL, 0x0F47), byt_6 },
 	{ 0,}
 };
 MODULE_DEVICE_TABLE(pci, i2_designware_pci_ids);
