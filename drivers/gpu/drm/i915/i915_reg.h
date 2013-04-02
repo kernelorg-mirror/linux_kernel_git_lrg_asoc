@@ -1999,6 +1999,8 @@
 #define BLC_PWM_CPU_CTL2	0x48250
 #define BLC_PWM_CPU_CTL		0x48254
 
+#define HSW_BLC_PWM2_CTL	0x48350
+
 /* PCH CTL1 is totally different, all but the below bits are reserved. CTL2 is
  * like the normal CTL from gen4 and earlier. Hooray for confusing naming. */
 #define BLC_PWM_PCH_CTL1	0xc8250
@@ -2006,6 +2008,12 @@
 #define   BLM_PCH_OVERRIDE_ENABLE		(1 << 30)
 #define   BLM_PCH_POLARITY			(1 << 29)
 #define BLC_PWM_PCH_CTL2	0xc8254
+
+#define UTIL_PIN_CTL		0x48400
+#define   UTIL_PIN_ENABLE	(1 << 31)
+
+#define PCH_GTC_CTL		0xe7000
+#define   PCH_GTC_ENABLE	(1 << 31)
 
 /* TV port control */
 #define TV_CTL			0x68000
@@ -3521,6 +3529,16 @@
 #define DEIIR   0x44008
 #define DEIER   0x4400c
 
+#define AUDIMR	0x44084
+#define AUDIIR	0x44088
+#define AUDIER	0x4408c
+
+#define SRDIMR	0x64834
+#define SRDIIR	0x64838
+
+#define PCH_GTCIMR	0xe7054
+#define PCH_GTCIIR	0xe7058
+
 /* GT interrupt.
  * Note that for gen6+ the ring-specific interrupt bits do alias with the
  * corresponding bits in the per-ring interrupt control registers. */
@@ -3680,6 +3698,8 @@
 #define SDEIMR  0xc4004
 #define SDEIIR  0xc4008
 #define SDEIER  0xc400c
+
+#define SERR_INT	0xc4040
 
 /* digital port hotplug */
 #define PCH_PORT_HOTPLUG        0xc4030		/* SHOTPLUG_CTL */
@@ -4683,6 +4703,8 @@
 #define   SBI_SSCAUXDIV_FINALDIV2SEL(x)		((x)<<4)
 #define  SBI_DBUFF0				0x2a00
 #define   SBI_DBUFF0_ENABLE			(1<<0)
+#define  SBI_GEN0				0x1f00
+#define   SBI_GEN0_ENABLE			(1<<0)
 
 /* LPT PIXCLK_GATE */
 #define PIXCLK_GATE			0xC6020
@@ -4748,7 +4770,14 @@
 #define  LCPLL_CLK_FREQ_450		(0<<26)
 #define  LCPLL_CD_CLOCK_DISABLE		(1<<25)
 #define  LCPLL_CD2X_CLOCK_DISABLE	(1<<23)
+#define  LCPLL_POWER_DOWN_ALLOW		(1<<22)
 #define  LCPLL_CD_SOURCE_FCLK		(1<<21)
+#define  LCPLL_CD_SOURCE_FCLK_DONE	(1<<19)
+
+#define D_COMP				(MCHBAR_MIRROR_BASE_SNB + 0x5F0C)
+#define  D_COMP_RCOMP_IN_PROGRESS	(1<<9)
+#define  D_COMP_COMP_FORCE		(1<<8)
+#define  D_COMP_COMP_DISABLE		(1<<0)
 
 /* Pipe WM_LINETIME - watermark line time */
 #define PIPE_WM_LINETIME_A		0x45270

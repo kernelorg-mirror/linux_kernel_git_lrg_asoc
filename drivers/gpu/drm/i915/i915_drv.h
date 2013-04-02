@@ -503,6 +503,29 @@ struct intel_gmbus {
 	struct drm_i915_private *dev_priv;
 };
 
+struct i915_c8_saved_registers {
+	u32 de_imr;
+	u32 de_ier;
+	u32 aud_imr;
+	u32 aud_ier;
+	u32 gt_imr;
+	u32 gt_ier;
+	u32 pm_imr;
+	u32 pm_ier;
+	u32 srd_imr;
+	u32 hotplug_ctl;
+	u32 err_int;
+
+	u32 sde_imr;
+	u32 sde_ier;
+	u32 fdirx_imr;
+	u32 gtcpch_imr;
+	u32 shotplug_ctl;
+	u32 serr_int;
+
+	u32 lcpll_freq;
+};
+
 struct i915_suspend_saved_registers {
 	u8 saveLBB;
 	u32 saveDSPACNTR;
@@ -1064,6 +1087,12 @@ typedef struct drm_i915_private {
 	u32 fdi_rx_config;
 
 	struct i915_suspend_saved_registers regfile;
+
+	struct i915_c8_saved_registers c8_regfile;
+	bool allowing_package_c8;
+	/* Wake ups should happen when allowing_package_c8 is true. */
+	int c8_wakeup_refcnt;
+	struct mutex c8_lock;
 
 	/* Old dri1 support infrastructure, beware the dragons ya fools entering
 	 * here! */

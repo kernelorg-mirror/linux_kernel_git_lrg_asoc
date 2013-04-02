@@ -5058,6 +5058,66 @@ static void lpt_init_pch_refclk(struct drm_device *dev)
 	mutex_unlock(&dev_priv->dpio_lock);
 }
 
+/* Sequence to enable CLKOUT_DP */
+static void lpt_enable_clkout_dp(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	mutex_lock(&dev_priv->dpio_lock);
+
+	val = intel_sbi_read(dev_priv, SBI_SSCCTL, SBI_ICLK);
+	val &= ~SBI_SSCCTL_DISABLE;
+	val |= SBI_SSCCTL_PATHALT;
+	intel_sbi_write(dev_priv, SBI_SSCCTL, val, SBI_ICLK);
+
+	udelay(24);
+
+	val = intel_sbi_read(dev_priv, SBI_SSCCTL, SBI_ICLK);
+	val &= ~SBI_SSCCTL_PATHALT;
+	intel_sbi_write(dev_priv, SBI_SSCCTL, val, SBI_ICLK);
+
+	if (IS_ULT(dev_priv->dev)) {
+		val = intel_sbi_read(dev_priv, SBI_GEN0, SBI_ICLK);
+		val |= SBI_GEN0_ENABLE;
+		intel_sbi_write(dev_priv, SBI_GEN0, val, SBI_ICLK);
+	} else {
+		val = intel_sbi_read(dev_priv, SBI_DBUFF0, SBI_ICLK);
+		val |= SBI_DBUFF0_ENABLE;
+		intel_sbi_write(dev_priv, SBI_DBUFF0, val, SBI_ICLK);
+	}
+
+	mutex_unlock(&dev_priv->dpio_lock);
+}
+
+/* Sequence to disable CLKOUT_DP */
+static void lpt_disable_clkout_dp(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	mutex_lock(&dev_priv->dpio_lock);
+
+	if (IS_ULT(dev_priv->dev)) {
+		val = intel_sbi_read(dev_priv, SBI_GEN0, SBI_ICLK);
+		val &= ~SBI_GEN0_ENABLE;
+		intel_sbi_write(dev_priv, SBI_GEN0, val, SBI_ICLK);
+	} else {
+		val = intel_sbi_read(dev_priv, SBI_DBUFF0, SBI_ICLK);
+		val &= ~SBI_DBUFF0_ENABLE;
+		intel_sbi_write(dev_priv, SBI_DBUFF0, val, SBI_ICLK);
+	}
+
+	val = intel_sbi_read(dev_priv, SBI_SSCCTL, SBI_ICLK);
+	if (!(val & SBI_SSCCTL_PATHALT)) {
+		val |= SBI_SSCCTL_PATHALT;
+		intel_sbi_write(dev_priv, SBI_SSCCTL, val, SBI_ICLK);
+		udelay(32);
+	}
+	val |= SBI_SSCCTL_DISABLE;
+	intel_sbi_write(dev_priv, SBI_SSCCTL, val, SBI_ICLK);
+
+	mutex_unlock(&dev_priv->dpio_lock);
+}
+
 /*
  * Initialize reference clocks when the driver loads
  */
@@ -5720,7 +5780,435 @@ static bool ironlake_get_pipe_config(struct intel_crtc *crtc,
 	return true;
 }
 
+static void hsw_disable_lcpll(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	val = I915_READ(LCPLL_CTL);
+
+	dev_priv->c8_regfile.lcpll_freq = val & LCPLL_CLK_FREQ_MASK;
+
+	val |= LCPLL_CD_SOURCE_FCLK;
+	I915_WRITE(LCPLL_CTL, val);
+	POSTING_READ(LCPLL_CTL);
+
+	udelay(1);
+
+	val = I915_READ(LCPLL_CTL);
+	if (!(val & LCPLL_CD_SOURCE_FCLK_DONE))
+		DRM_ERROR("Switching to FCLK failed\n");
+
+	val |= LCPLL_PLL_DISABLE;
+	I915_WRITE(LCPLL_CTL, val);
+	POSTING_READ(LCPLL_CTL);
+
+	if (wait_for((I915_READ(LCPLL_CTL) & LCPLL_PLL_LOCK) == 0, 1))
+		DRM_ERROR("LCPLL still locked\n");
+
+	val = I915_READ(D_COMP);
+	val |= D_COMP_COMP_DISABLE;
+	I915_WRITE(D_COMP, val);
+	POSTING_READ(D_COMP);
+
+	udelay(2);
+
+	val = I915_READ(D_COMP);
+	if (val & D_COMP_RCOMP_IN_PROGRESS)
+		DRM_ERROR("D_COMP RCOMP still in progress\n");
+
+	val = I915_READ(LCPLL_CTL);
+	val |= LCPLL_POWER_DOWN_ALLOW;
+	I915_WRITE(LCPLL_CTL, val);
+	POSTING_READ(LCPLL_CTL);
+}
+
+static void hsw_restore_lcpll(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	val = I915_READ(LCPLL_CTL);
+
+	if ((val & LCPLL_CLK_FREQ_MASK) != dev_priv->c8_regfile.lcpll_freq)
+		DRM_ERROR("LCPLL frequency changed\n");
+
+	if (val & LCPLL_POWER_DOWN_ALLOW) {
+		val &= ~LCPLL_POWER_DOWN_ALLOW;
+		I915_WRITE(LCPLL_CTL, val);
+	}
+
+	if (val & LCPLL_CD_SOURCE_FCLK) {
+		val = I915_READ(D_COMP);
+		val |= D_COMP_COMP_FORCE;
+		val &= ~D_COMP_COMP_DISABLE;
+		I915_WRITE(D_COMP, val);
+
+		val = I915_READ(LCPLL_CTL);
+		val &= ~LCPLL_PLL_DISABLE;
+		I915_WRITE(LCPLL_CTL, val);
+		POSTING_READ(LCPLL_CTL);
+
+		if (wait_for(I915_READ(LCPLL_CTL) & LCPLL_PLL_LOCK, 5))
+			DRM_ERROR("LCPLL not locked yet\n");
+
+		val = I915_READ(LCPLL_CTL);
+		val &= ~LCPLL_CD_SOURCE_FCLK;
+		I915_WRITE(LCPLL_CTL, val);
+		POSTING_READ(LCPLL_CTL);
+
+		udelay(1);
+
+		val = I915_READ(LCPLL_CTL);
+		if (val & LCPLL_CD_SOURCE_FCLK_DONE)
+			DRM_ERROR("Switching back to LCPLL failed\n");
+	}
+}
+
+static void hsw_disable_interrupts(struct drm_i915_private *dev_priv)
+{
+	struct i915_c8_saved_registers *c8_regfile = &dev_priv->c8_regfile;
+	unsigned long irqflags;
+	uint32_t val, deier, sdeier;
+
+	spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
+
+	/* TODO: clear all pending graphics interrupts. */
+	val = I915_READ(DEIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: DEIIR 0x%08x\n", val);
+
+	val = I915_READ(AUDIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: AUDIIR 0x%08x\n", val);
+
+	val = I915_READ(GTIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: GTIIR 0x%08x\n", val);
+
+	val = I915_READ(GEN6_PMIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: PMIIR 0x%08x\n", val);
+
+	val = I915_READ(SRDIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: SRDIIR 0x%08x\n", val);
+
+	val = I915_READ(SDEIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: SDEIIR 0x%08x\n", val);
+
+	val = I915_READ(_FDI_RXA_IIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: FDIRXAIIR 0x%08x\n", val);
+
+	val = I915_READ(PCH_GTCIIR);
+	if (val)
+		DRM_ERROR("Pending interrupt: GTCPCHIIR 0x%08x\n", val);
+
+	c8_regfile->de_imr = I915_READ(DEIMR);
+	c8_regfile->de_ier = I915_READ(DEIER);
+	c8_regfile->aud_imr = I915_READ(AUDIMR);
+	c8_regfile->aud_ier = I915_READ(AUDIER);
+	c8_regfile->gt_imr = I915_READ(GTIMR);
+	c8_regfile->gt_ier = I915_READ(GTIER);
+	c8_regfile->pm_imr = I915_READ(GEN6_PMIMR);
+	c8_regfile->pm_ier = I915_READ(GEN6_PMIER);
+	c8_regfile->srd_imr = I915_READ(SRDIMR);
+	c8_regfile->hotplug_ctl = I915_READ(DIGITAL_PORT_HOTPLUG_CNTRL);
+	c8_regfile->err_int = I915_READ(GEN7_ERR_INT);
+
+	c8_regfile->sde_imr = I915_READ(SDEIMR);
+	c8_regfile->sde_ier = I915_READ(SDEIER);
+	c8_regfile->fdirx_imr = I915_READ(_FDI_RXA_IMR);
+	c8_regfile->gtcpch_imr = I915_READ(PCH_GTCIMR);
+	c8_regfile->shotplug_ctl = I915_READ(PCH_PORT_HOTPLUG);
+	c8_regfile->serr_int = I915_READ(SERR_INT);
+
+	deier = DE_MASTER_IRQ_CONTROL | DE_PCH_EVENT_IVB;
+	I915_WRITE(DEIMR, ~deier);
+	I915_WRITE(DEIER, deier);
+
+	I915_WRITE(AUDIMR, 0xFFFFFFFF);
+	I915_WRITE(AUDIER, 0);
+
+	I915_WRITE(GTIMR, 0xFFFFFFFF);
+	I915_WRITE(GTIER, 0);
+
+	I915_WRITE(GEN6_PMIMR, 0xFFFFFFFF);
+	I915_WRITE(GEN6_PMIER, 0);
+
+	I915_WRITE(SRDIMR, 0xFFFFFFFF);
+
+	I915_WRITE(DIGITAL_PORT_HOTPLUG_CNTRL, 0);
+
+	I915_WRITE(GEN7_ERR_INT, 0xFFFFFFFF);
+
+	sdeier = SDE_PORTD_HOTPLUG_CPT | SDE_PORTC_HOTPLUG_CPT |
+		 SDE_PORTB_HOTPLUG_CPT | SDE_CRT_HOTPLUG_CPT;
+	I915_WRITE(SDEIMR, ~sdeier);
+	I915_WRITE(SDEIER, sdeier);
+
+	I915_WRITE(_FDI_RXA_IMR, 0xFFFFFFFF);
+	I915_WRITE(PCH_GTCIMR, 0xFFFFFFFF);
+
+	I915_WRITE(PCH_PORT_HOTPLUG, PORTD_HOTPLUG_ENABLE |
+				     PORTC_HOTPLUG_ENABLE |
+				     PORTB_HOTPLUG_ENABLE);
+	I915_WRITE(SERR_INT, 0xFFFFFFFF);
+
+	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
+}
+
+static void hsw_restore_interrupts(struct drm_i915_private *dev_priv)
+{
+	struct i915_c8_saved_registers *c8_regfile = &dev_priv->c8_regfile;
+	unsigned long irqflags;
+
+	spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
+
+	I915_WRITE(DEIMR, c8_regfile->de_imr);
+	I915_WRITE(DEIER, c8_regfile->de_ier);
+	I915_WRITE(AUDIMR, c8_regfile->aud_imr);
+	I915_WRITE(AUDIER, c8_regfile->aud_ier);
+	I915_WRITE(GTIMR, c8_regfile->gt_imr);
+	I915_WRITE(GTIER, c8_regfile->gt_ier);
+	I915_WRITE(GEN6_PMIMR, c8_regfile->pm_imr);
+	I915_WRITE(GEN6_PMIER, c8_regfile->pm_ier);
+	I915_WRITE(SRDIMR, c8_regfile->srd_imr);
+	I915_WRITE(DIGITAL_PORT_HOTPLUG_CNTRL, c8_regfile->hotplug_ctl);
+	I915_WRITE(GEN7_ERR_INT, c8_regfile->err_int);
+
+	I915_WRITE(SDEIMR, c8_regfile->sde_imr);
+	I915_WRITE(SDEIER, c8_regfile->sde_ier);
+	I915_WRITE(_FDI_RXA_IMR, c8_regfile->fdirx_imr);
+	I915_WRITE(PCH_GTCIMR, c8_regfile->gtcpch_imr);
+	I915_WRITE(PCH_PORT_HOTPLUG, c8_regfile->shotplug_ctl);
+	I915_WRITE(SERR_INT, c8_regfile->serr_int);
+
+	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
+}
+
+/*
+ * This function should only be called by:
+ *  - hsw_set_package_c8
+ *  - hsw_package_c8_sleep
+ */
+static void hsw_allow_package_c8(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	WARN_ON(!mutex_is_locked(&dev_priv->c8_lock));
+
+	/* Disable SCLKGATE_DIS workaround.
+	 * TODO: we should keep this always disabled and only enable it when
+	 * needed. */
+	if (dev_priv->pch_id == INTEL_PCH_LPT_LP_DEVICE_ID_TYPE) {
+		val = I915_READ(SOUTH_DSPCLK_GATE_D);
+		val &= ~PCH_LP_PARTITION_LEVEL_DISABLE;
+		I915_WRITE(SOUTH_DSPCLK_GATE_D, val);
+	}
+
+	lpt_disable_clkout_dp(dev_priv);
+	hsw_disable_interrupts(dev_priv);
+	hsw_disable_lcpll(dev_priv);
+}
+
+/*
+ * This function should only be called by:
+ *  - hsw_set_package_c8
+ *  - hsw_package_c8_wakeup
+ */
+static void hsw_disallow_package_c8(struct drm_i915_private *dev_priv)
+{
+	uint32_t val;
+
+	WARN_ON(!mutex_is_locked(&dev_priv->c8_lock));
+
+	hsw_restore_lcpll(dev_priv);
+	hsw_restore_interrupts(dev_priv);
+	lpt_enable_clkout_dp(dev_priv);
+
+	/* Enable SCLKGATE_DIS workaround.
+	 * TODO: we should keep this always disabled and only enable it when
+	 * needed. */
+	if (dev_priv->pch_id == INTEL_PCH_LPT_LP_DEVICE_ID_TYPE) {
+		val = I915_READ(SOUTH_DSPCLK_GATE_D);
+		val |= PCH_LP_PARTITION_LEVEL_DISABLE;
+		I915_WRITE(SOUTH_DSPCLK_GATE_D, val);
+	}
+}
+
+static bool hsw_can_allow_package_c8(struct drm_i915_private *dev_priv)
+{
+	struct drm_device *dev = dev_priv->dev;
+	struct intel_crtc *crtc;
+	struct intel_encoder *encoder;
+	uint32_t val;
+	int used_crtcs = 0, used_encoders = 0;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, base.head)
+		if (crtc->base.enabled)
+			used_crtcs++;
+
+	list_for_each_entry(encoder, &dev->mode_config.encoder_list,
+			   base.head)
+		if (encoder->connectors_active)
+			used_encoders++;
+
+	if (used_crtcs || used_encoders) {
+		DRM_DEBUG_KMS("Not allowing C8: %d crtcs and %d encoders enabled\n",
+			      used_crtcs, used_encoders);
+		return false;
+	}
+
+	val = I915_READ(SPLL_CTL);
+	if (val & SPLL_PLL_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: SPLL enabled\n");
+		return false;
+	}
+
+	val = I915_READ(WRPLL_CTL1);
+	if (val & WRPLL_PLL_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: WRPLL1 enabled\n");
+		return false;
+	}
+
+	val = I915_READ(WRPLL_CTL2);
+	if (val & WRPLL_PLL_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: WRPLL2 enabled\n");
+		return false;
+	}
+
+	val = I915_READ(HSW_PWR_WELL_DRIVER);
+	if (val != 0) {
+		DRM_DEBUG_KMS("Not allowing C8: power well on\n");
+		return false;
+	}
+
+	val = I915_READ(PCH_PP_STATUS);
+	if (val & PP_ON) {
+		DRM_DEBUG_KMS("Not allowing C8: panel power on\n");
+		return false;
+	}
+
+	val = I915_READ(BLC_PWM_CPU_CTL2);
+	if (val & BLM_PWM_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: CPU PWM1 enabled\n");
+		return false;
+	}
+
+	val = I915_READ(HSW_BLC_PWM2_CTL);
+	if (val & BLM_PWM_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: CPU PWM2 enabled\n");
+		return false;
+	}
+
+	val = I915_READ(BLC_PWM_PCH_CTL1);
+	if (val & BLM_PCH_PWM_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: PCH PWM1 enabled\n");
+		return false;
+	}
+
+	val = I915_READ(UTIL_PIN_CTL);
+	if (val & UTIL_PIN_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: utility pin enabled\n");
+		return false;
+	}
+
+	val = I915_READ(PCH_GTC_CTL);
+	if (val & PCH_GTC_ENABLE) {
+		DRM_DEBUG_KMS("Not allowing C8: PCH GTC enabled\n");
+		return false;
+	}
+
+	DRM_DEBUG_KMS("Allowing package C8+\n");
+	return true;
+}
+
+void hsw_package_c8_wakeup(struct drm_i915_private *dev_priv)
+{
+	if (!dev_priv->allowing_package_c8)
+		return;
+
+	mutex_lock(&dev_priv->c8_lock);
+
+	dev_priv->c8_wakeup_refcnt++;
+
+	if (dev_priv->c8_wakeup_refcnt == 1) {
+		DRM_DEBUG_KMS("Waking up from C8\n");
+		hsw_disallow_package_c8(dev_priv);
+	}
+
+	mutex_unlock(&dev_priv->c8_lock);
+}
+
+void hsw_package_c8_sleep(struct drm_i915_private *dev_priv)
+{
+	if (!dev_priv->allowing_package_c8)
+		return;
+
+	mutex_lock(&dev_priv->c8_lock);
+
+	dev_priv->c8_wakeup_refcnt--;
+
+	if (dev_priv->c8_wakeup_refcnt == 0) {
+		DRM_DEBUG_KMS("Sleeping back to C8\n");
+		hsw_allow_package_c8(dev_priv);
+	}
+
+	mutex_unlock(&dev_priv->c8_lock);
+}
+
+static void hsw_set_package_c8(struct drm_i915_private *dev_priv)
+{
+	bool allow = hsw_can_allow_package_c8(dev_priv);
+
+	mutex_lock(&dev_priv->c8_lock);
+
+	if (allow & !dev_priv->allowing_package_c8) {
+		hsw_allow_package_c8(dev_priv);
+		dev_priv->allowing_package_c8 = true;
+		dev_priv->c8_wakeup_refcnt = 0;
+	} else if (!allow & dev_priv->allowing_package_c8) {
+		hsw_disallow_package_c8(dev_priv);
+		dev_priv->allowing_package_c8 = false;
+		WARN_ON(dev_priv->c8_wakeup_refcnt);
+	}
+
+	mutex_unlock(&dev_priv->c8_lock);
+}
+
 static void haswell_modeset_global_resources(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_encoder *encoder;
+	struct intel_digital_port *intel_dig_port;
+	bool enable_power_well = false;
+
+	list_for_each_entry(encoder, &dev->mode_config.encoder_list,
+			   base.head) {
+		if (encoder->connectors_active) {
+
+			if (encoder->type != INTEL_OUTPUT_EDP) {
+				enable_power_well = true;
+			} else {
+				intel_dig_port =
+					enc_to_dig_port(&encoder->base);
+				if (intel_dig_port->port != PORT_A)
+					enable_power_well = true;
+			}
+		}
+	}
+
+	if (dev_priv->pch_pf_size)
+		enable_power_well = true;
+
+	intel_set_power_well(dev, enable_power_well);
+
+	hsw_set_package_c8(dev_priv);
+}
+
+#if 0
+static void haswell_modeset_global_resources2(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	bool enable = false;
@@ -5748,6 +6236,7 @@ static void haswell_modeset_global_resources(struct drm_device *dev)
 
 	intel_set_power_well(dev, enable);
 }
+#endif
 
 static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 				 int x, int y,

@@ -819,6 +819,8 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 	struct edid *edid;
 	enum drm_connector_status status = connector_status_disconnected;
 
+	hsw_package_c8_wakeup(dev_priv);
+
 	intel_hdmi->has_hdmi_sink = false;
 	intel_hdmi->has_audio = false;
 	intel_hdmi->rgb_quant_range_selectable = false;
@@ -846,6 +848,7 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 		intel_encoder->type = INTEL_OUTPUT_HDMI;
 	}
 
+	hsw_package_c8_sleep(dev_priv);
 	return status;
 }
 
