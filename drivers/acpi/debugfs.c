@@ -16,4 +16,5 @@ EXPORT_SYMBOL_GPL(acpi_debugfs_dir);
 void __init acpi_debugfs_init(void)
 {
 	acpi_debugfs_dir = debugfs_create_dir("acpi", NULL);
+	acpica_debugfs_init();
 }

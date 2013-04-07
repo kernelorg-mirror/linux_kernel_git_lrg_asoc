@@ -286,6 +286,16 @@ config SERIAL_8250_DW
 	  Selecting this option will enable handling of the extra features
 	  present in the Synopsys DesignWare APB UART.
 
+config SERIAL_8250_DUMMY
+	tristate "Support for dummy ACPI 8250"
+	depends on SERIAL_8250 && ACPI
+	help
+	  Selecting this option will enable a test UART target device DUMMY
+	  under the ISA serial8250 and a test UART host adapter IBMF000
+	  as an platform device for the purpose of testing the ACPI UART
+	  enumeration support.
+	  If unsure, say "N" here.
+
 config SERIAL_8250_EM
 	tristate "Support for Emma Mobile integrated serial port"
 	depends on SERIAL_8250 && ARM && HAVE_CLK
