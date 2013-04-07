@@ -667,14 +667,14 @@ void __init acpi_early_init(void)
 		goto error0;
 	}
 
-	status = acpi_initialize_subsystem();
+	status = ACPICA_INIT_STEP(initialize_subsystem);
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR PREFIX
 		       "Unable to initialize the ACPI Interpreter\n");
 		goto error0;
 	}
 
-	status = acpi_load_tables();
+	status = ACPICA_INIT_STEP(load_tables);
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR PREFIX
 		       "Unable to load the System Description Tables\n");
@@ -700,7 +700,7 @@ void __init acpi_early_init(void)
 	}
 #endif
 
-	status = acpi_enable_subsystem(~ACPI_NO_ACPI_ENABLE);
+	status = ACPICA_INIT_STEP(enable_subsystem, ~ACPI_NO_ACPI_ENABLE);
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR PREFIX "Unable to enable ACPI\n");
 		goto error0;
@@ -721,7 +721,7 @@ static int __init acpi_bus_init(void)
 
 	acpi_os_initialize1();
 
-	status = acpi_enable_subsystem(ACPI_NO_ACPI_ENABLE);
+	status = ACPICA_INIT_STEP(enable_subsystem, ACPI_NO_ACPI_ENABLE);
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR PREFIX
 		       "Unable to start the ACPI Interpreter\n");
@@ -739,7 +739,7 @@ static int __init acpi_bus_init(void)
 	status = acpi_ec_ecdt_probe();
 	/* Ignore result. Not having an ECDT is not fatal. */
 
-	status = acpi_initialize_objects(ACPI_FULL_INITIALIZATION);
+	status = ACPICA_INIT_STEP(initialize_objects, ACPI_FULL_INITIALIZATION);
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR PREFIX "Unable to initialize ACPI objects\n");
 		goto error1;

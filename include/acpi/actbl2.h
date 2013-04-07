@@ -356,10 +356,17 @@ struct acpi_dbg2_device {
 #define ACPI_DBG2_USB_PORT          0x8002
 #define ACPI_DBG2_NET_PORT          0x8003
 
+/* Intel buggy types for port_type field above */
+
+#define ACPI_DBG2_INTEL_SERIAL      0x0800
+#define ACPI_DBG2_INTEL_1394        0x0801
+#define ACPI_DBG2_INTEL_USB         0x0802
+
 /* Subtypes for port_subtype field above */
 
 #define ACPI_DBG2_16550_COMPATIBLE  0x0000
 #define ACPI_DBG2_16550_SUBSET      0x0001
+#define ACPI_DBG2_INTEL_MID_SPI     0x0002
 
 #define ACPI_DBG2_1394_STANDARD     0x0000
 

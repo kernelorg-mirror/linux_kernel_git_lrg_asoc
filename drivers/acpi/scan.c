@@ -68,8 +68,8 @@ int acpi_scan_add_handler(struct acpi_scan_handler *handler)
  * e.g. on a device with hid:IBM0001 and cid:ACPI0001 you get:
  * char *modalias: "acpi:IBM0001:ACPI0001"
 */
-static int create_modalias(struct acpi_device *acpi_dev, char *modalias,
-			   int size)
+int acpi_device_create_modalias(struct acpi_device *acpi_dev,
+				char *modalias, int size)
 {
 	int len;
 	int count;
@@ -99,7 +99,7 @@ acpi_device_modalias_show(struct device *dev, struct device_attribute *attr, cha
 	int len;
 
 	/* Device has no HID and no CID or string is >1024 */
-	len = create_modalias(acpi_dev, buf, 1024);
+	len = acpi_device_create_modalias(acpi_dev, buf, 1024);
 	if (len <= 0)
 		return 0;
 	buf[len++] = '\n';
@@ -567,7 +567,7 @@ static int acpi_device_uevent(struct device *dev, struct kobj_uevent_env *env)
 
 	if (add_uevent_var(env, "MODALIAS="))
 		return -ENOMEM;
-	len = create_modalias(acpi_dev, &env->buf[env->buflen - 1],
+	len = acpi_device_create_modalias(acpi_dev, &env->buf[env->buflen - 1],
 			      sizeof(env->buf) - env->buflen);
 	if (len >= (sizeof(env->buf) - env->buflen))
 		return -ENOMEM;
@@ -1797,6 +1797,7 @@ int __init acpi_scan_init(void)
 	 * Enumerate devices in the ACPI namespace.
 	 */
 	result = acpi_bus_scan(ACPI_ROOT_OBJECT);
+	result = ACPI_INIT_STEP(bus_scan, ACPI_ROOT_OBJECT);
 	if (result)
 		goto out;
 
@@ -1805,12 +1806,13 @@ int __init acpi_scan_init(void)
 		goto out;
 
 	result = acpi_bus_scan_fixed();
+	result = ACPI_INIT_STEP(bus_scan_fixed);
 	if (result) {
 		acpi_device_unregister(acpi_root);
 		goto out;
 	}
 
-	acpi_update_all_gpes();
+	ACPICA_INIT_STEP(update_all_gpes);
 
 	acpi_pci_root_hp_init();
 

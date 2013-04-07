@@ -349,7 +349,8 @@ int __init acpi_table_init(void)
 {
 	acpi_status status;
 
-	status = acpi_initialize_tables(initial_tables, ACPI_MAX_TABLES, 0);
+	status = ACPICA_INIT_STEP(initialize_tables,
+				  initial_tables, ACPI_MAX_TABLES, 0);
 	if (ACPI_FAILURE(status))
 		return 1;
 

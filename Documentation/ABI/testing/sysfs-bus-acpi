@@ -1,0 +1,96 @@
+What:		/sys/bus/acpi/devices/.../path
+Date:		December 2006
+Contact:	Zhang Rui <rui.zhang@intel.com>
+Description:
+		This attribute indicates the full path of ACPI namespace
+		node associated with the device.  For example, \_SB_.PCI0.
+		This file does not exist for device that is created for
+		ACPI fixed hardware features (power button and sleep
+		button).
+
+What:		/sys/bus/acpi/devices/.../modalias
+Date:		July 2007
+Contact:	Thomas Renninger <trenn@suse.de>
+Description:
+		This attribute indicates the PNP IDs of the device.  That
+		is acpi:HHHHHHHH:[CCCCCCC:].  Where each HHHHHHHH or
+		CCCCCCCC contains device's PNPID (_HID or _CID).
+
+What:		/sys/bus/acpi/devices/.../hid
+Date:		April 2005
+Contact:	Linux ACPI developers <linux-acpi@vger.kernel.org>
+Description:
+		This attribute indicates the hardware ID (_HID) of the
+		device.  For example, PNP0103.  When describing a platform,
+		use of any _HID objects is optional.  However, a _HID
+		object must be used to describe any device that will be
+		enumerated by OSPM.
+
+What:		/sys/bus/acpi/devices/.../description
+Date:		October 2012
+Contact:	Lance Ortiz <lance.ortiz@hp.com>
+Description:
+		This attribute indicates the string (_STR) of the device.
+		It may be used by OSPM to provide information to an end
+		user.
+
+What:		/sys/bus/acpi/devices/.../adr
+Date:		October 2012
+Contact:	Lv Zheng <lv.zheng@intel.com>
+Description:
+		This attribute indicates the address (_ADR) of the device.
+		This object must be used when specifying the address of
+		any device on a bus that has a standard enumeration
+		algorithm.
+
+What:		/sys/bus/acpi/devices/.../uid
+Date:		October 2012
+Contact:	Lv Zheng <lv.zheng@intel.com>
+Description:
+		This attribute indicates the unique ID (_UID) of the
+		device.  This identification object is optional, but is
+		required when the device has no other way to report a
+		persistent unique device ID.
+
+What:		/sys/bus/acpi/devices/.../sun
+Date:		November 2012
+Contact:	Yasuaki Ishimatsu <isimatu.yasuaki@jp.fujitsu.com>
+Description:
+		This attribute indicates the slot user number (_SUN) of the
+		device.  This object is used by OSPM UI to identify slots
+		for the user.
+
+What:		/sys/bus/acpi/devices/.../eject
+Date:		December 2006
+Contact:	Patrick Mochel <mochel@linux.intel.com>
+Description:
+		Writing 1 to this attribute will trigger hot removal of
+		this device.  This file exists for every device that has
+		_EJ0 method.
+
+What:		/sys/bus/acpi/devices/.../real_power_state
+Date:		January 2013
+Contact:	Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+Description:
+		This attribute indicates the device' real power state by
+		obtaining power state before indicating to the user space.
+		This file exists for every device that has _PRx method.
+
+What:		/sys/bus/acpi/devices/.../power_state
+Date:		January 2013
+Contact:	Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+Description:
+		This attribute indicates the device' current power state
+		cached in the OSPM.  This file exists for every device that
+		has _PS0 method.
+
+What:		/sys/bus/acpi/devices/.../resource_in_use
+Date:		January 2013
+Contact:	Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+Description:
+		This attribute indicates the current state of each ACPI
+		power resource.
+Users:
+		Userspace applications (powertop in particular) use this
+		attribute file to observe some properties of power
+		resources for diagnostics purposes.
