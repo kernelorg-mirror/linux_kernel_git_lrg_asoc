@@ -2,8 +2,9 @@
  *  HID driver for multitouch panels
  *
  *  Copyright (c) 2010-2012 Stephane Chatty <chatty@enac.fr>
- *  Copyright (c) 2010-2012 Benjamin Tissoires <benjamin.tissoires@gmail.com>
+ *  Copyright (c) 2010-2013 Benjamin Tissoires <benjamin.tissoires@gmail.com>
  *  Copyright (c) 2010-2012 Ecole Nationale de l'Aviation Civile, France
+ *  Copyright (c) 2012-2013 Red Hat, Inc
  *
  *  This code is partly based on hid-egalax.c:
  *
@@ -26,13 +27,23 @@
  * any later version.
  */
 
+/*
+ * This driver is regularly tested thanks to the tool hid-test[1].
+ * This tool relies on hid-replay[2] and a database of hid devices[3].
+ * Please run these regression tests before patching this module so that
+ * your patch won't break existing known devices.
+ *
+ * [1] https://github.com/bentiss/hid-test
+ * [2] https://github.com/bentiss/hid-replay
+ * [3] https://github.com/bentiss/hid-devices
+ */
+
 #include <linux/device.h>
 #include <linux/hid.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/usb.h>
 #include <linux/input/mt.h>
-#include "usbhid/usbhid.h"
 
 
 MODULE_AUTHOR("Stephane Chatty <chatty@enac.fr>");
@@ -129,6 +140,7 @@ struct mt_device {
 #define MT_CLS_FLATFROG				0x0107
 #define MT_CLS_GENERALTOUCH_TWOFINGERS		0x0108
 #define MT_CLS_GENERALTOUCH_PWT_TENFINGERS	0x0109
+#define MT_CLS_ELAN				0x010a
 
 #define MT_DEFAULT_MAXCONTACT	10
 #define MT_MAX_MAXCONTACT	250
@@ -243,6 +255,7 @@ static struct mt_class mt_classes[] = {
 		.sn_move = 2048,
 		.maxcontacts = 40,
 	},
+	{ .name = MT_CLS_ELAN, .quirks = MT_QUIRK_NOT_SEEN_MEANS_UP, },
 	{ }
 };
 
@@ -352,6 +365,25 @@ static void mt_store_field(struct hid_usage *usage, struct mt_device *td,
 		return;
 
 	f->usages[f->length++] = usage->hid;
+}
+
+static __u8 *mt_report_fixup(struct hid_device *hdev, __u8 *buf,
+			     unsigned int *size)
+{
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct mt_class *cls = &td->mtclass;
+
+	/*
+	 * Elan touch panel should report "Usage" but instead it reports
+	 * "Usage Maximum" so fix it here.
+	 */
+	if (cls->name == MT_CLS_ELAN && *size > 10)
+		if (buf[8] == 0x29 && buf[9] == 0x22) {
+			buf[8] = 0x09;
+			hid_info(hdev, "Fixing up Elan report descriptor\n");
+		}
+
+	return buf;
 }
 
 static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
@@ -740,7 +772,7 @@ static void mt_set_input_mode(struct hid_device *hdev)
 	r = re->report_id_hash[td->inputmode];
 	if (r) {
 		r->field[0]->value[td->inputmode_index] = 0x02;
-		usbhid_submit_report(hdev, r, USB_DIR_OUT);
+		hid_hw_request(hdev, r, HID_REQ_SET_REPORT);
 	}
 }
 
@@ -765,7 +797,7 @@ static void mt_set_maxcontacts(struct hid_device *hdev)
 		max = min(fieldmax, max);
 		if (r->field[0]->value[0] != max) {
 			r->field[0]->value[0] = max;
-			usbhid_submit_report(hdev, r, USB_DIR_OUT);
+			hid_hw_request(hdev, r, HID_REQ_SET_REPORT);
 		}
 	}
 }
@@ -911,7 +943,7 @@ static int mt_resume(struct hid_device *hdev)
 
 	intf = to_usb_interface(hdev->dev.parent);
 	interface = intf->cur_altsetting;
-	dev = hid_to_usb_dev(hdev);
+	dev = interface_to_usbdev(intf);
 
 	/* Some Elan legacy devices require SET_IDLE to be set on resume.
 	 * It should be safe to send it to other devices too.
@@ -1251,6 +1283,10 @@ static const struct hid_device_id mt_devices[] = {
 		MT_USB_DEVICE(USB_VENDOR_ID_ZYTRONIC,
 			USB_DEVICE_ID_ZYTRONIC_ZXY100) },
 
+	/* Elan touch panel */
+	{ .driver_data = MT_CLS_ELAN,
+		HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, 0x04f3, 0x200a) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 	{ }
@@ -1267,6 +1303,7 @@ static struct hid_driver mt_driver = {
 	.id_table = mt_devices,
 	.probe = mt_probe,
 	.remove = mt_remove,
+	.report_fixup = mt_report_fixup,
 	.input_mapping = mt_input_mapping,
 	.input_mapped = mt_input_mapped,
 	.input_configured = mt_input_configured,

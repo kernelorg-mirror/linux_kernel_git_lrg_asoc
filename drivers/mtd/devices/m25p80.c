@@ -31,6 +31,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/of_platform.h>
+#include <linux/acpi.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
@@ -889,6 +890,13 @@ static const struct spi_device_id *jedec_probe(struct spi_device *spi)
 	return ERR_PTR(-ENODEV);
 }
 
+#ifdef CONFIG_ACPI
+static struct acpi_device_id m25p_acpi_match[] = {
+	{ "M25P80", INFO(0x1f4800, 0, 64 * 1024, 128, SECT_4K) },
+	{ }
+};
+MODULE_DEVICE_TABLE(acpi, m25p_acpi_match);
+#endif
 
 /*
  * board specific setup should have ensured the SPI clock used here
@@ -904,6 +912,7 @@ static int m25p_probe(struct spi_device *spi)
 	unsigned			i;
 	struct mtd_part_parser_data	ppdata;
 	struct device_node __maybe_unused *np = spi->dev.of_node;
+	const struct acpi_device_id	*match;
 
 #ifdef CONFIG_MTD_OF_PARTS
 	if (!of_device_is_available(np))
@@ -932,7 +941,11 @@ static int m25p_probe(struct spi_device *spi)
 			dev_warn(&spi->dev, "unrecognized id %s\n", data->type);
 	}
 
-	info = (void *)id->driver_data;
+	match = acpi_match_device(ACPI_PTR(m25p_acpi_match), &spi->dev);
+	if (match)
+		info = (void *)match->driver_data;
+	else
+		info = (void *)id->driver_data;
 
 	if (info->jedec_id) {
 		const struct spi_device_id *jid;
@@ -1092,6 +1105,7 @@ static struct spi_driver m25p80_driver = {
 	.driver = {
 		.name	= "m25p80",
 		.owner	= THIS_MODULE,
+		.acpi_match_table = ACPI_PTR(m25p_acpi_match),
 	},
 	.id_table	= m25p_ids,
 	.probe	= m25p_probe,
