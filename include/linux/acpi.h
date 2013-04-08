@@ -588,4 +588,68 @@ acpi_handle_printk(const char *level, void *handle, const char *fmt, ...) {}
 })
 #endif
 
+#ifdef CONFIG_EARLY_PRINTK_ACPI
+struct acpi_debug_port {
+	u8 port_index;
+	u16 port_type;
+	u16 port_subtype;
+	u16 register_count;
+	struct acpi_generic_address *registers;
+	u16 namepath_length;
+	char *namepath;
+	u16 oem_data_length;
+	u8 *oem_data;
+};
+
+bool __init acpi_early_console_keep(struct acpi_debug_port *info);
+int __init acpi_early_console_launch(char *s, int keep);
+int __init acpi_early_console_probe(void);
+/* This interface is arch specific. */
+int __init __acpi_early_console_start(struct acpi_debug_port *info);
+#else
+static inline int acpi_early_console_probe(void) { return 0; }
+#endif
+
+#ifdef CONFIG_ACPICA_DEBUGFS
+/* Time measurement of ACPICA initialization steps. */
+#define ACPI_CHRONO_initialize_tables			0x00
+#define ACPI_CHRONO_initialize_subsystem		0x01
+#define ACPI_CHRONO_load_tables				0x02
+#define ACPI_CHRONO_enable_subsystem			0x03
+#define ACPI_CHRONO_initialize_objects			0x04
+#define ACPI_CHRONO_bus_scan				0x05
+#define ACPI_CHRONO_bus_scan_fixed			0x06
+#define ACPI_CHRONO_update_all_gpes			0x07
+#define ACPI_MAX_CHRONOS				0x08
+
+void acpi_chrono_log_enter(int step);
+void acpi_chrono_log_exit(int step);
+
+#define ACPICA_INIT_STEP(step, ...)			\
+({							\
+	acpi_status status;				\
+	acpi_chrono_log_enter(ACPI_CHRONO_##step);	\
+	status = acpi_##step(__VA_ARGS__);		\
+	acpi_chrono_log_exit(ACPI_CHRONO_##step);	\
+	status;						\
+})
+#define ACPI_INIT_STEP(step, ...)			\
+({							\
+	int result;					\
+	acpi_chrono_log_enter(ACPI_CHRONO_##step);	\
+	result = acpi_##step(__VA_ARGS__);		\
+	acpi_chrono_log_exit(ACPI_CHRONO_##step);	\
+	result;						\
+})
+
+/* ACPICA debugfs entry. */
+int __init acpica_debugfs_init(void);
+#else
+#define ACPICA_INIT_STEP(step, ...)	acpi_##step(__VA_ARGS__)
+#define ACPI_INIT_STEP(step, ...)	acpi_##step(__VA_ARGS__)
+
+static inline int acpica_debugfs_init(void)
+{ return 0; }
+#endif
+
 #endif	/*_LINUX_ACPI_H*/

@@ -127,8 +127,10 @@ static int i2c_device_probe(struct device *dev)
 					client->flags & I2C_CLIENT_WAKE);
 	dev_dbg(dev, "probe\n");
 
+	acpi_dev_pm_attach(dev, true);
 	status = driver->probe(client, i2c_match_id(driver->id_table, client));
 	if (status) {
+		acpi_dev_pm_detach(dev, true);
 		client->driver = NULL;
 		i2c_set_clientdata(client, NULL);
 	}
@@ -156,6 +158,7 @@ static int i2c_device_remove(struct device *dev)
 		client->driver = NULL;
 		i2c_set_clientdata(client, NULL);
 	}
+	acpi_dev_pm_detach(dev, true);
 	return status;
 }
 
@@ -911,6 +914,10 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 	bus_for_each_drv(&i2c_bus_type, NULL, adap, __process_new_adapter);
 	mutex_unlock(&core_lock);
 
+	pm_runtime_set_active(&adap->dev);
+	pm_runtime_no_callbacks(&adap->dev);
+	pm_runtime_enable(&adap->dev);
+
 	return 0;
 
 out_list:
@@ -1062,6 +1069,8 @@ int i2c_del_adapter(struct i2c_adapter *adap)
 			 "adapter [%s]\n", adap->name);
 		return -EINVAL;
 	}
+
+	pm_runtime_disable(&adap->dev);
 
 	/* Tell drivers about this removal */
 	mutex_lock(&core_lock);
@@ -1385,17 +1394,22 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		}
 #endif
 
+		pm_runtime_get_sync(&adap->dev);
 		if (in_atomic() || irqs_disabled()) {
 			ret = i2c_trylock_adapter(adap);
-			if (!ret)
+			if (!ret) {
+				pm_runtime_put(&adap->dev);
 				/* I2C activity is ongoing. */
 				return -EAGAIN;
+			}
 		} else {
 			i2c_lock_adapter(adap);
 		}
 
 		ret = __i2c_transfer(adap, msgs, num);
 		i2c_unlock_adapter(adap);
+
+		pm_runtime_put(&adap->dev);
 
 		return ret;
 	} else {
@@ -2134,6 +2148,7 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 	flags &= I2C_M_TEN | I2C_CLIENT_PEC | I2C_CLIENT_SCCB;
 
 	if (adapter->algo->smbus_xfer) {
+		pm_runtime_get_sync(&adapter->dev);
 		i2c_lock_adapter(adapter);
 
 		/* Retry automatically on arbitration loss */
@@ -2149,6 +2164,7 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 				break;
 		}
 		i2c_unlock_adapter(adapter);
+		pm_runtime_put(&adapter->dev);
 
 		if (res != -EOPNOTSUPP || !adapter->algo->master_xfer)
 			return res;

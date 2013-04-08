@@ -533,7 +533,8 @@ static int rpm_suspend(struct device *dev, int rpmflags)
 		spin_unlock(&dev->power.lock);
 
 		spin_lock(&parent->power.lock);
-		rpm_idle(parent, RPM_ASYNC);
+		rpm_idle(parent, parent->power.use_autosuspend ?
+				RPM_AUTO | RPM_ASYNC : RPM_ASYNC);
 		spin_unlock(&parent->power.lock);
 
 		spin_lock(&dev->power.lock);

@@ -213,6 +213,7 @@ struct tty_port {
 						   based drain is needed else
 						   set to size of fifo */
 	struct kref		kref;		/* Ref counter */
+	struct ktermios		termios;
 };
 
 /*
@@ -658,5 +659,23 @@ do {									\
 	finish_wait(&wq, &__wait);					\
 } while (0)
 
+
+#ifdef CONFIG_ACPI_UART
+int acpi_uart_get_peripheral_type(struct device *dev,
+	char *buf, size_t size);
+int acpi_uart_get_peripheral_attr(struct device *dev,
+	struct ktermios *termios, unsigned int *mctrl);
+#else
+static inline int acpi_uart_get_peripheral_type(struct device *dev,
+	char *buf, size_t size)
+{
+	return -ENODEV;
+}
+static inline int acpi_uart_get_peripheral_attr(struct device *dev,
+	struct ktermios *termios, unsigned int *mctrl)
+{
+	return -ENODEV;
+}
+#endif
 
 #endif

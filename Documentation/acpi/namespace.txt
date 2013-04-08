@@ -1,0 +1,373 @@
+ACPI Device Tree - Representation of ACPI Namespace
+
+Copyright (C) 2013, Intel Corporation
+Author: Lv Zheng <lv.zheng@intel.com>
+
+
+Abstract:
+The Linux ACPI subsystem converts ACPI namespace nodes into a Linux device
+tree under the /sys/devices/LNXSYSTEM:00 and updates it upon receiving the
+ACPI hotplug device notification events.  Each device node in this device
+hierarchy has a symbolic link sitting under the /sys/bus/acpi/devices.
+This document illustrates the structure of this ACPI device tree.
+
+1. ACPI Definition Blocks
+   The ACPI firmware sets up RSDP (Root System Description Pointer) in the
+   system memory address space pointing to the XSDT (Extended System
+   Description Table), which references other description tables that
+   provide data to OSPM.  The XSDT always points to the FADT (Fixed ACPI
+   Description Table) using its first entry, the data within the FADT
+   includes various fixed-length entries that describe the fixed ACPI
+   features of the hardware.  The FADT always refers to the DSDT
+   (Differentiated System Descripition Table).  This table contains the
+   data in "Definition Block" format.  During initialization, OSPM loads
+   the DSDT to create the ACPI namespace.  There might be multiple SSDTs
+   (Secondary System Definition Tables) present in the system, they are a
+   continuation of the DSDT and also contain the data in "Definition Block"
+   format.  After OSPM loads the DSDT to create the ACPI namespace, each
+   SSDT listed in the XSDT with a unique OEM table ID is loaded.  The
+   following figure dipicts the ACPI System Definition Tables architecture:
+
+                                              +------------------------+
+       +---------+    +-------+    +------+   |  +-------------------+ |
+       |  RSDP   | +->| XSDT  | +->| FADT | +-|->|       DSDT        | |
+       +---------+ |  +-------+ |  +------+ | |  +-------------------+ |
+       | Pointer | |  | Entry +-+  | .... | | |  | Definition Blocks | |
+       +---------+ |  +-------+    | DSDT +-+ |  +-------------------+ |
+       | Pointer +-+  | ..... |    | .... |   |  +-------------------+ |
+       +---------+    +-------+    +------+ +-|->|       SSDT        | |
+                      | Entry +-------------+ |  +-------------------+ |
+                      +-------+               |  | Definition Blocks | |
+                      | Entry +- - - - - - -+ |  +-------------------+ |
+                      +-------+             | |  +- - - - - - - - - -+ |
+                                            +-|->|       SSDT        | |
+                                              |  +-------------------+ |
+                                              |  | Definition Blocks | |
+                                              |  +- - - - - - - - - -+ |
+                                              +------------------------+
+                                                         |
+                                            OSPM Loading |
+                                                        \|/
+                                                  +----------------+
+                                                  | ACPI Namespace |
+                                                  +----------------+
+
+                     Figure 1. ACPI Definition Blocks
+
+   NOTE: RSDP can also contain pointer pointing the the RSDT (Root System
+         Description Table).  Platforms provide RSDT to enable
+         compatibility with ACPI 1.0 operating system.  XSDT supersedes
+         XSDT functionality.
+
+2. Example ACPI Namespace
+   All definition blocks loaded into a single namespace.  The namespace is
+   hierarchical in nature, with each name allowing a collection of names
+   below it.  The following naming conventions apply to all names:
+   1. All names are fixed 32 bits,
+   2. The first byte of name is inclusive of 'A' - 'Z', '_',
+   3. The remaining three bytes of a name are inclusive of 'A' - 'Z', '0'
+      - '9', '_',
+   4. Compilers pads a name shorter than 4 characters with trailing
+      underscores '_',
+   5. Names beginning with '_' are reserved by this specification,
+   6. A name proceeded with '\' causes the name to refer to the root of the
+      namespace,
+   7. A name proceeded with '^' causes the name to refer to the parent of
+      the current namespace.
+   The figure below shows a sample of the ACPI namespace:
+
+   +------+
+   | \    |                     Root
+   +------+
+     |
+     | +------+
+     +-| _PR  |                 Scope(_PR): the processor namespace
+     | +------+
+     |   |
+     |   | +------+
+     |   +-| CPU0 |             Processor(CPU0): the first processor
+     |     +------+
+     |
+     | +------+
+     +-| _SB  |                 Scope(_SB): the system bus namespace
+     | +------+
+     |   |
+     |   | +------+
+     |   +-| LID0 |             Device(LID0); the lid device
+     |   | +------+
+     |   |   |
+     |   |   | +------+
+     |   |   +-| _HID |         Name(_HID, "PNP0C0D"): the hardware ID
+     |   |   | +------+
+     |   |   |
+     |   |   | +------+
+     |   |   +-| _STA |         Method(_STA): the status control method
+     |   |     +------+
+     |   |
+     |   | +------+
+     |   +-| PCI0 |             Device(PCI0); the PCI root bridge
+     |     +------+
+     |       |
+     |       | +------+
+     |       +-| _HID |         Name(_HID, "PNP0A08"): the hardware ID
+     |       | +------+
+     |       |
+     |       | +------+
+     |       +-| _CID |         Name(_CID, "PNP0A03"): the compatible ID
+     |       | +------+
+     |       |
+     |       | +------+
+     |       +-| RP03 |         Scope(RP03): the PCI0 power scope
+     |       | +------+
+     |       |   |
+     |       |   | +------+
+     |       |   +-| PXP3 |     PowerResource(PXP3): the PCI0 power resource
+     |       |     +------+
+     |       |
+     |       | +------+
+     |       +-| GFX0 |         Device(GFX0): the graphics adapter
+     |         +------+
+     |           |
+     |           | +------+
+     |           +-| _ADR |     Name(_ADR, 0x00020000): the PCI bus address
+     |           | +------+
+     |           |
+     |           | +------+
+     |           +-| DD01 |     Device(DD01): the LCD output device
+     |             +------+
+     |               |
+     |               | +------+
+     |               +-| _BCL | Method(_BCL): the backlight control method
+     |                 +------+
+     |
+     | +------+
+     +-| _TZ  |                 Scope(_TZ): the thermal zone namespace
+     | +------+
+     |   |
+     |   | +------+
+     |   +-| FN00 |             PowerResource(FN00): the FAN0 power resource
+     |   | +------+
+     |   |
+     |   | +------+
+     |   +-| FAN0 |             Device(FAN0): the FAN0 cooling device
+     |   | +------+
+     |   |   |
+     |   |   | +------+
+     |   |   +-| _HID |         Name(_HID, "PNP0A0B"): the hardware ID
+     |   |     +------+
+     |   |
+     |   | +------+
+     |   +-| TZ00 |             ThermalZone(TZ00); the FAN thermal zone
+     |     +------+
+     |
+     | +------+
+     +-| _GPE |                 Scope(_GPE): the GPE namespace
+       +------+
+
+                     Figure 2. Example ACPI Namespace
+
+   The names listed above have special meanings to the Linux ACPI device
+   tree:
+   1. Device/PowerResource/Processor/ThermalZone:
+      They will be converted into device objects under LNXSYSTEM.
+   2. _HID/_CID:
+      They will be stored as the PNP ID strings of the owner device object.
+   3. _ADR:
+      It is used to glue the ACPI device object with a real physical device
+      created by another Linux subsystem.
+   4. Scope:
+      Some of them will be converted into dummy device objects to maintain
+      hiearchical nature for the Linux ACPI device tree.
+   5. _BCL:
+      Such special control methods are used to map the owner device as a
+      special Linux device.
+
+3. Linux ACPI Device Objects
+   ACPI device objects currently are implemented in Linux as the
+   "struct acpi_device" objects.  The name of the objects is formatted in
+   <bus_id:instance_no> style, where the instance_no is unique for each
+   bus_id across the whole system.  ex., the root node's bus_id is
+   LNXSYSTEM and its instance_no is 00.  The ACPI device objects are
+   converted from the ACPI namespace nodes and fixed hardware features
+   listed below:
+
+                +---+-----------------+-------+-----------+
+                |   | Node/Feature    | Table | bus_id    |
+                +---+-----------------+-------+-----------+
+                | N | Root            | xSDT  | LNXSYSTEM |
+                +---+-----------------+-------+-----------+
+                | N | Device          | xSDT  | _HID      |
+                +---+-----------------+-------+-----------+
+                | N | Processor       | xSDT  | LNXCPU    |
+                +---+-----------------+-------+-----------+
+                | N | ThermalZone     | xSDT  | LNXTHERM  |
+                +---+-----------------+-------+-----------+
+                | N | PowerResource   | xSDT  | LNXPOWER  |
+                +---+-----------------+-------+-----------+
+                | N | Other Scopes    | xSDT  | device    |
+                +---+-----------------+-------+-----------+
+                | F | PWR_BUTTON      | FADT  | LNXPWRBN  |
+                +---+-----------------+-------+-----------+
+                | F | SLP_BUTTON      | FADT  | LNXSLPBN  |
+                +---+-----------------+-------+-----------+
+                | M | Video Extension | xSDT  | LNXVIDEO  |
+                +---+-----------------+-------+-----------+
+                | M | ATA Controller  | xSDT  | LNXIOBAY  |
+                +---+-----------------+-------+-----------+
+                | M | Docking Station | xSDT  | LNXDOCK   |
+                +---+-----------------+-------+-----------+
+
+                   Table 1. ACPI Namespace Nodes Mapping
+
+   Where:
+     A. N: The device object is converted from a namespace node. Such
+        device object contains a "path" attribute indicating its namespace
+        path.
+        A.1. Root: The root node of the ACPI namespace.
+        A.2. Processor: The namespace node of this device object should
+             look like Processor(XXXX).  Not all of the processors in the
+             namespace will be converted.  The ACPI subsystem scans the
+             namespace and converts processors whose _STA control methods
+             returning PRESENT or FUNCTIONING into ACPI device tree.  The
+             processors without _STA control method will be deemed as
+             PRESENT and FUNCTIONING, thus also get converted.
+        A.3. Device: The namespace node of this device object should look
+             like Device(XXXX).  Not all of the devices in the namespace
+             will be converted.  The ACPI subsystem scans the namespace and
+             converts devices whose _STA control methods returning PRESENT
+             or FUNCTIONING into ACPI device tree.  The devices without
+             _STA control method will be deemed as PRESENT and FUNCTIONING,
+             thus also get converted.
+        A.4. ThermalZone: The namespace node of this device object should
+             look like ThermalZone(XXXX).
+        A.5. PowerResource: The namespace node of this device object
+             should look like PowerResource(XXXX).
+     B. F: The device object is converted from a fixed hardware feature.
+        Such device object does not contain a "path" attribute.
+        B.1. PWR_BUTTON: This device object is created if the flag
+             PWR_BUTTON in the FADT table is set.
+        B.2. SLP_BUTTON: This device object is created if the flag
+             SLP_BUTTON in the FADT table is set.
+     C. M: The device object is converted from a namespace node with
+        specific control methods.  Such device object contains a "path"
+        attribute indicating its namespace path.  ex., the _BCL control
+        method is used to convert the owner device object's parent device
+        into a LNXVIDEO device.
+        C.1. Video Extension: The device object has control methods
+             defined for video extension (ACPI 5.0, Appendix B).
+        C.2. ATA Controller: The device object has control methods
+             defined for ATA controller devices (ACPI 5.0, Chapter 9.8).
+        C.3. Docking Station: The device object has control methods
+             defined for docking station devices (ACPI 5.0, Chapter 6.5.2).
+     D. xSDT: The tables that contain the "Definition Blocks", ie., DSDT or
+        SSDT.
+     E. _HID: The device object's bus_id is derived from the _HID/_CID
+        indentification objects of the namespace node.  Such device object
+        contains "hid" and "modalias" attributes indicating its _HID and
+        _CIDs.  The pseudo devices (LNXxxx) has a modalias attribute
+        containing the pseudo hid (LNXxxx).
+     F. device: The device object's bus_id is a dummy "device" string.
+        The device object is created in order to organize the device
+        objects into the hierarchical device tree and collect the
+        Device(XXXX) nodes without _HID/_CIDs.  Such device object does not
+        contain the "hid" and "modalias" attributes.
+
+4. Linux ACPI Device Attributes
+   This section describes the device attributes associated with the device
+   objects described above, specific device objects' attributes are not
+   listed below.  Please find detailed descriptions of such attributes in
+   the kernel ABI document - Documentation/ABI/testing/sysfs-bus-acpi.
+
+5. Linux ACPI Physical Device Glue
+   ACPI subsystem implements a mechanism that glues a specific ACPI device
+   node and its corresponding physical device nodes (ex., PCI bus device)
+   together.  This is implemented in the drivers/acpi/glue.c.  Multiple
+   physical device nodes can be glued to single ACPI device node.  As a
+   result of the "glue" in the ACPI device tree, there will be:
+   A. The "physical_node" symbolic links under the ACPI device node,
+      linking to the physical device nodes; and
+   B. A "firmware_node" symbolic link under the corresponding physical
+      device node, linking to the ACPI device node.
+   The glue is heavily relies on some identification objects provided by
+   the ACPI namespace node.  ex., the PCI GFX0 have an _ADR attribute
+   valued 0x00020000, it's physical_node will be an symbolic link pointing
+   to the /sys/devices/pci0000:00/0000:00:02:0, where 0000:00:02:0 is the
+   PCI bus address format used by the Linux PCI subsystem.
+
+6. Example Linux ACPI Device Tree
+   If we have an ACPI namespace like the one illustrated in the Figure 2,
+   and the PWR_BUTTON/SLP_BUTTON bit is set in the FADT, then we have the
+   following Linux ACPI device tree:
+
+   +--------------+---+-----------------+
+   | LNXSYSTEM:00 | \ | acpi:LNXSYSTEM: |
+   +--------------+---+-----------------+
+     |
+     | +-------------+-----+----------------+
+     +-| LNXPWRBN:00 | N/A | acpi:LNXPWRBN: |
+     | +-------------+-----+----------------+
+     |
+     | +-------------+-----+----------------+
+     +-| LNXSLPBN:00 | N/A | acpi:LNXSLPBN: |
+     | +-------------+-----+----------------+
+     |
+     | +-----------+------------+--------------+
+     +-| LNXCPU:00 | \_PR_.CPU0 | acpi:LNXCPU: |
+     | +-----------+------------+--------------+
+     |
+     | +-------------+-------+----------------+
+     +-| LNXSYBUS:00 | \_SB_ | acpi:LNXSYBUS: |
+     | +-------------+-------+----------------+
+     |   |
+     |   | +- - - - - - +- - - - - - +- - - - - - - -+
+     |   +-| PNP0C0D:00 | \_SB_.LID0 | acpi:PNP0C0D: |
+     |   | +- - - - - - +- - - - - - +- - - - - - - -+
+     |   |
+     |   | +------------+------------+-----------------------+
+     |   +-| PNP0A08:00 | \_SB_.PCI0 | acpi:PNP0A08:PNP0A03: |
+     |     +------------+------------+-----------------------+
+     |       |
+     |       | +-----------+-----------------+-----+
+     |       +-| device:00 | \_SB_.PCI0.RP03 | N/A |
+     |       | +-----------+-----------------+-----+
+     |       |   |
+     |       |   | +-------------+----------------------+----------------+
+     |       |   +-| LNXPOWER:00 | \_SB_.PCI0.RP03.PXP3 | acpi:LNXPOWER: |
+     |       |     +-------------+----------------------+----------------+
+     |       |
+     |       | +-------------+-----------------+----------------+
+     |       +-| LNXVIDEO:00 | \_SB_.PCI0.GFX0 | acpi:LNXVIDEO: |
+     |         +-------------+-----------------+----------------+
+     |           |
+     |           | +-----------+-----------------+-----+
+     |           +-| device:01 | \_SB_.PCI0.DD01 | N/A |
+     |             +-----------+-----------------+-----+
+     |
+     | +-------------+-------+----------------+
+     +-| LNXSYBUS:01 | \_TZ_ | acpi:LNXSYBUS: |
+       +-------------+-------+----------------+
+         |
+         | +-------------+------------+----------------+
+         +-| LNXPOWER:0a | \_TZ_.FN00 | acpi:LNXPOWER: |
+         | +-------------+------------+----------------+
+         |
+         | +------------+------------+---------------+
+         +-| PNP0C0B:00 | \_TZ_.FAN0 | acpi:PNP0C0B: |
+         | +------------+------------+---------------+
+         |
+         | +-------------+------------+----------------+
+         +-| LNXTHERM:00 | \_TZ_.TZ00 | acpi:LNXTHERM: |
+           +-------------+------------+----------------+
+
+                  Figure 3. Example Linux ACPI Device Tree
+
+   NOTE: The node is expressed in the "object/path/modalias" format.  Where
+         1. object is the object name, appears as the directory name.
+         2. path: is the ACPI namespace path, appears as the path attribute
+                  of the object.
+         3. modalias: is the PNP ID strings ACPI namespace path, appears as
+                      the modalias attribute of the object.
+   NOTE: N/A indicates the device node does not have the path or the
+         modalias attribute.
+   NOTE: The devices listed in a dashed box will be created only when their
+         _STA methods return PRESENT or FUNCTIONING.

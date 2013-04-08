@@ -61,6 +61,8 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 			     int type, unsigned long long sta);
 void acpi_device_add_finalize(struct acpi_device *device);
 void acpi_free_ids(struct acpi_device *device);
+int acpi_device_create_modalias(struct acpi_device *acpi_dev,
+				char *modalias, int size);
 
 /* --------------------------------------------------------------------------
                                   Power Resource

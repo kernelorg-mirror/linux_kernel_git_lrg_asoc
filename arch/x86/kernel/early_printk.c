@@ -200,6 +200,26 @@ static inline void early_console_register(struct console *con, int keep_early)
 	register_console(early_console);
 }
 
+#ifdef CONFIG_EARLY_PRINTK_ACPI
+#include <linux/acpi.h>
+
+int __init __acpi_early_console_start(struct acpi_debug_port *info)
+{
+#ifdef CONFIG_EARLY_PRINTK_INTEL_MID_SPI
+	if ((info->port_type == ACPI_DBG2_SERIAL_PORT ||
+	     info->port_type == ACPI_DBG2_INTEL_SERIAL)
+	    && info->port_subtype == ACPI_DBG2_INTEL_MID_SPI
+	    && info->register_count > 0) {
+		mid_spi_early_console_init((u32)(info->registers[0].address));
+		early_console_register(&mid_spi_early_console,
+				       acpi_early_console_keep(info) ? 1 : 0);
+	}
+#endif
+
+	return 0;
+}
+#endif
+
 static int __init setup_early_printk(char *buf)
 {
 	int keep;
@@ -236,6 +256,10 @@ static int __init setup_early_printk(char *buf)
 		if (!strncmp(buf, "dbgp", 4) && !early_dbgp_init(buf + 4))
 			early_console_register(&early_dbgp_console, keep);
 #endif
+#ifdef CONFIG_EARLY_PRINTK_ACPI
+		if (!strncmp(buf, "acpi", 4))
+			acpi_early_console_launch(buf + 4, keep);
+#endif
 #ifdef CONFIG_HVC_XEN
 		if (!strncmp(buf, "xen", 3))
 			early_console_register(&xenboot_console, keep);
@@ -243,7 +267,7 @@ static int __init setup_early_printk(char *buf)
 #ifdef CONFIG_EARLY_PRINTK_INTEL_MID
 		if (!strncmp(buf, "mrst", 4)) {
 			mrst_early_console_init();
-			early_console_register(&early_mrst_console, keep);
+			early_console_register(&mid_spi_early_console, keep);
 		}
 
 		if (!strncmp(buf, "hsu", 3)) {
