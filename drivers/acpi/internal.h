@@ -35,7 +35,6 @@ void acpi_pci_link_init(void);
 void acpi_pci_root_hp_init(void);
 void acpi_platform_init(void);
 int acpi_sysfs_init(void);
-void acpi_csrt_init(void);
 #ifdef CONFIG_ACPI_CONTAINER
 void acpi_container_init(void);
 #else
@@ -47,6 +46,11 @@ extern struct dentry *acpi_debugfs_dir;
 int acpi_debugfs_init(void);
 #else
 static inline void acpi_debugfs_init(void) { return; }
+#endif
+#ifdef CONFIG_X86_INTEL_LPSS
+void acpi_lpss_init(void);
+#else
+static inline void acpi_lpss_init(void) {}
 #endif
 
 /* --------------------------------------------------------------------------
@@ -132,5 +136,8 @@ static inline void suspend_nvs_restore(void) {}
 				Platform bus support
   -------------------------------------------------------------------------- */
 struct platform_device;
+
+int acpi_create_platform_device(struct acpi_device *adev,
+				const struct acpi_device_id *id);
 
 #endif /* _ACPI_INTERNAL_H_ */

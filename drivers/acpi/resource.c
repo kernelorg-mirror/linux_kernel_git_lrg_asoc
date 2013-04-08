@@ -306,28 +306,11 @@ static void acpi_dev_irqresource_disabled(struct resource *res, u32 gsi)
 static void acpi_dev_get_irqresource(struct resource *res, u32 gsi,
 				     u8 triggering, u8 polarity, u8 shareable)
 {
-	int irq, p, t;
+	int irq;
 
 	if (!valid_IRQ(gsi)) {
 		acpi_dev_irqresource_disabled(res, gsi);
 		return;
-	}
-
-	/*
-	 * In IO-APIC mode, use overrided attribute. Two reasons:
-	 * 1. BIOS bug in DSDT
-	 * 2. BIOS uses IO-APIC mode Interrupt Source Override
-	 */
-	if (!acpi_get_override_irq(gsi, &t, &p)) {
-		u8 trig = t ? ACPI_LEVEL_SENSITIVE : ACPI_EDGE_SENSITIVE;
-		u8 pol = p ? ACPI_ACTIVE_LOW : ACPI_ACTIVE_HIGH;
-
-		if (triggering != trig || polarity != pol) {
-			pr_warning("ACPI: IRQ %d override to %s, %s\n", gsi,
-				   t ? "edge" : "level", p ? "low" : "high");
-			triggering = trig;
-			polarity = pol;
-		}
 	}
 
 	res->flags = acpi_dev_irq_flags(triggering, polarity, shareable);

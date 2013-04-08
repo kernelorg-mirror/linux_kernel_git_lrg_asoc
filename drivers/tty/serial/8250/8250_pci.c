@@ -1324,6 +1324,82 @@ ce4100_serial_setup(struct serial_private *priv,
 	return ret;
 }
 
+static bool lpss_dma_filter(struct dma_chan *chan, void *param)
+{
+	return chan->chan_id == *(int*)param;
+}
+
+#define PCI_DEVICE_ID_INTEL_BYT_UART1	0x0f0a
+#define PCI_DEVICE_ID_INTEL_BYT_UART2	0x0f0c
+#define PCI_DEVICE_ID_INTEL_HSW_UART1	0x9c63
+#define PCI_DEVICE_ID_INTEL_HSW_UART2	0x9c64
+
+#define LPSS_CLK_PARAMS			0x800
+#define LPSS_CLK_PARAMS_CLK_EN		(1 << 0)
+#define LPSS_CLK_PARAMS_CLK_UPDATE	(1 << 31)
+
+static int
+lpss_serial_setup(struct serial_private *priv,
+		const struct pciserial_board *board,
+		struct uart_8250_port *port, int idx)
+{
+	struct uart_8250_dma *dma;
+	int ret;
+
+	dma = devm_kzalloc(port->port.dev, sizeof(*dma), GFP_KERNEL);
+	if (!dma)
+		return -ENOMEM;
+
+	switch (priv->dev->device) {
+	case PCI_DEVICE_ID_INTEL_BYT_UART1:
+		dma->rx_chan_id = 3;
+		dma->rxconf.slave_id = dma->rx_chan_id;
+		dma->tx_chan_id = 2;
+		dma->txconf.slave_id = dma->tx_chan_id;
+		break;
+	case PCI_DEVICE_ID_INTEL_BYT_UART2:
+		dma->rx_chan_id = 5;
+		dma->rxconf.slave_id = dma->rx_chan_id;
+		dma->tx_chan_id = 4;
+		dma->txconf.slave_id = dma->tx_chan_id;
+		break;
+	case PCI_DEVICE_ID_INTEL_HSW_UART1:
+		dma->rx_chan_id = 5;
+		dma->rxconf.slave_id = 21;
+		dma->tx_chan_id = 4;
+		dma->txconf.slave_id = 20;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	dma->rxconf.direction = DMA_DEV_TO_MEM;
+	dma->rxconf.src_addr_width = 1;
+	dma->rxconf.src_maxburst = 16;
+
+	dma->txconf.direction = DMA_MEM_TO_DEV;
+	dma->txconf.dst_addr_width = 1;
+	dma->rxconf.dst_maxburst = 16;
+
+	dma->fn = lpss_dma_filter;
+	dma->rx_param = &dma->rx_chan_id;
+	dma->tx_param = &dma->tx_chan_id;
+
+	ret = pci_default_setup(priv, board, port, idx);
+	port->port.iotype = UPIO_MEM;
+	port->port.type = PORT_16550A;
+	port->port.flags = (port->port.flags | UPF_FIXED_PORT | UPF_FIXED_TYPE);
+	port->port.fifosize = 64;
+	port->tx_loadsz = 64;
+	port->dma = dma;
+
+	/* Enable LPSS clk */
+	writel(LPSS_CLK_PARAMS_CLK_EN | LPSS_CLK_PARAMS_CLK_UPDATE,
+	       port->port.membase + LPSS_CLK_PARAMS);
+
+	return ret;
+}
+
 static int
 pci_omegapci_setup(struct serial_private *priv,
 		      const struct pciserial_board *board,
@@ -1660,6 +1736,34 @@ static struct pci_serial_quirk pci_serial_quirks[] __refdata = {
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.setup		= kt_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_BYT_UART1,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= lpss_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_BYT_UART2,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= lpss_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_HSW_UART1,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= lpss_serial_setup,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_INTEL,
+		.device		= PCI_DEVICE_ID_INTEL_HSW_UART2,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.setup		= pci_default_setup,
 	},
 	/*
 	 * ITE
@@ -2448,6 +2552,8 @@ enum pci_board_num_t {
 	pbn_ADDIDATA_PCIe_4_3906250,
 	pbn_ADDIDATA_PCIe_8_3906250,
 	pbn_ce4100_1_115200,
+	pbn_byt,
+	pbn_hsw,
 	pbn_omegapci,
 	pbn_NETMOS9900_2s_115200,
 	pbn_brcm_trumanage,
@@ -3182,6 +3288,20 @@ static struct pciserial_board pci_boards[] = {
 		.flags		= FL_BASE_BARS,
 		.num_ports	= 2,
 		.base_baud	= 921600,
+		.reg_shift      = 2,
+	},
+	[pbn_byt] = {
+		.flags		= FL_BASE0,
+		.num_ports	= 1,
+		.base_baud	= 6250000,
+		.uart_offset	= 0x80,
+		.reg_shift      = 2,
+	},
+	[pbn_hsw] = {
+		.flags		= FL_BASE0,
+		.num_ports	= 1,
+		.base_baud	= 6250000,
+		.uart_offset	= 0x80,
 		.reg_shift      = 2,
 	},
 	[pbn_omegapci] = {
@@ -4845,6 +4965,24 @@ static struct pci_device_id serial_pci_tbl[] = {
 	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CE4100_UART,
 		PCI_ANY_ID,  PCI_ANY_ID, 0, 0,
 		pbn_ce4100_1_115200 },
+	/* Intel Valleyview2 */
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BYT_UART1,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		pbn_byt },
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BYT_UART2,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		pbn_byt },
+	/* Intel Haswell-ULT */
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HSW_UART1,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		pbn_hsw },
+	{	PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HSW_UART2,
+		PCI_ANY_ID,  PCI_ANY_ID,
+		PCI_CLASS_COMMUNICATION_SERIAL << 8, 0xff0000,
+		pbn_hsw },
 
 	/*
 	 * Cronyx Omega PCI
