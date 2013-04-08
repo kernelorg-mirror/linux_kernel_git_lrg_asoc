@@ -68,6 +68,7 @@ MODULE_ALIAS("platform:pxa2xx-spi");
 #define LPSS_TX_HITHRESH_DFLT	224
 
 /* Offset from drv_data->lpss_base */
+#define SSP_REG			0x0c
 #define SPI_CS_CONTROL		0x18
 #define SPI_CS_CONTROL_SW_MODE	BIT(0)
 #define SPI_CS_CONTROL_CS_HIGH	BIT(1)
@@ -138,6 +139,10 @@ detection_done:
 	/* Enable software chip select control */
 	value = SPI_CS_CONTROL_SW_MODE | SPI_CS_CONTROL_CS_HIGH;
 	__lpss_ssp_write_priv(drv_data, SPI_CS_CONTROL, value);
+
+	/* Enable multiblock DMA transfers */
+	if (drv_data->master_info->enable_dma)
+		__lpss_ssp_write_priv(drv_data, SSP_REG, 1);
 }
 
 static void lpss_ssp_cs_control(struct driver_data *drv_data, bool enable)
@@ -1034,32 +1039,10 @@ static void cleanup(struct spi_device *spi)
 }
 
 #ifdef CONFIG_ACPI
-static int pxa2xx_spi_acpi_add_dma(struct acpi_resource *res, void *data)
-{
-	struct pxa2xx_spi_master *pdata = data;
-
-	if (res->type == ACPI_RESOURCE_TYPE_FIXED_DMA) {
-		const struct acpi_resource_fixed_dma *dma;
-
-		dma = &res->data.fixed_dma;
-		if (pdata->tx_slave_id < 0) {
-			pdata->tx_slave_id = dma->request_lines;
-			pdata->tx_chan_id = dma->channels;
-		} else if (pdata->rx_slave_id < 0) {
-			pdata->rx_slave_id = dma->request_lines;
-			pdata->rx_chan_id = dma->channels;
-		}
-	}
-
-	/* Tell the ACPI core to skip this resource */
-	return 1;
-}
-
 static struct pxa2xx_spi_master *
 pxa2xx_spi_acpi_get_pdata(struct platform_device *pdev)
 {
 	struct pxa2xx_spi_master *pdata;
-	struct list_head resource_list;
 	struct acpi_device *adev;
 	struct ssp_device *ssp;
 	struct resource *res;
@@ -1099,15 +1082,7 @@ pxa2xx_spi_acpi_get_pdata(struct platform_device *pdev)
 		ssp->port_id = devid;
 
 	pdata->num_chipselect = 1;
-	pdata->rx_slave_id = -1;
-	pdata->tx_slave_id = -1;
-
-	INIT_LIST_HEAD(&resource_list);
-	acpi_dev_get_resources(adev, &resource_list, pxa2xx_spi_acpi_add_dma,
-			       pdata);
-	acpi_dev_free_resource_list(&resource_list);
-
-	pdata->enable_dma = pdata->rx_slave_id >= 0 && pdata->tx_slave_id >= 0;
+	pdata->enable_dma = true;
 
 	return pdata;
 }
@@ -1115,6 +1090,8 @@ pxa2xx_spi_acpi_get_pdata(struct platform_device *pdev)
 static struct acpi_device_id pxa2xx_spi_acpi_match[] = {
 	{ "INT33C0", 0 },
 	{ "INT33C1", 0 },
+	{ "INT33B0", 0 },
+	{ "80860F0E", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, pxa2xx_spi_acpi_match);
@@ -1210,7 +1187,7 @@ static int pxa2xx_spi_probe(struct platform_device *pdev)
 	if (platform_info->enable_dma) {
 		status = pxa2xx_spi_dma_setup(drv_data);
 		if (status) {
-			dev_warn(dev, "failed to setup DMA, using PIO\n");
+			dev_dbg(dev, "no DMA channels available, using PIO\n");
 			platform_info->enable_dma = false;
 		}
 	}
