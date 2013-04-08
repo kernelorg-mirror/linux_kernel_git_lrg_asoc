@@ -1,0 +1,8 @@
+origin			git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+drm-intel		git://people.freedesktop.org/~danvet/drm-intel#drm-intel-nightly
+ak			git://git.kernel.org/pub/scm/linux/kernel/git/ak/linux-misc.git#hsw/pmu5
+rtd3			git://bee.sh.intel.com/git/rtd3/rtd3.git#rtd3-all
+mwesterb		git://otcgit.jf.intel.com/mwesterb/linux#lpss-next
+iwlwifi-next		git://git.kernel.org/pub/scm/linux/kernel/git/iwlwifi/iwlwifi-next.git
+sasharp			git://otcgit.jf.intel.com/sasharp/xhci.git
+sameo_nfc-next		git://git.kernel.org/pub/scm/linux/kernel/git/sameo/nfc-next.git#master and topic/char-misc-next-mei
