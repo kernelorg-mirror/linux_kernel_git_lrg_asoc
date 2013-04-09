@@ -7,3 +7,14 @@ config SND_SOC_INTEL_SST
 
 config SND_SOC_INTEL_HSWULT
 	tristate
+
+config SND_SOC_INTEL_HSWULT_MACH
+        tristate "ASoC Audio driver for Intel Haswell-ULT platform"
+        depends on SND_SOC_INTEL_SST
+	select SND_SOC_INTEL_HSWULT
+	select SND_COMPRESS_OFFLOAD
+	help
+          This adds support for ASoC driver for Intel(R) Haswell
+          Ultrabook platform  used as alsa device in audio substem
+          Say Y if you have such a device
+          If unsure select "N".
