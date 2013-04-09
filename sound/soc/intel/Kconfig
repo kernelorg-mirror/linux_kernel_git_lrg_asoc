@@ -4,3 +4,6 @@ config SND_SOC_INTEL_SST
           This adds support for Intel(R) Smart Sound Technology.
           Say Y if you have such a device
           If unsure select "N".
+
+config SND_SOC_INTEL_HSWULT
+	tristate
