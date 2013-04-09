@@ -1,0 +1,6 @@
+config SND_SOC_INTEL_SST
+	tristate "ASoC support for Intel(R) Smart Sound Technology"
+	help
+          This adds support for Intel(R) Smart Sound Technology.
+          Say Y if you have such a device
+          If unsure select "N".
