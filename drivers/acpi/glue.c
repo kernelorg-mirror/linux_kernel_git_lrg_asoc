@@ -29,6 +29,8 @@ do {								\
 #endif
 static LIST_HEAD(bus_type_list);
 static DECLARE_RWSEM(bus_type_sem);
+static bool hsw_audio_init = false;
+static struct acpi_device_id audio_id = {"INT33C8", };
 
 #define PHYSICAL_NODE_STRING "physical_node"
 #define PHYSICAL_NODE_NAME_SIZE (sizeof(PHYSICAL_NODE_STRING) + 10)
@@ -198,6 +200,12 @@ int acpi_bind_one(struct device *dev, acpi_handle handle)
 	status = acpi_bus_get_device(handle, &acpi_dev);
 	if (ACPI_FAILURE(status))
 		goto err;
+
+	/* For Haswell Audio DSP ACPI only */
+	if (!hsw_audio_init && !strncmp(acpi_device_hid(acpi_dev), "INT33C8", 7)) {
+		hsw_audio_init = true;
+		acpi_create_platform_device(acpi_dev, &audio_id);
+	}
 
 	physical_node = kzalloc(sizeof(*physical_node), GFP_KERNEL);
 	if (!physical_node) {
