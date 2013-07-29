@@ -851,6 +851,7 @@ static int hsw_compr_open(struct snd_compr_stream *cstream)
 	mutex_lock(&pcm_data->mutex);
 	pcm_data->cstream = cstream;
 	pcm_data->wpos = 0;
+
 	pcm_data->stream = sst_hsw_stream_new(hsw, rtd->cpu_dai->id,
 		 hsw_compr_notify_pointer, pcm_data);
 	if (pcm_data->stream == NULL) {
@@ -938,6 +939,9 @@ static int hsw_compr_set_params(struct snd_compr_stream *cstream,
 		break;
 	case SND_AUDIOCODEC_AAC:
 		format = SST_HSW_STREAM_FORMAT_AAC_FORMAT;
+		break;
+	case SND_AUDIOCODEC_PCM:
+		format = SST_HSW_STREAM_FORMAT_PCM_FORMAT;
 		break;
 	default:
 		dev_err(rtd->dev, "invalid compressed format %d\n",
@@ -1086,13 +1090,14 @@ static int hsw_compr_ack(struct snd_compr_stream *cstream, size_t bytes)
 static int hsw_compr_get_caps(struct snd_compr_stream *cstream,
 					struct snd_compr_caps *caps)
 {
-	caps->num_codecs = 2;
+	caps->num_codecs = 3;
 	caps->min_fragment_size = PAGE_SIZE;
 	caps->max_fragment_size = PAGE_SIZE * 1024;
 	caps->min_fragments = 2;
 	caps->max_fragments = 1024;
 	caps->codecs[0] = SND_AUDIOCODEC_MP3;
 	caps->codecs[1] = SND_AUDIOCODEC_AAC;
+	caps->codecs[2] = SND_AUDIOCODEC_PCM;
 
 	return 0;
 }
@@ -1102,7 +1107,7 @@ static int hsw_compr_get_codec_caps(struct snd_compr_stream *cstream,
 {
 	switch (codec->codec) {
 	case SND_AUDIOCODEC_MP3:
-		codec->num_descriptors = 2;
+		codec->num_descriptors = 3;
 		codec->descriptor[0].max_ch = 2;
 		codec->descriptor[0].sample_rates = SNDRV_PCM_RATE_8000_48000;
 		codec->descriptor[0].bit_rate[0] = 320; /* 320kbps */
@@ -1113,7 +1118,7 @@ static int hsw_compr_get_codec_caps(struct snd_compr_stream *cstream,
 		codec->descriptor[0].formats = 0;
 		break;
 	case SND_AUDIOCODEC_AAC:
-		codec->num_descriptors = 2;
+		codec->num_descriptors = 3;
 		codec->descriptor[1].max_ch = 2;
 		codec->descriptor[1].sample_rates = SNDRV_PCM_RATE_8000_48000;
 		codec->descriptor[1].bit_rate[0] = 320; /* 320kbps */
@@ -1124,6 +1129,17 @@ static int hsw_compr_get_codec_caps(struct snd_compr_stream *cstream,
 		codec->descriptor[1].formats =
 			(SND_AUDIOSTREAMFORMAT_MP4ADTS |
 				SND_AUDIOSTREAMFORMAT_RAW);
+		break;
+	case SND_AUDIOCODEC_PCM:
+		codec->num_descriptors = 3;
+		codec->descriptor[2].max_ch = 2;
+		codec->descriptor[2].sample_rates = SNDRV_PCM_RATE_8000_48000;
+		codec->descriptor[2].bit_rate[0] = 320; /* 320kbps */
+		codec->descriptor[2].bit_rate[1] = 192;
+		codec->descriptor[2].num_bitrates = 0;
+		codec->descriptor[2].profiles = 0;
+		codec->descriptor[2].modes = 0;
+		codec->descriptor[2].formats = 0;
 		break;
 	default:
 		return -EINVAL;
