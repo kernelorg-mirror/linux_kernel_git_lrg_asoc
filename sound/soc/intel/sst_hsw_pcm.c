@@ -911,7 +911,7 @@ static int hsw_compr_set_params(struct snd_compr_stream *cstream,
 	enum sst_hsw_stream_format format;
 	enum sample_frequency rate;
 	u32 map;
-	int ret, pages;
+	int ret, pages, depth = SST_HSW_DEPTH_INVALID, bits = 0;
 
 	dev_dbg(rtd->dev, "compr: hw_params, pcm_data %p\n", pcm_data);
 
@@ -942,6 +942,8 @@ static int hsw_compr_set_params(struct snd_compr_stream *cstream,
 		break;
 	case SND_AUDIOCODEC_PCM:
 		format = SST_HSW_STREAM_FORMAT_PCM_FORMAT;
+		depth = SST_HSW_DEPTH_16BIT;
+		bits = 16;
 		break;
 	default:
 		dev_err(rtd->dev, "invalid compressed format %d\n",
@@ -962,7 +964,7 @@ static int hsw_compr_set_params(struct snd_compr_stream *cstream,
 		return ret;
 	}
 
-	/* set to stereo */
+	/* set to stereo - TODO hardcoded */
 	ret = sst_hsw_stream_set_channels(hsw, pcm_data->stream, 2);
 	if (ret < 0) {
 		dev_err(rtd->dev, "could not set channels %d\n", 2);
@@ -974,12 +976,19 @@ static int hsw_compr_set_params(struct snd_compr_stream *cstream,
 	if (ret < 0)
 		return ret;
 
+	ret = sst_hsw_stream_set_bits(hsw, pcm_data->stream, bits);
+	if (ret < 0) {
+		dev_err(rtd->dev, "could not set bits %d\n", bits);
+		return ret;
+	}
+
 	// TODO leave these hard coded atm
 	map = create_channel_map(SST_HSW_CHANNEL_CONFIG_STEREO);
 	sst_hsw_stream_set_map_config(hsw, pcm_data->stream,
 			map, SST_HSW_CHANNEL_CONFIG_STEREO);
+
 	sst_hsw_stream_set_style(hsw, pcm_data->stream, SST_HSW_INTERLEAVING_PER_CHANNEL);
-	sst_hsw_stream_set_valid(hsw, pcm_data->stream, 0);
+	sst_hsw_stream_set_valid(hsw, pcm_data->stream, depth);
 
 	if (runtime->buffer_size % PAGE_SIZE)
 		pages = (runtime->buffer_size / PAGE_SIZE) + 1;
