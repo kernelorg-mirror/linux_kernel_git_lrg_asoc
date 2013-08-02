@@ -100,15 +100,13 @@ enum sst_hsw_volume_curve {
 };
 
 /* Sample ordering */
-enum sst_hsw_interleaving
-{
+enum sst_hsw_interleaving {
 	SST_HSW_INTERLEAVING_PER_CHANNEL = 0, /* [s1_ch1...s1_chN,...,sM_ch1...sM_chN] */
 	SST_HSW_INTERLEAVING_PER_SAMPLE  = 1, /* [s1_ch1...sM_ch1,...,s1_chN...sM_chN] */
 };
 
 /* Channel indices */
-enum sst_hsw_channel_index
-{
+enum sst_hsw_channel_index {
 	SST_HSW_CHANNEL_LEFT            = 0,
 	SST_HSW_CHANNEL_CENTER          = 1,
 	SST_HSW_CHANNEL_RIGHT           = 2,
@@ -120,8 +118,7 @@ enum sst_hsw_channel_index
 };
 
 /* List of supported channel maps. */
-enum sst_hsw_channel_config
-{
+enum sst_hsw_channel_config {
 	SST_HSW_CHANNEL_CONFIG_MONO      = 0, /**< One channel only. */
 	SST_HSW_CHANNEL_CONFIG_STEREO    = 1, /**< L & R. */
 	SST_HSW_CHANNEL_CONFIG_2_POINT_1 = 2, /**< L, R & LFE; PCM only. */
@@ -136,8 +133,7 @@ enum sst_hsw_channel_config
 };
 
 /* List of supported ADSP sample rates */
-enum sample_frequency
-{
+enum sample_frequency {
 	SST_HSW_FS_8000HZ   = 8000,
 	SST_HSW_FS_11025HZ  = 11025,
 	SST_HSW_FS_12000HZ  = 12000, /** Mp3, AAC, SRC only. */
@@ -157,13 +153,12 @@ enum sample_frequency
 };
 
 /** List of supported bit depths. */
-enum bitdepth
-{
+enum bitdepth {
 	SST_HSW_DEPTH_8BIT  = 8,
 	SST_HSW_DEPTH_16BIT = 16,
 	SST_HSW_DEPTH_24BIT = 24, /**< Default. */
 	SST_HSW_DEPTH_32BIT = 32,
-	SST_HSW_DEPTH_INVALID
+	SST_HSW_DEPTH_INVALID = 33,
 };
 
 struct sst_hsw;
