@@ -13,6 +13,7 @@ config SND_SOC_INTEL_HSWULT_MACH
         depends on SND_SOC_INTEL_SST
 	select SND_SOC_INTEL_HSWULT
 	select SND_COMPRESS_OFFLOAD
+	select X86_LPSS
 	help
           This adds support for ASoC driver for Intel(R) Haswell
           Ultrabook platform  used as alsa device in audio substem
