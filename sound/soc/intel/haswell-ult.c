@@ -86,8 +86,9 @@ static int headset_get_switch(struct snd_kcontrol *kcontrol,
 static int headset_set_switch(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_codec *codec =  snd_kcontrol_chip(kcontrol);
 #if 0
+	struct snd_soc_codec *codec =  snd_kcontrol_chip(kcontrol);
+
 	if (ucontrol->value.integer.value[0]) {
 		pr_debug("hs_set HS path\n");
 		snd_soc_dapm_enable_pin(&codec->dapm, "Headphones");
@@ -112,8 +113,9 @@ static int lo_get_switch(struct snd_kcontrol *kcontrol,
 static int lo_set_switch(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_codec *codec =  snd_kcontrol_chip(kcontrol);
 #if 0
+	struct snd_soc_codec *codec =  snd_kcontrol_chip(kcontrol);
+
 	if (ucontrol->value.integer.value[0] == lo_dac)
 		return 0;
 
