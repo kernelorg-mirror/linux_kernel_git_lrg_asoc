@@ -203,9 +203,24 @@ static int haswell_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret;
 
-	return snd_soc_dai_set_sysclk(codec_dai, RT5640_SCLK_S_MCLK, 12288000,
+	/* Set codec DAI configuration */
+	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
+			SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS);
+	if (ret < 0) {
+		dev_err(rtd->dev, "can't set codec DAI configuration\n");
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(codec_dai, RT5640_SCLK_S_MCLK, 12288000,
 		SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(rtd->dev, "can't set codec sysclk configuration\n");
+		return ret;
+	}
+
+	return ret;
 }
 
 static struct snd_soc_ops haswell_ops = {
@@ -367,15 +382,48 @@ static struct snd_soc_card haswell = {
 	.num_links = ARRAY_SIZE(haswell_dais),
 };
 
+
 #if 1
-static int haswell_acpi_probe(struct platform_device *pdev)
+
+static acpi_status hsw_audio_walk_resources(struct acpi_resource *res,
+	void *context)
+{
+	struct sst_pdata *pdata = context;
+	struct acpi_resource_extended_irq *pirq;
+	struct acpi_resource_fixed_memory32 *pmem;
+
+	switch (res->type) {
+	case ACPI_RESOURCE_TYPE_EXTENDED_IRQ:
+		pirq = &res->data.extended_irq;
+
+		pdata->irq = pirq->interrupts[0];
+		return AE_OK;
+
+	case ACPI_RESOURCE_TYPE_FIXED_MEMORY32:
+		pmem = &res->data.fixed_memory32;
+
+		pdata->address[pdata->num_regions] = pmem->address;
+		pdata->length[pdata->num_regions] = pmem->address_length;
+		pdata->num_regions++;
+		return AE_OK;
+
+	default:
+	case ACPI_RESOURCE_TYPE_END_TAG:
+		return AE_OK;
+	}
+	return AE_CTRL_TERMINATE;
+}
+
+static int hsw_audio_add(struct acpi_device *acpi)
 {
 	struct snd_soc_card *card = &haswell;
 	struct haswell_data *pdata;
+	struct sst_pdata sst_pdata;
 	struct sst_hsw_pcm *pcm_plat_data;
+	struct device *dev = &acpi->dev;
 	int ret;
 
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (pdata == NULL)
 		return -ENOMEM;
 
@@ -384,8 +432,11 @@ static int haswell_acpi_probe(struct platform_device *pdev)
 	if (pcm_plat_data == NULL)
 		return -ENOMEM;
 
+	acpi_walk_resources(acpi->handle, METHOD_NAME__CRS,
+			    hsw_audio_walk_resources, &sst_pdata);
+
 	/* initialise IPC and DSP */
-	pdata->hsw = sst_hsw_dsp_init(&pdev->dev, 0, pdev);
+	pdata->hsw = sst_hsw_dsp_init(dev, &sst_pdata);
 	if (pdata->hsw == NULL) {
 		kfree(pcm_plat_data);
 		return -ENODEV;
@@ -393,27 +444,27 @@ static int haswell_acpi_probe(struct platform_device *pdev)
 
 	/* register haswell PCM and DAI driver */
 	pcm_plat_data->hsw = pdata->hsw;
-	pdata->hsw_pcm_pdev = platform_device_register_data(&pdev->dev,
+	pdata->hsw_pcm_pdev = platform_device_register_data(dev,
 		"hsw-pcm-audio", -1, pcm_plat_data, sizeof(*pcm_plat_data));
 	if (IS_ERR(pdata->hsw_pcm_pdev))
 		return PTR_ERR(pdata->hsw_pcm_pdev);
 
 	/* register Haswell card */
-	card->dev = &pdev->dev;
-	platform_set_drvdata(pdev, card);
+	card->dev = dev;
+	dev_set_drvdata(dev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 	ret = snd_soc_register_card(card);
 	if (ret) {
 		platform_device_unregister(pdata->hsw_pcm_pdev);
-		dev_err(&pdev->dev, "snd_soc_register_card() failed: %d\n", ret);
+		dev_err(dev, "snd_soc_register_card() failed: %d\n", ret);
 	}
 
 	return ret;
 }
 
-static int haswell_acpi_remove(struct platform_device *pdev)
+static int hsw_audio_remove(struct acpi_device *acpi)
 {
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
+	struct snd_soc_card *card = dev_get_drvdata(&acpi->dev);
 	struct haswell_data *pdata = snd_soc_card_get_drvdata(card);
 
 	snd_soc_unregister_card(card);
@@ -423,31 +474,37 @@ static int haswell_acpi_remove(struct platform_device *pdev)
 	return 0;
 }
 
+// TODO: do we need this atm ?
+static void hsw_audio_notify(struct acpi_device *dev, u32 event)
+{
+}
+
 static struct acpi_device_id hswult_acpi_match[] = {
 	{ "INT33C8", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, hswult_acpi_match);
 
-
-static struct platform_driver hsw_platform_driver = {
-	.probe		= haswell_acpi_probe,
-	.remove		= haswell_acpi_remove,
-	.driver		= {
-		.owner	= THIS_MODULE,
-		.name	= "haswell-ult",
-		.acpi_match_table = ACPI_PTR(hswult_acpi_match),
-	}
+static struct acpi_driver hsw_acpi_audio = {
+	.owner = THIS_MODULE,
+	.name = "hsw-ult-audio",
+	.class = "hsw-ult-audio",
+	.ids = hswult_acpi_match,
+	.ops = {
+		.add = hsw_audio_add,
+		.remove = hsw_audio_remove,
+		.notify = hsw_audio_notify,
+	},
 };
 
 static int __init haswell_init(void)
 {
-	return platform_driver_register(&hsw_platform_driver);
+	return acpi_bus_register_driver(&hsw_acpi_audio);
 }
 
 static void __exit haswell_exit(void)
 {
-	platform_driver_unregister(&hsw_platform_driver);
+	acpi_bus_unregister_driver(&hsw_acpi_audio);
 }
 
 #else
