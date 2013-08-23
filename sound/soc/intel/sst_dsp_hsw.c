@@ -109,38 +109,18 @@ static void hsw_reset(struct sst_dsp *sst)
 		SST_CSR_RST | SST_CSR_STALL, SST_CSR_STALL);
 }
 
-static int hsw_acpi_resource_map(struct sst_dsp *sst,
-	struct platform_device *pdev)
+static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 {
-	struct resource *res_mem, *res_pci;
-
 	dev_dbg(sst->dev, "initialising audio DSP ACPI device\n");
 
-	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res_mem) {
-		dev_err(sst->dev, "no memory resource provided");
-		return -ENXIO;
-	}
-	dev_dbg(sst->dev, "Resource IO Start %llx - End %llx\n",
-		res_mem->start, res_mem->end);
-
 	/* DRAM */
-	sst->addr.dram_base = res_mem->start;
-	sst->addr.dram_end = res_mem->end;
-	sst->addr.dram = ioremap(res_mem->start, resource_size(res_mem));
+	sst->addr.dram_base = pdata->address[0];
+	sst->addr.dram_end = pdata->address[0] + pdata->length[0];
+	sst->addr.dram = ioremap(pdata->address[0], pdata->length[0]);
 	if (!sst->addr.dram)
 		return -ENODEV;
 
-	res_pci = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!res_pci) {
-		dev_err(sst->dev, "no memory resource provided");
-		iounmap(sst->addr.dram);
-		return -ENXIO;
-	}
-	dev_dbg(sst->dev, "Resource pci Start %llx - End %llx\n",
-		res_pci->start, res_pci->end);
-
-	sst->addr.pci_cfg = ioremap(res_pci->start, resource_size(res_pci));
+	sst->addr.pci_cfg = ioremap(pdata->address[1], pdata->length[1]);
 	if (!sst->addr.pci_cfg) {
 		iounmap(sst->addr.dram);
 		return -ENODEV;
@@ -154,55 +134,21 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst,
 	sst->addr.iram_base = sst->addr.dram_base + 0x80000;
 	sst->addr.iram = sst->addr.dram + 0x80000;
 
-	sst->irq = platform_get_irq(pdev, 0);
-
-	return 0;
-}
-
-static int hsw_pci_resource_map(struct sst_dsp *sst, struct pci_dev *pci)
-{
-	dev_dbg(sst->dev, "initialising audio DSP PCI device\n");
-
-	/* DRAM */
-	//sst->addr.dram_end = res_mem->end;
-	sst->addr.dram_base = pci_resource_start(pci, 0);
-	sst->addr.dram = pci_ioremap_bar(pci, 0);
-	if (!sst->addr.dram)
-		return -ENODEV;
-
-	sst->addr.pci_cfg = pci_ioremap_bar(pci, 1);
-	if (!sst->addr.pci_cfg) {
-		iounmap(sst->addr.dram);
-		return -ENODEV;
-	}
-
-	/* SST Shim */
-	sst->addr.shim = sst->addr.dram + 0xE7000;
-
-	/* IRAM */
-	sst->addr.iram_end = sst->addr.dram_base + 0xDFFFF;
-	sst->addr.iram_base = sst->addr.dram_base + 0x80000;
-	sst->addr.iram = sst->addr.dram + 0x80000;
-
-	sst->irq = pci->irq;
+	sst->irq = pdata->irq;
 
 	return 0;
 }
 
 static u64 hsw_dmamask = DMA_BIT_MASK(32);
 
-static int hsw_init(struct sst_dsp *sst)
+static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 {
 	struct device *dev;
 	int ret = -ENODEV;
 
-	dev = sst->sst_dev->dev;
+	dev = sst->dev;
 
-	/* determine if we are probed via ACPI or PCI */
-	if (!sst->sst_dev->pci)
-		ret = hsw_acpi_resource_map(sst, sst->sst_dev->handle);
-	else
-		ret = hsw_pci_resource_map(sst, sst->sst_dev->handle);
+	ret = hsw_acpi_resource_map(sst, pdata);
 	if (ret < 0) {
 		dev_err(dev, "failed to map resources\n");
 		return ret;
