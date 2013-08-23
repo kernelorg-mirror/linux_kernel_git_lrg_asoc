@@ -1535,7 +1535,8 @@ static struct sst_dsp_device hsw_dev ={
 	.thread = hsw_irq_thread,
 };
 
-struct sst_hsw *sst_hsw_dsp_init(struct device *dev, int pci, void *handle)
+struct sst_hsw *sst_hsw_dsp_init(struct device *dev,
+	struct sst_pdata *pdata)
 {
 	struct sst_hsw_ipc_fw_version version;
 	struct sst_hsw *hsw;
@@ -1571,13 +1572,10 @@ struct sst_hsw *sst_hsw_dsp_init(struct device *dev, int pci, void *handle)
 	}
 	init_kthread_work(&hsw->kwork, ipc_tx_msgs);
 
-	hsw_dev.dev = dev;
-	hsw_dev.pci = pci;
-	hsw_dev.handle = handle;
 	hsw_dev.thread_context = hsw;
 
 	/* init SST shim */
-	hsw->dsp = sst_dsp_new(dev, &hsw_dev);
+	hsw->dsp = sst_dsp_new(dev, &hsw_dev, pdata);
 	if (hsw->dsp == NULL)
 		goto list_err;
 

@@ -163,6 +163,7 @@ enum bitdepth {
 
 struct sst_hsw;
 struct sst_hsw_stream;
+struct sst_pdata;
 
 /* FW version */
 struct sst_hsw_ipc_fw_version {
@@ -382,7 +383,7 @@ int sst_hsw_dx_get_state(struct sst_hsw *hsw, u32 item,
 	u32 *offset, u32 *size, u32 *source);
 
 /* init */
-struct sst_hsw *sst_hsw_dsp_init(struct device *dev, int pci, void *handle);
+struct sst_hsw *sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata);
 void sst_hsw_dsp_free(struct sst_hsw *hsw);
 
 #endif
