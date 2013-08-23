@@ -31,7 +31,6 @@ struct sst_dsp;
 #define SST_MFLD_PCI_ID 0x082F
 #define SST_CLV_PCI_ID	0x08E7
 #define SST_MRFLD_PCI_ID  0x119A
-#define SST_HSWULT_PCI_ID	0x9c36
 
 
 /* SST register map */
@@ -116,18 +115,13 @@ struct sst_dsp;
 /*
  * SST Device.
  *
- * This structure is populated by either the ACPI or PCI SST device for use
- * by the generic SST core. TODO: may need more re-flow when other platforms
- * are added, may re-work ACPI/PCI config.
+ * This structure is populated by the SST core driver. 
  */
 struct sst_dsp_device {
 	/* Mandatory fields */
 	u32 id;
 	irqreturn_t (*thread)(int irq, void *context);
 	void *thread_context;
-	struct device *dev;
-	void *handle; /* platform dev, pci dev pointer */
-	int pci; /* pci device or ACPI device */
 };
 
 /* SST Device IDs - can be PCI or ACPI ID */
@@ -136,10 +130,22 @@ struct sst_dsp_device {
  */
 #define SST_DEV_ID_HSWULT	0x33C8
 
+#define SST_MAX_MEM_REGIONS	8
+
+/*
+ * SST Platform Data
+ * This data can be read from ACPI bus, PCI or ACPI platform device data.
+ */
+struct sst_pdata {
+	u32 address[SST_MAX_MEM_REGIONS];
+	u32 length[SST_MAX_MEM_REGIONS];
+	int num_regions;
+	int irq;
+};
 
 /* Initialization */
 struct sst_dsp *sst_dsp_new(struct device *dev,
-	struct sst_dsp_device *sst_dev);
+	struct sst_dsp_device *sst_dev, struct sst_pdata *pdata);
 void sst_dsp_free(struct sst_dsp *sst);
 
 /* Firmware loading */

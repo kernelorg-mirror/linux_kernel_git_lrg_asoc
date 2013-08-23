@@ -405,7 +405,7 @@ void *sst_dsp_get_thread_context(struct sst_dsp *sst)
 EXPORT_SYMBOL(sst_dsp_get_thread_context);
 
 struct sst_dsp *sst_dsp_new(struct device *dev,
-	struct sst_dsp_device *sst_dev)
+	struct sst_dsp_device *sst_dev, struct sst_pdata *pdata)
 {
 	struct sst_dsp *sst;
 	int err;
@@ -427,7 +427,7 @@ struct sst_dsp *sst_dsp_new(struct device *dev,
 		sst->ops = &hswult_ops;
 
 		/* Initialise Haswell SST */
-		err = sst->ops->init(sst);
+		err = sst->ops->init(sst, pdata);
 		if (err < 0) {
 			kfree(sst);
 			return NULL;

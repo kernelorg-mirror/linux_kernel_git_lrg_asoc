@@ -47,7 +47,7 @@ struct sst_ops {
 	irqreturn_t (*irq_handler)(int irq, void *context);
 
 	/* SST init and free */
-	int (*init)(struct sst_dsp *sst);
+	int (*init)(struct sst_dsp *sst, struct sst_pdata *pdata);
 	void (*free)(struct sst_dsp *sst);
 };
 
