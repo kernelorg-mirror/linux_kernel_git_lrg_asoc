@@ -220,6 +220,8 @@ static int haswell_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
+	snd_soc_update_bits( rtd->codec, 0x83, 0xffff, 0x8000);
+
 	return ret;
 }
 
