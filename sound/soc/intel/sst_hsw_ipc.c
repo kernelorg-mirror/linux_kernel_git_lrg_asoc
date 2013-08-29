@@ -1049,7 +1049,7 @@ int sst_hsw_mixer_set_volume(struct sst_hsw *hsw, u32 stage_id, u32 channel,
 
 	/* set both at same time */
 	// TODO: mute not required as in db scale
-	if (channel == 3) {
+	if (channel == 2) {
 		if (hsw->mute[0] && hsw->mute[1]) {
 			hsw->mute_volume[0] = hsw->mute_volume[1] = volume;
 			return 0;
