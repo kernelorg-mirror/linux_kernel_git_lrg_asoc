@@ -3453,6 +3453,22 @@ int snd_soc_codec_set_pll(struct snd_soc_codec *codec, int pll_id, int source,
 EXPORT_SYMBOL_GPL(snd_soc_codec_set_pll);
 
 /**
+ * snd_soc_dai_set_fs - configure DAI FS.
+ * @dai: DAI
+ * @fs Ration of BCLK to Sample rate
+ *
+ * Configures the DAI for a preset FS.
+ */
+int snd_soc_dai_set_fs(struct snd_soc_dai *dai, unsigned int fs)
+{
+	if (dai->driver && dai->driver->ops->set_fs)
+		return dai->driver->ops->set_fs(dai, fs);
+	else
+		return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(snd_soc_dai_set_fs);
+
+/**
  * snd_soc_dai_set_fmt - configure DAI hardware audio format.
  * @dai: DAI
  * @fmt: SND_SOC_DAIFMT_ format value.
