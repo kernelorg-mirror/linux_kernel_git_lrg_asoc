@@ -351,6 +351,17 @@ static int soc_compr_trigger_fe(struct snd_compr_stream *cstream, int cmd)
 	struct snd_soc_platform *platform = fe->platform;
 	int ret = 0, stream;
 
+	/* TODO: rework - for partial drain and drain cmd dont aquire lock while invoking DSP.
+	 * These calls will be blocked till these operation can complete while
+	 * will be a while. And during that app can invoke STOP, PAUSE etc
+	 */
+	if (cmd == SND_COMPR_TRIGGER_PARTIAL_DRAIN || cmd == SND_COMPR_TRIGGER_DRAIN) {
+		pr_err("%s issue drain command without lock held", __func__);
+		if (platform->driver->compr_ops &&
+			platform->driver->compr_ops->trigger)
+		return platform->driver->compr_ops->trigger(cstream, cmd);
+	}
+
 	if (cstream->direction == SND_COMPRESS_PLAYBACK)
 		stream = SNDRV_PCM_STREAM_PLAYBACK;
 	else
