@@ -344,6 +344,7 @@ static struct snd_soc_dai_link haswell_dais[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_capture = 1,
 	},
+
 	/* Back End DAI links */
 	{
 		/* SSP0 - Codec */
@@ -352,8 +353,13 @@ static struct snd_soc_dai_link haswell_dais[] = {
 		.cpu_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "snd-soc-dummy",
 		.no_pcm = 1,
+#if 1
 		.codec_name = "rt5640.0-001c",
 		.codec_dai_name = "rt5640-aif1",
+#else
+		.codec_name = "rt286.0-001c",
+		.codec_dai_name = "rt286-aif1",
+#endif
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
 		.be_hw_params_fixup = hswult_ssp0_fixup,
