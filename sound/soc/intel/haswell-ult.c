@@ -161,10 +161,15 @@ static const struct snd_soc_dapm_widget hsw_widgets[] = {
 };
 
 static const struct snd_soc_dapm_route hsw_map[] = {
+#if 1
 	{"Headphones", NULL, "HPOR"},
 	{"Headphones", NULL, "HPOL"},
 	{"IN2P", NULL, "Mic"},
-
+#else
+	{"Headphones", NULL, "SPOR"},
+	{"Headphones", NULL, "SPOL"},
+	{"MIC1", NULL, "Mic"},
+#endif
 	/* CODEC BE connections */
 	{"SSP0 CODEC IN", NULL, "AIF1 Capture"},
 	{"AIF1 Playback", NULL, "SSP0 CODEC OUT"},
