@@ -40,7 +40,12 @@
 #include "sst_dsp.h"
 #include "sst_hsw_ipc.h"
 #include "sst_hsw_pcm.h"
+
+#if defined CONFIG_HSW_ULT_RT286
+#include "../codecs/rt286.h"
+#else
 #include "../codecs/rt5640.h"
+#endif
 
 #define SST_HSWULT_PCI_ID	0x9c36
 
@@ -161,14 +166,14 @@ static const struct snd_soc_dapm_widget hsw_widgets[] = {
 };
 
 static const struct snd_soc_dapm_route hsw_map[] = {
-#if 1
-	{"Headphones", NULL, "HPOR"},
-	{"Headphones", NULL, "HPOL"},
-	{"IN2P", NULL, "Mic"},
-#else
+#if defined CONFIG_HSW_ULT_RT286
 	{"Headphones", NULL, "SPOR"},
 	{"Headphones", NULL, "SPOL"},
 	{"MIC1", NULL, "Mic"},
+#else
+	{"Headphones", NULL, "HPOR"},
+	{"Headphones", NULL, "HPOL"},
+	{"IN2P", NULL, "Mic"},
 #endif
 	/* CODEC BE connections */
 	{"SSP0 CODEC IN", NULL, "AIF1 Capture"},
@@ -218,15 +223,20 @@ static int haswell_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
+#if defined CONFIG_HSW_ULT_RT286
+	ret = snd_soc_dai_set_sysclk(codec_dai, RT286_SCLK_S_MCLK, 24000000,
+		SND_SOC_CLOCK_IN);
+#else
 	ret = snd_soc_dai_set_sysclk(codec_dai, RT5640_SCLK_S_MCLK, 12288000,
 		SND_SOC_CLOCK_IN);
+#endif
 	if (ret < 0) {
 		dev_err(rtd->dev, "can't set codec sysclk configuration\n");
 		return ret;
 	}
-
-	snd_soc_update_bits( rtd->codec, 0x83, 0xffff, 0x8000);
-
+#if defined CONFIG_HSW_ULT_RT5640
+	snd_soc_update_bits(rtd->codec, 0x83, 0xffff, 0x8000);
+#endif
 	return ret;
 }
 
@@ -358,12 +368,12 @@ static struct snd_soc_dai_link haswell_dais[] = {
 		.cpu_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "snd-soc-dummy",
 		.no_pcm = 1,
-#if 1
-		.codec_name = "rt5640.0-001c",
-		.codec_dai_name = "rt5640-aif1",
-#else
+#if defined CONFIG_HSW_ULT_RT286
 		.codec_name = "rt286.0-001c",
 		.codec_dai_name = "rt286-aif1",
+#else
+		.codec_name = "rt5640.0-001c",
+		.codec_dai_name = "rt5640-aif1",
 #endif
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
