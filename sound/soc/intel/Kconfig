@@ -14,6 +14,8 @@ config SND_SOC_INTEL_HSWULT_MACH
 	select SND_SOC_INTEL_HSWULT
 	select SND_COMPRESS_OFFLOAD
 	select SND_DSP_MODULE
+	select SND_SOC_RT286
+	select SND_SOC_RT5640
 	help
           This adds support for ASoC driver for Intel(R) Haswell
           Ultrabook platform  used as alsa device in audio substem
@@ -30,10 +32,8 @@ choice
 
 config HSW_ULT_RT5640
 	bool "Realtek RT5640"
-	select SND_SOC_RT5640
 
 config HSW_ULT_RT286
 	bool "Realtek ALC286S"
-	select SND_SOC_RT286
 
 endchoice
