@@ -149,8 +149,9 @@ struct sst_dsp *sst_dsp_new(struct device *dev,
 void sst_dsp_free(struct sst_dsp *sst);
 
 /* Firmware loading */
-int sst_fw_load(struct sst_dsp *dsp, const char *fw, int use_dma);
-void sst_fw_free(struct sst_dsp *dsp);
+//int sst_fw_load(struct sst_dsp *dsp, const char *fw, int use_dma);
+//void sst_fw_free(struct sst_dsp *dsp);
+//int sst_fw_copy(struct sst_dsp *dsp, void *dest, void *src, int bytes);
 
 /* SHIM Read / Write */
 void sst_dsp_shim_write(struct sst_dsp *sst, u32 offset, u32 value);
