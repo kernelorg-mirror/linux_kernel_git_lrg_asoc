@@ -34,9 +34,11 @@
 #include <linux/list.h>
 #include <linux/platform_device.h>
 #include <linux/kthread.h>
+#include <linux/firmware.h>
 
 #include "sst_hsw_ipc.h"
 #include "sst_dsp.h"
+#include "sst_dsp_priv.h"
 
 /* Global Message - Generic */
 #define IPC_GLB_TYPE_SHIFT	24
@@ -88,12 +90,13 @@
 /* Global Message - Types and Replies */
 enum ipc_glb_type {
 	IPC_GLB_GET_FW_VERSION = 0,		/**< Retrieves firmware version */
+	IPC_GLB_PERFORMANCE_MONITOR = 1, /**< Performance monitoring actions */
 	IPC_GLB_ALLOCATE_STREAM = 3,		/**< Request to allocate new stream */
 	IPC_GLB_FREE_STREAM = 4,			/**< Request to free stream */
 	IPC_GLB_GET_FW_CAPABILITIES = 5,		/**< Retrieves firmware capabilities */
 	IPC_GLB_STREAM_MESSAGE = 6,		/**< Message directed to stream or its stages */
 	/** Request to store firmware context during D0->D3 transition */
-	IPC_GLB_SAVE_CONTEXT = 7,
+	IPC_GLB_REQUEST_DUMP = 7,
 	/** Request to restore firmware context during D3->D0 transition */
 	IPC_GLB_RESTORE_CONTEXT = 8,
 	IPC_GLB_GET_DEVICE_FORMATS = 9,		/**< TODO: Add description */
@@ -102,7 +105,8 @@ enum ipc_glb_type {
 	IPC_GLB_ENTER_DX_STATE = 12,
 	IPC_GLB_GET_MIXER_STREAM_INFO = 13,	/** < Request mixer stream params */
 	IPC_GLB_DEBUG_LOG_MESSAGE = 14,		/* Message to or from the debug logger. */
-	IPC_GLB_MAX_IPC_MESSAGE_TYPE = 15,	/**< Maximum message number */
+	IPC_GLB_REQUEST_TRANSFER = 16, /** < Request Transfer for host */
+	IPC_GLB_MAX_IPC_MESSAGE_TYPE = 17,	/**< Maximum message number */
 };
 
 enum ipc_glb_reply {
@@ -134,6 +138,11 @@ enum ipc_stg_operation {
 	IPC_STG_GET_VOLUME = 0,
 	IPC_STG_SET_VOLUME,
 	IPC_STG_SET_WRITE_POSITION,
+	IPC_STG_SET_FX_ENABLE,
+	IPC_STG_SET_FX_DISABLE,
+	IPC_STG_SET_FX_GET_PARAM,
+	IPC_STG_SET_FX_SET_PARAM,
+	IPC_STG_SET_FX_GET_INFO,
 	IPC_STG_MUTE_LOOPBACK,
 	IPC_STG_MAX_MESSAGE
 };
@@ -157,7 +166,7 @@ enum ipc_debug_operation {
 	IPC_DEBUG_ENABLE_LOG = 0,
 	IPC_DEBUG_DISABLE_LOG = 1,
 	IPC_DEBUG_REQUEST_LOG_DUMP = 2,
-	IPC_DEBIG_NOTIFY_LOG_DUMP = 3,
+	IPC_DEBUG_NOTIFY_LOG_DUMP = 3,
 	IPC_DEBUG_MAX_DEBUG_LOG
 };
 
@@ -167,6 +176,8 @@ struct sst_hsw_ipc_fw_ready {
 	uint32_t outbox_offset;
 	uint32_t inbox_size;
 	uint32_t outbox_size;
+	uint32_t fw_info_size;
+	uint8_t fw_info[1];
 } __attribute__((packed));
 
 struct ipc_message {
@@ -796,7 +807,7 @@ static int hsw_process_notification(struct sst_hsw *hsw)
 	case IPC_GLB_ALLOCATE_STREAM:
 	case IPC_GLB_FREE_STREAM:
 	case IPC_GLB_GET_FW_CAPABILITIES:
-	case IPC_GLB_SAVE_CONTEXT:
+	case IPC_GLB_REQUEST_DUMP:
 	case IPC_GLB_GET_DEVICE_FORMATS:
 	case IPC_GLB_SET_DEVICE_FORMATS:
 	case IPC_GLB_ENTER_DX_STATE:
@@ -1540,6 +1551,8 @@ struct sst_hsw *sst_hsw_dsp_init(struct device *dev,
 {
 	struct sst_hsw_ipc_fw_version version;
 	struct sst_hsw *hsw;
+	struct sst_fw *hsw_sst_fw;
+	const struct firmware *fw;
 	int err;
 
 	dev_dbg(dev, "initialising Hawell DSP IPC\n");
@@ -1580,9 +1593,18 @@ struct sst_hsw *sst_hsw_dsp_init(struct device *dev,
 		goto list_err;
 
 	/* load DSP FW */
-	err = sst_fw_load(hsw->dsp, "IntcADSP.bin", 0);
+	err = request_firmware(&fw, "IntcSST1.bin", dev);
 	if (err < 0) {
-		dev_err(hsw->dev, "error: failed to load firmware\n");
+		dev_err(dev, "request fw failed %d\n", err);
+		goto fw_err;
+	}
+
+	/* keep the DSP in reset state for base FW loading */
+	sst_dsp_reset(hsw->dsp);
+
+	hsw_sst_fw = sst_fw_new(hsw->dsp, fw, NULL);
+	if (hsw_sst_fw  == NULL) {
+		dev_err(dev, "error: failed to load firmware\n");
 		goto fw_err;
 	}
 
@@ -1615,7 +1637,7 @@ struct sst_hsw *sst_hsw_dsp_init(struct device *dev,
 
 boot_err:
 	sst_dsp_reset(hsw->dsp);
-	sst_fw_free(hsw->dsp);
+	//sst_fw_free(hsw->dsp);
 fw_err:
 	sst_dsp_free(hsw->dsp);
 list_err:
@@ -1627,7 +1649,7 @@ EXPORT_SYMBOL(sst_hsw_dsp_init);
 void sst_hsw_dsp_free(struct sst_hsw *hsw)
 {
 	sst_dsp_reset(hsw->dsp);
-	sst_fw_free(hsw->dsp);
+	//sst_fw_free(hsw->dsp);
 	sst_dsp_free(hsw->dsp);
 	kfree(hsw);
 }

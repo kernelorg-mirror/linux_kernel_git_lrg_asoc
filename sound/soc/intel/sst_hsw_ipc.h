@@ -84,7 +84,16 @@ enum sst_hsw_dx_state {
 	SST_HSW_DX_STATE_D0     = 0,
 	SST_HSW_DX_STATE_D1     = 1,
 	SST_HSW_DX_STATE_D3     = 3,
-	SST_HSW_DX_STATE_MAX  = 3,
+	SST_HSW_DX_STATE_MAX	= 3,
+};
+
+/* Audio stream stage IDs */
+enum sst_hsw_fx_stage_id {
+	SST_HSW_STAGE_ID_WAVES = 0,
+	SST_HSW_STAGE_ID_DTS   = 1,
+	SST_HSW_STAGE_ID_DOLBY = 2,
+	SST_HSW_STAGE_ID_BOOST = 3,
+	SST_HSW_STAGE_ID_MAX_FX_ID
 };
 
 /* DX State Type */
@@ -165,12 +174,180 @@ struct sst_hsw;
 struct sst_hsw_stream;
 struct sst_pdata;
 
+/**
+ * Upfront defined maximum message size that is
+ * expected by the in/out communication pipes in FW.
+ */
+#define SST_HSW_IPC_MAX_PAYLOAD_SIZE	400
+#define SST_HSW_MAX_INFO_SIZE		64
+#define SST_HSW_BUILD_HASH_LENGTH	40
+
+struct sst_hsw_module_info {
+    uint8_t module_name[SST_HSW_MAX_INFO_SIZE];
+    uint8_t module_version[SST_HSW_MAX_INFO_SIZE];
+} __attribute__((packed));
+
+
+struct sst_hsw_transfer_info {
+    uint32_t destination;       //!< destination address
+    uint32_t reverse:1;         //!< if 1 data flows from destination
+    uint32_t size:31;           //!< transfer size in bytes. Negative value means reverse direction
+    uint16_t first_page_offset; //!< offset to data in the first page.
+    uint8_t  packed_pages[1];   //!< compressed array of page numbers. Each page occupies 24b.
+} __attribute__((packed));
+
+#if 0
+/**
+* Calculates variable size of TransferInfo payload.
+* pages_count is ceil((size+offset)/PAGE_SIZE)
+* size of packed_pages is ceil(pages_count * 2.5), as each page number occupies 20 bits (2.5 bytes)
+*/
+inline size_t PayloadSize(const TransferInfo* payload) {
+    uint16_t result=static_cast<uint16_t>((payload->size + payload->first_page_offset + 4095) >> 12); //pages_count
+    result = (result * 5 + 1) >> 1; //sizeof(packed_pages)
+    result += sizeof(*payload) - sizeof(payload->packed_pages); //add size of header
+    return result;
+}
+#endif
+
+struct sst_hsw_transfer_list {
+    uint32_t transfers_count;
+    struct sst_hsw_transfer_info transfers[1];
+} __attribute__((packed));
+
+#if 0
+/**
+* Calculates variable size of TransferList payload.
+* @return size Computed size in bytes or 0 if payload is corrupted)
+*/
+inline size_t PayloadSize(const TransferList* payload) {
+    size_t size = sizeof(*payload) - sizeof(payload->transfers);
+
+    for(uint32_t idx=0; idx<payload->transfers_count; ++idx)
+    {
+        const TransferInfo *current = reinterpret_cast<const TransferInfo*>(reinterpret_cast<const uint8_t*>(payload)+size);
+        if ((size += PayloadSize(current)) > IPC_MAX_PAYLOAD_SIZE)
+        {
+            return 0;
+        }
+    }
+    return size;
+}
+#endif
+
+/**
+ * TODO: add pointer & data struct for sensory net & gramm memory regions.
+ */
+struct sst_hsw_transfer_parameter
+{
+    uint32_t parameter_id;
+    uint32_t data_size;
+    union {
+        uint8_t data[1];
+        struct sst_hsw_transfer_list transfer_list; // SGL chain of physical 32bit addresses
+    };
+} __attribute__((packed));
+
+
+#if 0
+/**
+* Calculates variable size of Parameter payload.
+*/
+inline size_t PayloadSize(const Parameter* payload) {
+    return sizeof(*payload) + payload->data_size - 1;
+}
+
+#endif
+
+#define SST_HSW_IPC_MAX_PARAMETER_SIZE	\
+	(IPC_MAX_PAYLOAD_SIZE - sizeof(struct sst_hsw_transfer_parameter) - 1)
+
+enum sst_hsw_module_id {
+	SST_HSW_MODULE_BASE_FW = 0x0,
+	SST_HSW_MODULE_MP3     = 0x1,
+	SST_HSW_MODULE_AAC_5_1 = 0x2,
+	SST_HSW_MODULE_AAC_2_0 = 0x3,
+	SST_HSW_MODULE_SRC     = 0x4,
+	//MIN_MODULE_ID_AVAILABLE_THROUGH_API= 0x4,	// minimal module ID (including) that status can be set by FwModuleManager API
+	SST_HSW_MODULE_WAVES   = 0x5,
+	SST_HSW_MODULE_DOLBY   = 0x6,
+	SST_HSW_MODULE_BOOST   = 0x7,
+	SST_HSW_MODULE_LPAL    = 0x8,
+	SST_HSW_MODULE_DTS     = 0x9,
+	//MAX_MODULE_ID_AVAILABLE_THROUGH_API= 0x9,	// maximal module ID (including) that status can be set by FwModuleManager API
+	SST_HSW_MODULE_PCM_CAPTURE = 0xA,
+	SST_HSW_MODULE_PCM_SYSTEM = 0xB,
+	SST_HSW_MODULE_PCM_REFERENCE = 0xC,
+	SST_HSW_MODULE_PCM = 0xD,
+	SST_HSW_MODULE_BLUETOOTH_RENDER_MODULE = 0xE,
+	SST_HSW_MODULE_BLUETOOTH_CAPTURE_MODULE = 0xF,
+	MAX_MODULE_ID
+};
+
+struct sst_hsw_module_entry {
+	enum sst_hsw_module_id module_id;
+	uint32_t entry_point;
+} __attribute__((packed));
+
+struct sst_hsw_module_map {
+	uint8_t module_entries_count;
+        // list of all loaded modules necesary for stream
+	struct sst_hsw_module_entry module_entries[1];
+} __attribute__((packed));
+
+#if 0
+    /**
+    * Calculates variable size of ModuleMap payload.
+    */
+    inline size_t PayloadSize(const ModuleMap* payload) {
+        return sizeof(*payload) + (payload->module_entries_count - 1)*sizeof(ModuleEntry);
+    }
+#endif
+
+struct sst_hsw_memory_info {
+	uint32_t offset;
+	uint32_t size;
+} __attribute__((packed));
+
+    /*
+     * GetFxState Message Class
+     */
+struct sst_hsw_fx_enable {
+	struct sst_hsw_module_map module_map;
+	struct sst_hsw_memory_info persistent_mem;
+} __attribute__((packed));
+
+    /*
+     * GetFxParam Message Class
+     */
+struct sst_hsw_get_fx_param {
+	uint32_t parameter_id;
+	uint32_t param_size;
+} __attribute__((packed));
+
+enum sst_hsw_performance_action {
+	SST_HSW_PERF_START = 0,
+	SST_HSW_PERF_STOP = 1,
+} __attribute__((packed));
+
+struct sst_hsw_perf_action {
+	uint32_t action;
+} __attribute__((packed));
+
+struct sst_hsw_perf_data {
+	uint64_t timestamp;
+	uint64_t cycles;
+	uint64_t datatime;
+} __attribute__((packed));
+
 /* FW version */
 struct sst_hsw_ipc_fw_version {
 	uint8_t build;
 	uint8_t minor;
 	uint8_t major;
 	uint8_t type;
+	uint8_t fw_build_hash[SST_HSW_BUILD_HASH_LENGTH];
+	uint32_t fw_log_providers_hash;
 } __attribute__((packed));
 
 /* Debug Dump Log Reply */
@@ -250,6 +427,10 @@ struct sst_hsw_ipc_stream_alloc_req {
 	uint8_t reserved;
 	struct sst_hsw_audio_data_format_ipc format;
 	struct sst_hsw_ipc_stream_ring ringinfo;
+	struct sst_hsw_module_map module_info;
+	struct sst_hsw_memory_info persistent_mem;
+	struct sst_hsw_memory_info scratch_mem;
+	uint32_t number_of_notifications;
 } __attribute__((packed));
 
 /* Stream Allocate Reply */
@@ -291,43 +472,43 @@ struct sst_hsw_ipc_dx_reply {
 struct sst_hsw_ipc_fw_version;
 
 /* SST Init & Free */
-struct sst_hsw *sst_hsw_new(struct device *dev, const u8 *fw, size_t fw_length,
-	u32 fw_offset);
+struct sst_hsw *sst_hsw_new(struct device *dev, const uint8_t *fw, size_t fw_length,
+	uint32_t fw_offset);
 void sst_hsw_free(struct sst_hsw *hsw);
 int sst_hsw_fw_get_version(struct sst_hsw *hsw,
 	struct sst_hsw_ipc_fw_version *version);
-u32 create_channel_map(enum sst_hsw_channel_config config);
+uint32_t create_channel_map(enum sst_hsw_channel_config config);
 
 /* Stream Mixer Controls - */
 int sst_hsw_stream_mute(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 stage_id, u32 channel);
+	uint32_t stage_id, uint32_t channel);
 int sst_hsw_stream_unmute(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 stage_id, u32 channel);
+	uint32_t stage_id, uint32_t channel);
 
 int sst_hsw_stream_set_volume(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 stage_id, u32 channel, u32 volume);
+	uint32_t stage_id, uint32_t channel, uint32_t volume);
 int sst_hsw_stream_get_volume(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 stage_id, u32 channel, u32 *volume);
+	uint32_t stage_id, uint32_t channel, uint32_t *volume);
 
 int sst_hsw_stream_set_volume_curve(struct sst_hsw *hsw,
-	struct sst_hsw_stream *stream, u64 curve_duration,
+	struct sst_hsw_stream *stream, uint64_t curve_duration,
 	enum sst_hsw_volume_curve curve);
 
 /* Global Mixer Controls - */
-int sst_hsw_mixer_mute(struct sst_hsw *hsw, u32 stage_id, u32 channel);
-int sst_hsw_mixer_unmute(struct sst_hsw *hsw, u32 stage_id, u32 channel);
+int sst_hsw_mixer_mute(struct sst_hsw *hsw, uint32_t stage_id, uint32_t channel);
+int sst_hsw_mixer_unmute(struct sst_hsw *hsw, uint32_t stage_id, uint32_t channel);
 
-int sst_hsw_mixer_set_volume(struct sst_hsw *hsw, u32 stage_id, u32 channel,
-	u32 volume);
-int sst_hsw_mixer_get_volume(struct sst_hsw *hsw, u32 stage_id, u32 channel,
-	u32 *volume);
+int sst_hsw_mixer_set_volume(struct sst_hsw *hsw, uint32_t stage_id, uint32_t channel,
+	uint32_t volume);
+int sst_hsw_mixer_get_volume(struct sst_hsw *hsw, uint32_t stage_id, uint32_t channel,
+	uint32_t *volume);
 
 int sst_hsw_mixer_set_volume_curve(struct sst_hsw *hsw,
-	u64 curve_duration, enum sst_hsw_volume_curve curve);
+	uint64_t curve_duration, enum sst_hsw_volume_curve curve);
 
 /* Stream API */
 struct sst_hsw_stream *sst_hsw_stream_new(struct sst_hsw *hsw, int id,
-	u32 (*get_write_position)(struct sst_hsw_stream *stream, void *data),
+	uint32_t (*get_write_position)(struct sst_hsw_stream *stream, void *data),
 	void *data);
 
 int sst_hsw_stream_free(struct sst_hsw *hsw, struct sst_hsw_stream *stream);
@@ -339,21 +520,21 @@ int sst_hsw_stream_format(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum sst_hsw_stream_format format_id);
 
 int sst_hsw_stream_buffer(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 ring_pt_address, u32 num_pages,
-	u32 ring_size, u32 ring_offset, u32 ring_first_pfn);
+	uint32_t ring_pt_address, uint32_t num_pages,
+	uint32_t ring_size, uint32_t ring_offset, uint32_t ring_first_pfn);
 
 int sst_hsw_stream_commit(struct sst_hsw *hsw, struct sst_hsw_stream *stream);
 
 int sst_hsw_stream_set_valid(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 bits);
+	uint32_t bits);
 int sst_hsw_stream_set_rate(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum sample_frequency rate);
 int sst_hsw_stream_set_bits(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum bitdepth bits);
 int sst_hsw_stream_set_channels(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u8 channels);
+	uint8_t channels);
 int sst_hsw_stream_set_map_config(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 map, enum sst_hsw_channel_config config);
+	uint32_t map, enum sst_hsw_channel_config config);
 int sst_hsw_stream_set_style(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum sst_hsw_interleaving style);
 
@@ -364,23 +545,23 @@ int sst_hsw_stream_reset(struct sst_hsw *hsw, struct sst_hsw_stream *stream);
 
 /* Stream pointer positions */
 int sst_hsw_stream_get_read_pos(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 *position);
+	uint32_t *position);
 int sst_hsw_stream_get_write_pos(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 *position);
+	uint32_t *position);
 int sst_hsw_stream_set_write_position(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
-	u32 stage_id, u32 position);
+	uint32_t stage_id, uint32_t position);
 int sst_hsw_get_dsp_position(struct sst_hsw *hsw, struct sst_hsw_stream *stream);
 
 /* HW port config */
 int sst_hsw_device_set_config(struct sst_hsw *hsw,
 	enum sst_hsw_device_id dev, enum sst_hsw_device_mclk mclk,
-	enum sst_hsw_device_mode mode, u32 clock_divider);
+	enum sst_hsw_device_mode mode, uint32_t clock_divider);
 
 /* DX Config */
 int sst_hsw_dx_set_state(struct sst_hsw *hsw,
 	enum sst_hsw_dx_state state, struct sst_hsw_ipc_dx_reply *dx);
-int sst_hsw_dx_get_state(struct sst_hsw *hsw, u32 item,
-	u32 *offset, u32 *size, u32 *source);
+int sst_hsw_dx_get_state(struct sst_hsw *hsw, uint32_t item,
+	uint32_t *offset, uint32_t *size, uint32_t *source);
 
 /* init */
 struct sst_hsw *sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata);
