@@ -167,16 +167,16 @@ static int hsw_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
  *
  * This function is called to parse and download the FW image
  */
-static int hsw_parse_fw_image(struct sst_dsp *dsp, const struct firmware *fw)
+static int hsw_parse_fw_image(struct sst_fw *sst_fw, const struct firmware *fw)
 {
 	struct fw_header *header;
 	struct fw_module_header *module;
-	struct sst_fw *sst_fw;
+	struct sst_dsp *dsp = sst_fw->dsp;
 	int ret, count;
 
-	sst_fw = sst_fw_new(dsp, fw, NULL);
-	if (sst_fw == NULL)
-		return -ENOMEM;
+	//sst_fw = sst_fw_new(dsp, fw, NULL);
+	///if (sst_fw == NULL)
+	//	return -ENOMEM;
 
 	/* Read the header information from the data pointer */
 	header = (struct fw_header *)fw->data;
@@ -382,12 +382,12 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 	/* register the DSP memory blocks - ideally we should get this from ACPI */
 	for (i = 0; i < ARRAY_SIZE(region); i++) {
 		offset = region[i].start;
-		size = (region[i].end - region[i].end) / region[i].blocks;
+		size = (region[i].end - region[i].start) / region[i].blocks;
 
 		for (j = 0; j < region[i].blocks; j++) {
-			offset += size;
 			sst_mem_block_register(&sst->bmap, offset, size,
 				region[i].type, &sst_hsw_ops, sst);
+			offset += size;
 		}
 	}
 
