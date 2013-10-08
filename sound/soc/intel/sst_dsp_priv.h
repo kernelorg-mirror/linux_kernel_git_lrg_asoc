@@ -26,6 +26,7 @@
 #include <linux/firmware.h>
 
 struct sst_mem_block;
+struct sst_fw;
 
 struct sst_ops {
 	/* DSP core boot / reset */
@@ -54,7 +55,7 @@ struct sst_ops {
 	void (*free)(struct sst_dsp *sst);
 
 	/* FW module parser/loader */
-	int (*parse_fw)(struct sst_dsp *dsp, const struct firmware *fw);
+	int (*parse_fw)(struct sst_fw *sst_fw, const struct firmware *fw);
 };
 
 struct sst_addr {
@@ -152,13 +153,12 @@ struct sst_mem_block {
 	struct sst_module *module;
 	struct list_head module_tlist;	/* Module list of text blocks */
 	struct list_head module_dlist;	/* Module list of data blocks */
-	struct list_head map_list;	/* Block Map list of used/free blocks */
-	struct list_head list; 		/* DSP list of blocks */
+	//struct list_head map_list;	/* Block Map list of used/free blocks */
+	struct list_head list; 		/* Map list of free/used blocks */
 };
 
 /* SST block memory map */
 struct sst_bmap {
-	struct sst_dsp *dsp;
 
 	/* IRAM */
 	u32 iram_base;

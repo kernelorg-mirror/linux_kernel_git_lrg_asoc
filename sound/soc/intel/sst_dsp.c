@@ -417,9 +417,14 @@ struct sst_dsp *sst_dsp_new(struct device *dev,
 		return NULL;
 
 	spin_lock_init(&sst->spinlock);
+	mutex_init(&sst->mutex);
 	sst->dev = dev;
 	sst->thread_context = sst_dev->thread_context;
 	sst->sst_dev = sst_dev;
+	INIT_LIST_HEAD(&sst->bmap.used_block_list);
+	INIT_LIST_HEAD(&sst->bmap.free_block_list);
+	INIT_LIST_HEAD(&sst->module_list);
+	INIT_LIST_HEAD(&sst->fw_list);
 
 	/* Init SST hardware and set core specific ops */
 	switch (sst_dev->id) {

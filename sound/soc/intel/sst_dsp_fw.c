@@ -605,7 +605,7 @@ struct sst_fw *sst_fw_new(struct sst_dsp *dsp,
 	sst_fw->fw = fw;
 	sst_fw->private = private;
 
-	err = dsp->ops->parse_fw(dsp, fw);
+	err = dsp->ops->parse_fw(sst_fw, fw);
 	if (err < 0) {
 		dev_err(dsp->dev, "parse fw failed %d\n", err);
 		kfree(sst_fw);
@@ -624,6 +624,7 @@ void sst_fw_free(struct sst_fw *sst_fw)
 {
 	struct sst_dsp *dsp = sst_fw->dsp;
 
+return;
 	mutex_lock(&dsp->mutex);
 	list_del(&sst_fw->list); 
 	mutex_unlock(&dsp->mutex);
@@ -694,6 +695,7 @@ struct sst_module *sst_module_new(struct sst_fw *sst_fw,
 	sst_module->text_offset = template->text_offset;
 	sst_module->data_offset = template->data_offset;
 	sst_module->private = private;
+
 	INIT_LIST_HEAD(&sst_module->tblock_list);
 	INIT_LIST_HEAD(&sst_module->dblock_list);
 
@@ -718,22 +720,22 @@ void sst_module_free(struct sst_module *sst_module)
 EXPORT_SYMBOL_GPL(sst_module_free);
 
 static int get_contiguous_tblocks(struct sst_mem_block *parent, 
-	struct sst_bmap *bmap, struct sst_module *module, int size)
+	struct sst_bmap *bmap, struct sst_module *module, u32 next_offset, 
+	int size)
 {
 	struct sst_mem_block *block, *tmp;
-	u32 next_offset = parent->offset + parent->size;
 	int ret;
 
 	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 
 		/* ignore blocks before parent*/
 		if (block->offset < parent->offset)
 			continue;
-
+#warning fix
 		/* ignore data blocks */
-		if (block->type == SST_MEM_DRAM)
-			continue;
+		//if (block->type == SST_MEM_DRAM)
+		//	continue;
 
 		/* is block next after parent ? */
 		if (next_offset == block->offset) {
@@ -741,14 +743,15 @@ static int get_contiguous_tblocks(struct sst_mem_block *parent,
 			if (size > module->text_size) {
 				/* need more blocks */
 				ret = get_contiguous_tblocks(block, bmap,
-					module, size - module->text_size);
+					module, block->offset + block->size,
+					size - module->text_size);
 				if (ret < 0)
 					return ret;
 			}
 
 			/* add block */
 			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		}	
 	}
@@ -761,7 +764,7 @@ static int module_get_tblocks(struct sst_module *module, struct sst_bmap *bmap)
 	int ret;
 
 	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 
 		/* ignore data blocks */
 		if (block->type == SST_MEM_DRAM)
@@ -770,18 +773,19 @@ static int module_get_tblocks(struct sst_module *module, struct sst_bmap *bmap)
 		if (block->size >= module->text_size) {
 			/* return block if size fits */
 			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		} else	{
 			/* need more blocks */
 			ret = get_contiguous_tblocks(block, bmap,
-				module, module->text_size - block->size);
+				module, block->offset + block->size,
+				module->text_size);
 			if (ret < 0)
 				return ret;
 
 			/* add block */
 			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		}
 	}
@@ -791,18 +795,20 @@ static int module_get_tblocks(struct sst_module *module, struct sst_bmap *bmap)
 static int module_get_fixed_tblocks(struct sst_module *module,
 	struct sst_bmap *bmap)
 {
+
 	return 0;
 }
 
 static int module_copy_text(struct sst_module *module, struct sst_bmap *bmap)
 {
+
 	return 0;
 }
 
 static int module_insert_text(struct sst_module *module, struct sst_bmap *bmap)
 {
 	struct sst_mem_block *block;
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int ret;
 
 	/* find space for text */
@@ -839,7 +845,7 @@ err:
 static void module_remove_text(struct sst_module *module, struct sst_bmap *bmap)
 {
 	struct sst_mem_block *block, *tmp;
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int err;
 
 	/* disable each block  */
@@ -855,7 +861,7 @@ static void module_remove_text(struct sst_module *module, struct sst_bmap *bmap)
 	/* mark each block as free */
 	list_for_each_entry_safe(block, tmp, &module->tblock_list, module_tlist) {
 		list_del(&block->module_tlist);
-		list_move(&block->map_list, &bmap->free_block_list);
+		list_move(&block->list, &bmap->free_block_list);
 	}
 }
 
@@ -867,7 +873,7 @@ static int get_contiguous_dblocks(struct sst_mem_block *parent,
 	int ret;
 
 	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 
 		/* ignore blocks before parent*/
 		if (block->offset < parent->offset)
@@ -882,7 +888,7 @@ static int get_contiguous_dblocks(struct sst_mem_block *parent,
 
 			if (size > module->data_size) {
 				/* need more blocks */
-				ret = get_contiguous_tblocks(block, bmap,
+				ret = get_contiguous_dblocks(block, bmap,
 					module, size - module->data_size);
 				if (ret < 0)
 					return ret;
@@ -890,7 +896,7 @@ static int get_contiguous_dblocks(struct sst_mem_block *parent,
 
 			/* add block */
 			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		}	
 	}
@@ -904,7 +910,7 @@ static int module_get_dblocks(struct sst_module *module, struct sst_bmap *bmap)
 	int ret;
 
 	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 
 		/* ignore text blocks */
 		if (block->type == SST_MEM_IRAM)
@@ -913,7 +919,7 @@ static int module_get_dblocks(struct sst_module *module, struct sst_bmap *bmap)
 		if (block->size >= module->data_size) {
 			/* return block if size fits */
 			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		} else	{
 			/* need more blocks */
@@ -924,7 +930,7 @@ static int module_get_dblocks(struct sst_module *module, struct sst_bmap *bmap)
 
 			/* add block */
 			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		}
 	}
@@ -937,9 +943,10 @@ static int module_get_fixed_dblocks(struct sst_module *module,
 {
 	struct sst_mem_block *block, *tmp;
 	int ret;
+
 #warning fix
 	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 
 		/* ignore text blocks */
 		if (block->type == SST_MEM_IRAM)
@@ -948,7 +955,7 @@ static int module_get_fixed_dblocks(struct sst_module *module,
 		if (block->size >= module->data_size) {
 			/* return block if size fits */
 			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		} else	{
 			/* need more blocks */
@@ -959,7 +966,7 @@ static int module_get_fixed_dblocks(struct sst_module *module,
 
 			/* add block */
 			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->map_list, &bmap->used_block_list);
+			list_move(&block->list, &bmap->used_block_list);
 			return 0;
 		}
 	}
@@ -968,13 +975,14 @@ static int module_get_fixed_dblocks(struct sst_module *module,
 
 static int module_copy_data(struct sst_module *module, struct sst_bmap *bmap)
 {
+
 	return 0;
 }
 
 static int module_insert_data(struct sst_module *module, struct sst_bmap *bmap)
 {
 	struct sst_mem_block *block;
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int ret;
 
 	/* find space for data */
@@ -1011,7 +1019,7 @@ err:
 static void module_remove_data(struct sst_module *module, struct sst_bmap *bmap)
 {
 	struct sst_mem_block *block, *tmp;
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int err;
 
 	/* disable each block  */
@@ -1027,13 +1035,13 @@ static void module_remove_data(struct sst_module *module, struct sst_bmap *bmap)
 	/* mark each block as free */
 	list_for_each_entry_safe(block, tmp, &module->dblock_list, module_dlist) {
 		list_del(&block->module_dlist);
-		list_move(&block->map_list, &bmap->free_block_list);
+		list_move(&block->list, &bmap->free_block_list);
 	}
 }
 
 int sst_module_insert(struct sst_module *module, struct sst_bmap *bmap)
 {
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int ret;
 
 	mutex_lock(&dsp->mutex);
@@ -1092,29 +1100,59 @@ static int module_get_section_block(struct sst_module *module,
 	struct sst_bmap *bmap, u32 offset, u32 size)
 {
 	struct sst_mem_block *block, *tmp;
-	u32 end = offset + size;
+	u32 end = offset + size, block_end;
+	int err;
 
 	/* are blocks already atteched to the module */
 	list_for_each_entry_safe(block, tmp, &module->tblock_list, module_tlist) {
+		block_end = block->offset + block->size;
 
 		/* find block that holds section */
-		if (block->offset < offset || block->offset + block->size > end)
-			continue;
+		if (offset >= block->offset && end < block_end)
+			return 0;
 
-		return 0;	
+		/* does block span more than 1 section */
+		if (offset >= block->offset && offset < block_end) {
+
+			err = get_contiguous_tblocks(block, bmap, module,
+				block->offset + block->size,
+				module->text_size);
+			if (err < 0)
+				return -ENOMEM;
+
+			return 0;
+
+		}
 	}
 
 	/* find first free blocks that can hold section in free list*/
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
+		block_end = block->offset + block->size;
 
 		/* find block that holds section */
-		if (block->offset < offset || block->offset + block->size > end)
-			continue;
+		if (offset >= block->offset && end < block_end) {
 
-		/* add block */
-		list_add(&block->module_tlist, &module->tblock_list);
-		list_move(&block->map_list, &bmap->used_block_list);
-		return 0;
+			/* add block */
+			list_add(&block->module_tlist, &module->tblock_list);
+			list_move(&block->list, &bmap->used_block_list);
+			return 0;
+		}
+
+		/* does block span more than 1 section */
+		if (offset >= block->offset && offset < block_end) {
+
+			err = get_contiguous_tblocks(block, bmap, module,
+				block->offset + block->size,
+				module->text_size);
+			if (err < 0)
+				return -ENOMEM;
+
+			/* add block */
+			list_add(&block->module_tlist, &module->tblock_list);
+			list_move(&block->list, &bmap->used_block_list);
+			return 0;
+
+		}
 	
 	}
 
@@ -1146,7 +1184,7 @@ err:
 int sst_module_insert_section(struct sst_module *module, struct sst_bmap *bmap,
 	u32 offset, u32 size, void *data)
 {
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	int ret;
 
 	mutex_lock(&dsp->mutex);
@@ -1155,13 +1193,12 @@ int sst_module_insert_section(struct sst_module *module, struct sst_bmap *bmap,
 	ret = module_get_section_block(module, bmap, offset, size);
 	if (ret < 0) {
 		dev_err(dsp->dev, "cant't find free blocks for section\n");
+		mutex_unlock(&dsp->mutex);
 		return -ENOMEM;
 	}
 
 	/* insert module data and text */
 	ret = module_insert_section(module, bmap, offset, size, data);
-	if (ret < 0)
-		return ret;
 
 	mutex_unlock(&dsp->mutex);
 	return ret;
@@ -1172,7 +1209,7 @@ struct sst_mem_block *sst_mem_block_register(struct sst_bmap *bmap, u32 offset,
 	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
 	void *private)
 {
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	struct sst_mem_block *block;
 
 	block = kzalloc(sizeof(*block), GFP_KERNEL);
@@ -1196,18 +1233,20 @@ EXPORT_SYMBOL_GPL(sst_mem_block_register);
 
 void sst_mem_block_unregister_all(struct sst_bmap *bmap)
 {
-	struct sst_dsp *dsp = bmap->dsp;
+	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
 	struct sst_mem_block *block, *tmp;
 
+return;
 	mutex_lock(&dsp->mutex);
 
 	/* unregister used blocks */
-	list_for_each_entry_safe(block, tmp, &bmap->used_block_list, map_list) {
+	list_for_each_entry_safe(block, tmp, &bmap->used_block_list, list) {
 		list_del(&block->list);
 		kfree(block);
 	}
 	
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, map_list) {
+	/* unregister free blocks */
+	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
 		list_del(&block->list);
 		kfree(block);
 	}
