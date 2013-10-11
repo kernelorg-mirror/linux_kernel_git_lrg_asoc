@@ -36,6 +36,8 @@
 #include <sound/compress_driver.h>
 #include "sst_hsw_ipc.h"
 #include "sst_hsw_pcm.h"
+#include "sst_dsp_priv.h"
+#include "sst_dsp.h"
 
 /*
  * Dont build in the compressed support as it's not required for base FW.
@@ -321,6 +323,8 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct hsw_pcm_data *pcm_data = snd_soc_pcm_get_drvdata(rtd);
 	struct sst_hsw *hsw = pdata->hsw;
+	struct sst_module_data *module_data;
+	struct sst_dsp *dsp;
 	enum sst_hsw_stream_type stream_type;
 	enum sst_hsw_stream_path_id path_id;
 	u32 rate, bits, map, pages;
@@ -480,6 +484,31 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		dev_err(rtd->dev, "PCM: failed to set DMA buffer %d\n", ret);
 		return ret;
 	}
+
+	/* TODO: validate module parameters for allocate stream */
+
+	/* TODO: validate - persistant data */
+	dsp = sst_hsw_get_dsp(hsw);
+	module_data = sst_module_get_config(dsp, 0, SST_DATA_P);
+	if (module_data == NULL) {
+		dev_err(rtd->dev, "PCM: failed to get module P config\n");
+		return -EINVAL;
+	}
+	sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
+		SST_HSW_MODULE_BASE_FW, module_data->entry);
+
+	sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
+		module_data->offset, module_data->size);
+
+	/* TODO: validate - scratch data */
+	module_data = sst_module_get_config(dsp, 0, SST_DATA_S);
+	if (module_data == NULL) {
+		dev_err(rtd->dev, "PCM: failed to get module S config\n");
+		return -EINVAL;
+	}
+
+	sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
+		module_data->offset, module_data->size);
 
 	ret = sst_hsw_stream_commit(hsw, pcm_data->stream);
 	if (ret < 0) {
