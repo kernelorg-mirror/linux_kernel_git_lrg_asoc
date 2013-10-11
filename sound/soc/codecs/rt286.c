@@ -1523,7 +1523,7 @@ static const struct i2c_device_id rt286_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, rt286_i2c_id);
 
 static struct acpi_device_id rt286_acpi_match[] = {
-       { "INT33CA", 0 },
+	   { "INT343A", 0 },
        { },
 };
 MODULE_DEVICE_TABLE(acpi, rt286_acpi_match);
