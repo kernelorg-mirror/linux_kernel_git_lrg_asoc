@@ -33,7 +33,7 @@ struct sst_dsp;
 #define SST_MRFLD_PCI_ID  0x119A
 
 
-/* SST register map */
+/* SST Shim register map */
 #define SST_CSR			0x00
 #define SST_PISR		0x08
 #define SST_PIMR		0x10
@@ -58,7 +58,7 @@ struct sst_dsp;
 #define SST_SHIM_SIZE		0x100
 #define SST_PWMCTRL             0x1000
 
-/* SST Register bits
+/* SST Shim Register bits
  * The register/bit naming can differ between products. Some products also
  * contain extra fuctionality.
  */
@@ -111,6 +111,19 @@ struct sst_dsp;
 /* HDMC */
 #define SST_HDMC_HDDA0(x)	(x << 0)
 #define SST_HDMC_HDDA1(x)	(x << 7)
+
+
+/* SST Vendor Defined Registers and bits */
+#define SST_VDRTCTL0		0xa0
+#define SST_VDRTCTL1		0xa4
+#define SST_VDRTCTL2		0xa8
+#define SST_VDRTCTL3		0xaC
+
+/* VDRTCTL0 */
+#define SST_VDRTCL0_DSRAMPGE_SHIFT	16
+#define SST_VDRTCL0_DSRAMPGE_MASK	(0xffff << SST_VDRTCL0_DSRAMPGE_SHIFT)
+#define SST_VDRTCL0_ISRAMPGE_SHIFT	6
+#define SST_VDRTCL0_ISRAMPGE_MASK	(0x3ff << SST_VDRTCL0_ISRAMPGE_SHIFT)
 
 /*
  * SST Device.

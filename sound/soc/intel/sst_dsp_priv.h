@@ -78,6 +78,17 @@ struct sst_mailbox {
 	size_t out_size;
 };
 
+enum sst_data_type {
+	SST_DATA_P	= 0, /* peristant data (text, data) */
+	SST_DATA_S	= 1, /* scratch data (usually buffers) */
+};
+
+enum sst_mem_type {
+	SST_MEM_IRAM = 0,
+	SST_MEM_DRAM = 1,
+	SST_MEM_ANY  = 2,
+};
+
 /* SST Firmware - each FW file can support N modules */
 struct sst_fw {
 	struct sst_dsp *dsp;
@@ -88,47 +99,38 @@ struct sst_fw {
 	void *private;
 };
 
+struct sst_module_data {
+	u32 size;
+	u32 entry;
+	u32 offset;
+	enum sst_mem_type type;
+	u32 fixed:1;
+	void *data;
+};
+
 struct sst_module_template {
 	u32 id;
-	u32 text_size;
-	u32 data_size;
-	u32 text_offset;
-	u32 data_offset;
-	u32 text_fixed:1;
-	u32 data_fixed:1;
-	void *text;
-	void *data;
+	struct sst_module_data s;	/* scratch data */
+	struct sst_module_data p;	/* peristant data */
 };
 
 /* SST Module - module can span multiple blocks */
 struct sst_module {
 	struct sst_dsp *dsp;
+	struct sst_fw *sst_fw;		/* parent FW we belong too */
 
+	/* module configuration */
 	u32 id;
-	u32 text_size;
-	u32 data_size;
-	u32 text_offset;
-	u32 data_offset;
-	u32 text_fixed:1;
-	u32 data_fixed:1;
-	u32 resident:1;
+	struct sst_module_data s;	/* scratch data */
+	struct sst_module_data p;	/* peristant data */
+
+	/* runtime */
 	u32 usage_count;
-
-	struct sst_fw *sst_fw;
-	void *text;
-	void *data;
-
 	void *private;
 
-	struct list_head tblock_list;	/* Module list of text blocks */
-	struct list_head dblock_list;	/* Module list of data blocks */
+	struct list_head block_list;	/* Module list of blocks in use */
 	struct list_head list;		/* DSP list of modules */
 	struct list_head list_fw;	/* FW list of modules */
-};
-
-enum sst_mem_type {
-	SST_MEM_IRAM = 0,
-	SST_MEM_DRAM = 1,
 };
 
 struct sst_block_ops {
@@ -136,40 +138,24 @@ struct sst_block_ops {
 	int (*disable)(struct sst_mem_block *block);
 };
 
-/* SST memory Block - SST memory has multiple IRAM and DRAM regions */
+/* SST Memory Block - SST memory has multiple IRAM and DRAM blocks */
 struct sst_mem_block {
 	struct sst_dsp *dsp;
+	struct sst_module *module;
 
+	/* block config */
 	u32 offset;
 	u32 size;
-	enum sst_mem_type type;
-	u32 in_use:1;
-	u32 flags;			/* generic core does not touch this */
-	u32 power;
-	u32 clock;
+	enum sst_mem_type type;		/* block memory type IRAM/DRAM */
 	struct sst_block_ops *ops;
-	void *private;
 
-	struct sst_module *module;
-	struct list_head module_tlist;	/* Module list of text blocks */
-	struct list_head module_dlist;	/* Module list of data blocks */
-	//struct list_head map_list;	/* Block Map list of used/free blocks */
+	/* block status */
+	u32 in_use:1;
+	void *private;			/* generic core does not touch this */
+
+	/* block lists */	
+	struct list_head module_list;	/* Module list of I blocks */
 	struct list_head list; 		/* Map list of free/used blocks */
-};
-
-/* SST block memory map */
-struct sst_bmap {
-
-	/* IRAM */
-	u32 iram_base;
-	u32 iram_size;
-
-	/* DRAM */
-	u32 dram_base;
-	u32 dram_size;
-
-	struct list_head used_block_list;
-	struct list_head free_block_list;
 };
 
 /*
@@ -183,7 +169,10 @@ struct sst_dsp {
 	struct device *dev;
 	void *thread_context;
 	int irq;
-	struct sst_bmap bmap;
+
+	/* memory blocks */
+	struct list_head used_block_list;
+	struct list_head free_block_list;
 
 	/* operations */
 	struct sst_ops *ops;
@@ -204,7 +193,6 @@ struct sst_dsp {
 	/* modules */
 	struct list_head module_list;
 	struct list_head fw_list;
-	struct sst_bmap block_map;
 };
 
 /* Core specific ops for internal use only */
@@ -232,15 +220,17 @@ void sst_fw_free(struct sst_fw *sst_fw);
 struct sst_module *sst_module_new(struct sst_fw *sst_fw,
 	struct sst_module_template *template, void *private);
 void sst_module_free(struct sst_module *sst_module);
-int sst_module_insert(struct sst_module *sst_module, struct sst_bmap *bmap);
-int sst_module_remove(struct sst_module *sst_module, struct sst_bmap *bmap);
-int sst_module_insert_section(struct sst_module *module, struct sst_bmap *bmap,
-	u32 offset, u32 size, void *data);
+int sst_module_insert(struct sst_module *sst_module);
+int sst_module_remove(struct sst_module *sst_module);
+int sst_module_insert_partial(struct sst_module *module,
+	struct sst_module_data *data);
+struct sst_module_data *sst_module_get_config(struct sst_dsp *dsp, u32 id,
+	enum sst_data_type);
 
 /* Register the DSPs memory blocks - would be nice to read from ACPI */
-struct sst_mem_block *sst_mem_block_register(struct sst_bmap *bmap, u32 offset,
+struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
 	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
 	void *private);
-void sst_mem_block_unregister_all(struct sst_bmap *bmap);
+void sst_mem_block_unregister_all(struct sst_dsp *dsp);
 
 #endif

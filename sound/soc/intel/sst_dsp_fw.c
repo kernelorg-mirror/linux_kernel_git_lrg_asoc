@@ -38,11 +38,6 @@ struct sst_sg_list {
 	int list_len;
 };
 
-static void module_remove_text(struct sst_module *module,
-	struct sst_bmap *bmap);
-static void module_remove_data(struct sst_module *module,
-	struct sst_bmap *bmap);
-
 #if 0
 /**
  * sst_parse_module - Parse audio FW modules
@@ -588,6 +583,7 @@ free_dma:
 // TODO: new functions that expose public API
 #endif
 
+/* create new FW object that can hold N modules */
 struct sst_fw *sst_fw_new(struct sst_dsp *dsp, 
 	const struct firmware *fw, void *private)
 {
@@ -605,6 +601,7 @@ struct sst_fw *sst_fw_new(struct sst_dsp *dsp,
 	sst_fw->fw = fw;
 	sst_fw->private = private;
 
+	/* call core specific FW paser to load FW data into DSP */
 	err = dsp->ops->parse_fw(sst_fw, fw);
 	if (err < 0) {
 		dev_err(dsp->dev, "parse fw failed %d\n", err);
@@ -624,7 +621,6 @@ void sst_fw_free(struct sst_fw *sst_fw)
 {
 	struct sst_dsp *dsp = sst_fw->dsp;
 
-return;
 	mutex_lock(&dsp->mutex);
 	list_del(&sst_fw->list); 
 	mutex_unlock(&dsp->mutex);
@@ -633,48 +629,7 @@ return;
 }
 EXPORT_SYMBOL_GPL(sst_fw_free);
 
-#if 0
-int sst_fw_load(struct sst_dsp *dsp, const char *fw_name, int use_dma)
-{
-	const struct firmware *fw;
-	int ret;
-
-	if (!dsp->ops->fw_parse_image)
-		return -EINVAL;
-
-	dev_dbg(dsp->dev, "requesting FW %s\n", fw_name);
-	ret = request_firmware(&fw, fw_name, dsp->dev);
-	if (ret < 0) {
-		dev_err(dsp->dev, "request fw failed %d\n", ret);
-		return ret;
-	}
-
-	sst_dsp_reset(dsp);
-
-	//TODO: Check whether DMA works here
-	ret = dsp->fw_parse_image(dsp, use_dma);
-	if (ret < 0) {
-		dev_err(dsp->dev, "parse fw failed %d\n", ret);
-		release_firmware(fw);
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL(sst_fw_load);
-
-void sst_fw_free(struct sst_dsp *dsp)
-{
-	struct sst_fw *sst_fw;
-	mutex_lock(&dsp->mutex);
-
-
-	release_firmware(dsp->fw);
-
-	mutex_unlock(&dsp->mutex);
-}
-EXPORT_SYMBOL(sst_fw_free);
-#endif
-
+/* create new module object */
 struct sst_module *sst_module_new(struct sst_fw *sst_fw,
 	struct sst_module_template *template, void *private)
 {
@@ -688,16 +643,10 @@ struct sst_module *sst_module_new(struct sst_fw *sst_fw,
 	sst_module->id = template->id;
 	sst_module->dsp = dsp;
 	sst_module->sst_fw = sst_fw;
-	sst_module->data = template->data;
-	sst_module->text = template->text;
-	sst_module->text_size = template->text_size;
-	sst_module->data_size = template->data_size;
-	sst_module->text_offset = template->text_offset;
-	sst_module->data_offset = template->data_offset;
-	sst_module->private = private;
+	memcpy(&sst_module->s, &template->s, sizeof(struct sst_module_data));
+	memcpy(&sst_module->p, &template->p, sizeof(struct sst_module_data));
 
-	INIT_LIST_HEAD(&sst_module->tblock_list);
-	INIT_LIST_HEAD(&sst_module->dblock_list);
+	INIT_LIST_HEAD(&sst_module->block_list);
 
 	mutex_lock(&dsp->mutex);
 	list_add(&sst_module->list, &dsp->module_list);
@@ -719,545 +668,97 @@ void sst_module_free(struct sst_module *sst_module)
 }
 EXPORT_SYMBOL_GPL(sst_module_free);
 
-static int get_contiguous_tblocks(struct sst_mem_block *parent, 
-	struct sst_bmap *bmap, struct sst_module *module, u32 next_offset, 
-	int size)
+/* mark block as used and not free for other modules */
+static inline void block_set_used(struct sst_mem_block *block, 
+	struct sst_module *module)
 {
-	struct sst_mem_block *block, *tmp;
-	int ret;
+	struct sst_dsp *dsp = block->dsp;
 
-	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-
-		/* ignore blocks before parent*/
-		if (block->offset < parent->offset)
-			continue;
-#warning fix
-		/* ignore data blocks */
-		//if (block->type == SST_MEM_DRAM)
-		//	continue;
-
-		/* is block next after parent ? */
-		if (next_offset == block->offset) {
-
-			if (size > module->text_size) {
-				/* need more blocks */
-				ret = get_contiguous_tblocks(block, bmap,
-					module, block->offset + block->size,
-					size - module->text_size);
-				if (ret < 0)
-					return ret;
-			}
-
-			/* add block */
-			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		}	
-	}
-	return -ENOMEM;
+	list_add(&block->module_list, &module->block_list);
+	list_move(&block->list, &dsp->used_block_list);
 }
 
-static int module_get_tblocks(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block, *tmp;
-	int ret;
-
-	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-
-		/* ignore data blocks */
-		if (block->type == SST_MEM_DRAM)
-			continue;
-
-		if (block->size >= module->text_size) {
-			/* return block if size fits */
-			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		} else	{
-			/* need more blocks */
-			ret = get_contiguous_tblocks(block, bmap,
-				module, block->offset + block->size,
-				module->text_size);
-			if (ret < 0)
-				return ret;
-
-			/* add block */
-			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		}
-	}
-	return -ENOMEM;
-}
-
-static int module_get_fixed_tblocks(struct sst_module *module,
-	struct sst_bmap *bmap)
-{
-
-	return 0;
-}
-
-static int module_copy_text(struct sst_module *module, struct sst_bmap *bmap)
-{
-
-	return 0;
-}
-
-static int module_insert_text(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block;
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	int ret;
-
-	/* find space for text */
-	ret = module_get_tblocks(module, bmap);
-	if (ret < 0) {
-		dev_err(dsp->dev, "can't find 0x%x IRAM bytes for module %d\n",
-			module->text_size, module->id);
-		return ret;
-	}
-
-	/* enable each block so that's it'e ready for module text */
-	list_for_each_entry(block, &module->tblock_list, module_tlist) {
-
-		if (block->ops && block->ops->enable)
-			ret = block->ops->enable(block);
-			if (ret < 0)
-				goto err;
-	}
-
-	/* copy module text to blocks */
-	ret = module_copy_text(module, bmap);
-	if (ret < 0) {
-		dev_err(dsp->dev, "module text copy failed\n");
-		goto err;
-	}
-
-	return ret;
-
-err:
-	module_remove_text(module, bmap);
-	return ret;
-}
-
-static void module_remove_text(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block, *tmp;
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	int err;
-
-	/* disable each block  */
-	list_for_each_entry(block, &module->tblock_list, module_tlist) {
-
-		if (block->ops && block->ops->disable) {
-			err = block->ops->disable(block);
-			if (err < 0)
-				dev_err(dsp->dev, "failed to remove block\n");
-		}
-	}
-
-	/* mark each block as free */
-	list_for_each_entry_safe(block, tmp, &module->tblock_list, module_tlist) {
-		list_del(&block->module_tlist);
-		list_move(&block->list, &bmap->free_block_list);
-	}
-}
-
-static int get_contiguous_dblocks(struct sst_mem_block *parent, 
-	struct sst_bmap *bmap, struct sst_module *module, int size)
-{
-	struct sst_mem_block *block, *tmp;
-	u32 next_offset = parent->offset + parent->size;
-	int ret;
-
-	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-
-		/* ignore blocks before parent*/
-		if (block->offset < parent->offset)
-			continue;
-
-		/* ignore text blocks */
-		if (block->type == SST_MEM_IRAM)
-			continue;
-
-		/* is block next after parent ? */
-		if (next_offset == block->offset) {
-
-			if (size > module->data_size) {
-				/* need more blocks */
-				ret = get_contiguous_dblocks(block, bmap,
-					module, size - module->data_size);
-				if (ret < 0)
-					return ret;
-			}
-
-			/* add block */
-			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		}	
-	}
-	return -ENOMEM;
-}
-
-/* find a contiguous range of data blocks at any offset */
-static int module_get_dblocks(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block, *tmp;
-	int ret;
-
-	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-
-		/* ignore text blocks */
-		if (block->type == SST_MEM_IRAM)
-			continue;
-
-		if (block->size >= module->data_size) {
-			/* return block if size fits */
-			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		} else	{
-			/* need more blocks */
-			ret = get_contiguous_dblocks(block, bmap,
-				module, module->data_size - block->size);
-			if (ret < 0)
-				return ret;
-
-			/* add block */
-			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		}
-	}
-	return -ENOMEM;
-}
-
-/* find a contiguous range of data blocks at a fixed offset */
-static int module_get_fixed_dblocks(struct sst_module *module,
-	struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block, *tmp;
-	int ret;
-
-#warning fix
-	/* find first free blocks that can hold text */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-
-		/* ignore text blocks */
-		if (block->type == SST_MEM_IRAM)
-			continue;
-
-		if (block->size >= module->data_size) {
-			/* return block if size fits */
-			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		} else	{
-			/* need more blocks */
-			ret = get_contiguous_dblocks(block, bmap,
-				module, module->data_size - block->size);
-			if (ret < 0)
-				return ret;
-
-			/* add block */
-			list_add(&block->module_dlist, &module->dblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-		}
-	}
-	return 0;
-}
-
-static int module_copy_data(struct sst_module *module, struct sst_bmap *bmap)
-{
-
-	return 0;
-}
-
-static int module_insert_data(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block;
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	int ret;
-
-	/* find space for data */
-	ret = module_get_dblocks(module, bmap);
-	if (ret < 0) {
-		dev_err(dsp->dev, "can't find 0x%x DRAM bytes for module %d\n",
-			module->data_size, module->id);
-		return ret;
-	}
-
-	/* enable each block so that's it'e ready for module data */
-	list_for_each_entry(block, &module->dblock_list, module_dlist) {
-
-		if (block->ops && block->ops->enable)
-			ret = block->ops->enable(block);
-			if (ret < 0)
-				goto err;
-	}
-
-	/* copy module text to blocks */
-	ret = module_copy_data(module, bmap);
-	if (ret < 0) {
-		dev_err(dsp->dev, "module data copy failed\n");
-		goto err;
-	}
-
-	return ret;
-
-err:
-	module_remove_data(module, bmap);
-	return ret;
-}
-
-static void module_remove_data(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_mem_block *block, *tmp;
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	int err;
-
-	/* disable each block  */
-	list_for_each_entry(block, &module->dblock_list, module_dlist) {
-
-		if (block->ops && block->ops->disable) {
-			err = block->ops->disable(block);
-			if (err < 0)
-				dev_err(dsp->dev, "failed to remove block\n");
-		}
-	}
-
-	/* mark each block as free */
-	list_for_each_entry_safe(block, tmp, &module->dblock_list, module_dlist) {
-		list_del(&block->module_dlist);
-		list_move(&block->list, &bmap->free_block_list);
-	}
-}
-
-int sst_module_insert(struct sst_module *module, struct sst_bmap *bmap)
-{
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	int ret;
-
-	mutex_lock(&dsp->mutex);
-
-	/* get DSP memory for module text */
-	if (module->text_fixed)
-		ret = module_get_fixed_tblocks(module, bmap);
-	else
-		ret = module_get_tblocks(module, bmap);
-
-	if (ret < 0) {
-		dev_err(dsp->dev, "cant't find free blocks for module text\n");
-		return -ENOMEM;
-	}
-
-	/* get DSP memory for module data */
-	if (module->data_fixed)
-		ret = module_get_fixed_dblocks(module, bmap);
-	else
-		ret = module_get_dblocks(module, bmap);
-
-	if (ret < 0) {
-		dev_err(dsp->dev, "cant't find free blocks for module data\n");
-		return -ENOMEM;
-	}
-
-	/* insert module data and text */
-	ret = module_insert_text(module, bmap);
-	if (ret < 0)
-		return ret;
-
-	ret = module_insert_data(module, bmap);
-	if (ret < 0) {
-		module_remove_text(module, bmap);
-		return ret;
-	}
-
-	mutex_unlock(&dsp->mutex);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(sst_module_insert);
-
-int sst_module_remove(struct sst_module *module, struct sst_bmap *bmap)
+/* allocate contiguous free DSP blocks for this module */
+static int alloc_contiguous_blocks(struct sst_mem_block *parent, 
+	struct sst_module *module, struct sst_module_data *data,
+	u32 next_offset, int size)
 {
 	struct sst_dsp *dsp = module->dsp;
-
-	mutex_lock(&dsp->mutex);
-	module_remove_text(module, bmap);
-	module_remove_data(module, bmap);
-	mutex_unlock(&dsp->mutex);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(sst_module_remove);
-
-static int module_get_section_block(struct sst_module *module,
-	struct sst_bmap *bmap, u32 offset, u32 size)
-{
 	struct sst_mem_block *block, *tmp;
-	u32 end = offset + size, block_end;
-	int err;
+	int ret;
 
-	/* are blocks already atteched to the module */
-	list_for_each_entry_safe(block, tmp, &module->tblock_list, module_tlist) {
-		block_end = block->offset + block->size;
+	/* find first free blocks that can hold text */
+	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
 
-		/* find block that holds section */
-		if (offset >= block->offset && end < block_end)
-			return 0;
+		/* ignore data blocks */
+		if (block->type != data->type)
+			continue;
 
-		/* does block span more than 1 section */
-		if (offset >= block->offset && offset < block_end) {
+		/* is block next after parent ? */
+		if (next_offset == block->offset) {
 
-			err = get_contiguous_tblocks(block, bmap, module,
-				block->offset + block->size,
-				module->text_size);
-			if (err < 0)
-				return -ENOMEM;
+			if (size > block->size) {
 
-			return 0;
-
-		}
-	}
-
-	/* find first free blocks that can hold section in free list*/
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-		block_end = block->offset + block->size;
-
-		/* find block that holds section */
-		if (offset >= block->offset && end < block_end) {
+				/* need more blocks */
+				ret = alloc_contiguous_blocks(block, module,
+					data, block->offset + block->size,
+					size - block->size);
+				if (ret < 0)
+					return ret;
+			}
 
 			/* add block */
-			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->list, &bmap->used_block_list);
+			block_set_used(block, module);
 			return 0;
-		}
-
-		/* does block span more than 1 section */
-		if (offset >= block->offset && offset < block_end) {
-
-			err = get_contiguous_tblocks(block, bmap, module,
-				block->offset + block->size,
-				module->text_size);
-			if (err < 0)
-				return -ENOMEM;
-
-			/* add block */
-			list_add(&block->module_tlist, &module->tblock_list);
-			list_move(&block->list, &bmap->used_block_list);
-			return 0;
-
-		}
-	
+		}	
 	}
-
 	return -ENOMEM;
 }
 
-static int module_insert_section(struct sst_module *module,
-	struct sst_bmap *bmap, u32 offset, u32 size, void *data)
+/* allocate free DSP blocks for this module data */ 
+static int module_alloc_blocks(struct sst_module *module,
+	struct sst_module_data *data)
 {
-	struct sst_mem_block *block;
-	int ret = -ENODEV;
-
-	/* enable each block so that's it'e ready for module data */
-	list_for_each_entry(block, &module->tblock_list, module_tlist) {
-
-		if (block->ops && block->ops->enable)
-			ret = block->ops->enable(block);
-			if (ret < 0)
-				goto err;
-	}
-
-	return 0;
-
-err:
-	module_remove_data(module, bmap);
-	return ret;
-}
-
-int sst_module_insert_section(struct sst_module *module, struct sst_bmap *bmap,
-	u32 offset, u32 size, void *data)
-{
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
+	struct sst_dsp *dsp = module->dsp;
+	struct sst_mem_block *block, *tmp;
 	int ret;
 
-	mutex_lock(&dsp->mutex);
+	/* find first free blocks that can hold text */
+	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
 
-	/* get block that includes this section */
-	ret = module_get_section_block(module, bmap, offset, size);
-	if (ret < 0) {
-		dev_err(dsp->dev, "cant't find free blocks for section\n");
-		mutex_unlock(&dsp->mutex);
-		return -ENOMEM;
+		/* ignore blocks with wrong type */
+		if (block->type != data->type)
+			continue;
+
+		if (block->size >= data->size) {
+			/* return block if size fits */
+			block_set_used(block, module);
+			return 0;
+		} else	{
+			/* need more blocks */
+			ret = alloc_contiguous_blocks(block, module, data,
+				block->offset + block->size,
+				data->size - block->size);
+			if (ret < 0)
+				return ret;
+
+			/* add block */
+			block_set_used(block, module);
+			return 0;
+		}
 	}
-
-	/* insert module data and text */
-	ret = module_insert_section(module, bmap, offset, size, data);
-
-	mutex_unlock(&dsp->mutex);
-	return ret;
+	return -ENOMEM;
 }
-EXPORT_SYMBOL_GPL(sst_module_insert_section);
 
-struct sst_mem_block *sst_mem_block_register(struct sst_bmap *bmap, u32 offset,
-	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
-	void *private)
+/* allocate contiguous blocks at fixed offset */
+static int module_alloc_fixed_blocks(struct sst_module *module,
+	struct sst_module_data *data)
 {
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	struct sst_mem_block *block;
-
-	block = kzalloc(sizeof(*block), GFP_KERNEL);
-	if (block == NULL)
-		return NULL;
-
-	block->offset = offset;
-	block->size = size;
-	block->type = type;
-	block->dsp = dsp;
-	block->private = private;
-	block->ops = ops;
-
-	mutex_lock(&dsp->mutex);
-	list_add(&block->list, &bmap->free_block_list);
-	mutex_unlock(&dsp->mutex);
-
-	return block;
+	// TODO: implement 
+	return 0;
 }
-EXPORT_SYMBOL_GPL(sst_mem_block_register);
 
-void sst_mem_block_unregister_all(struct sst_bmap *bmap)
-{
-	struct sst_dsp *dsp = container_of(bmap, struct sst_dsp, bmap);
-	struct sst_mem_block *block, *tmp;
-
-return;
-	mutex_lock(&dsp->mutex);
-
-	/* unregister used blocks */
-	list_for_each_entry_safe(block, tmp, &bmap->used_block_list, list) {
-		list_del(&block->list);
-		kfree(block);
-	}
-	
-	/* unregister free blocks */
-	list_for_each_entry_safe(block, tmp, &bmap->free_block_list, list) {
-		list_del(&block->list);
-		kfree(block);
-	}
-
-	mutex_unlock(&dsp->mutex);
-	
-}
-EXPORT_SYMBOL_GPL(sst_mem_block_unregister_all);
-
-static void sst_memcpy32(struct sst_dsp *dsp, void *dest, void *src,
-	int bytes)
+static void sst_memcpy32(void *dest, void *src, int bytes)
 {
 	u32 *src32 = src, *dest32 = dest;
 	int size, i;
@@ -1272,18 +773,324 @@ static void sst_memcpy32(struct sst_dsp *dsp, void *dest, void *src,
 	}
 }
 
-int sst_fw_copy(struct sst_dsp *dsp, void *dest, void *src, int bytes)
+/* copy module data from host to DSP memory */
+static int module_copy(struct sst_module *module)
 {
-/* TODO: implement logioc for DMA */
-#if 0
-	memcpy_toio(ram + block->ram_offset,
-		(void *)block + sizeof(*block), block->size);
-#else
-	/* TODO: use generic SST shim drv copy for this */
-	sst_memcpy32(dsp, dest, src, bytes);
-#endif
+	struct sst_dsp *dsp = module->dsp;
+
+	// TODO: Add DMA support
+	sst_memcpy32((void *)(module->p.offset + dsp->addr.dram),
+		module->p.data, module->p.size);
+
+	// TODO: only need to copy scratch if we do a context restore from D3 ??
+	//sst_memcpy32((void *)(module->s.offset + dsp->addr.dram),
+	//	module->s.data, module->s.size);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sst_fw_copy);
 
+/* copy module partial data from host to DSP memory */
+static int module_partial_copy(struct sst_module *module,
+	struct sst_module_data *data)
+{
+	struct sst_dsp *dsp = module->dsp;
+
+	// TODO: Add DMA support
+	sst_memcpy32((void *)(data->offset + dsp->addr.dram),
+		data->data, data->size);
+
+	return 0;
+}
+
+/* remove module from DSP memory */
+static void module_remove(struct sst_module *module)
+{
+	struct sst_mem_block *block, *tmp;
+	struct sst_dsp *dsp = module->dsp;
+	int err;
+
+	/* disable each block  */
+	list_for_each_entry(block, &module->block_list, module_list) {
+
+		if (block->ops && block->ops->disable) {
+			err = block->ops->disable(block);
+			if (err < 0)
+				dev_err(dsp->dev, "failed to disable block\n");
+		}
+	}
+
+	/* mark each block as free */
+	list_for_each_entry_safe(block, tmp, &module->block_list, module_list) {
+		list_del(&block->module_list);
+		list_move(&block->list, &dsp->free_block_list);
+	}
+}
+
+/* prepare the DSP memory block to receive data from host */
+static int module_prepare_block(struct sst_module *module)
+{
+	struct sst_mem_block *block;
+	int ret = 0;
+
+	/* enable each block so that's it'e ready for module P/S data */
+	list_for_each_entry(block, &module->block_list, module_list) {
+
+		if (block->ops && block->ops->enable)
+			ret = block->ops->enable(block);
+			if (ret < 0)
+				goto err;
+	}
+	return ret;
+
+err:
+	list_for_each_entry(block, &module->block_list, module_list) {
+		if (block->ops && block->ops->disable)
+			block->ops->disable(block);
+	}
+	return ret;
+}
+
+/* Load an entire module into DSP memory blocks */
+int sst_module_insert(struct sst_module *module)
+{
+	struct sst_dsp *dsp = module->dsp;
+	int ret;
+
+	mutex_lock(&dsp->mutex);
+
+	/* get DSP memory for module P data */
+	if (module->p.fixed)
+		ret = module_alloc_fixed_blocks(module, &module->p);
+	else
+		ret = module_alloc_blocks(module, &module->p);
+	if (ret < 0) {
+		dev_err(dsp->dev, "cant't find free blocks for module P data\n");
+		goto err;
+	}
+
+	/* get DSP memory for module S data */
+	if (module->s.fixed)
+		ret = module_alloc_fixed_blocks(module, &module->s);
+	else
+		ret = module_alloc_blocks(module, &module->s);
+	if (ret < 0) {
+		dev_err(dsp->dev, "cant't find free blocks for module S data\n");
+		goto err;
+	}
+
+	/* prepare DSP blocks for module copy */
+	ret = module_prepare_block(module);
+	if (ret < 0) {
+		dev_err(dsp->dev, "module prepare failed\n");
+		goto err;
+	}
+
+	/* copy module text to blocks */
+	ret = module_copy(module);
+	if (ret < 0) {
+		dev_err(dsp->dev, "module copy failed\n");
+		goto err;
+	}
+
+	mutex_unlock(&dsp->mutex);
+	return ret;
+
+err:
+	module_remove(module);
+	mutex_unlock(&dsp->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_module_insert);
+
+/* Unload entire module from DSP memory */
+int sst_module_remove(struct sst_module *module)
+{
+	struct sst_dsp *dsp = module->dsp;
+
+	mutex_lock(&dsp->mutex);
+	module_remove(module);
+	mutex_unlock(&dsp->mutex);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sst_module_remove);
+
+/* allocate DSP memory blocks for partial module sections */
+static int module_alloc_partial_block(struct sst_module *module,
+	struct sst_module_data *data)
+{
+	struct sst_dsp *dsp = module->dsp;
+	struct sst_mem_block *block, *tmp;
+	u32 end = data->offset + data->size, block_end;
+	int err;
+
+	/* are blocks already attached to this module */
+	list_for_each_entry_safe(block, tmp, &module->block_list, module_list) {
+		block_end = block->offset + block->size;
+
+		/* find block that holds section */
+		if (data->offset >= block->offset && end < block_end)
+			return 0;
+
+		/* does block span more than 1 section */
+		if (data->offset >= block->offset && data->offset < block_end) {
+
+			err = alloc_contiguous_blocks(block, module, data,
+				block->offset + block->size,
+				data->size - block->size);
+			if (err < 0)
+				return -ENOMEM;
+
+			/* module already owns blocks */
+			return 0;
+		}
+	}
+
+	/* find first free blocks that can hold section in free list*/
+	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
+		block_end = block->offset + block->size;
+
+		/* find block that holds section */
+		if (data->offset >= block->offset && end < block_end) {
+
+			/* add block */
+			block_set_used(block, module);
+			return 0;
+		}
+
+		/* does block span more than 1 section */
+		if (data->offset >= block->offset && data->offset < block_end) {
+
+			err = alloc_contiguous_blocks(block, module, data,
+				block->offset + block->size,
+				data->size - block->size);
+			if (err < 0)
+				return -ENOMEM;
+
+			/* add block */
+			block_set_used(block, module);
+			return 0;
+		}
+	
+	}
+
+	return -ENOMEM;
+}
+
+/* Load partial module data into DSP memory blocks */
+int sst_module_insert_partial(struct sst_module *module,
+	struct sst_module_data *data)
+{
+	struct sst_dsp *dsp = module->dsp;
+	int ret;
+
+	mutex_lock(&dsp->mutex);
+
+	/* alloc blocks that includes this section */
+	ret = module_alloc_partial_block(module, data);
+	if (ret < 0) {
+		dev_err(dsp->dev,
+			"no free blocks for section at offset 0x%x size 0x%x\n",
+			data->offset, data->size);
+		mutex_unlock(&dsp->mutex);
+		return -ENOMEM;
+	}
+
+	/* prepare DSP blocks for module copy */
+	ret = module_prepare_block(module);
+	if (ret < 0) {
+		dev_err(dsp->dev, "module prepare failed\n");
+		goto err;
+	}
+
+	/* copy partial module data to blocks */
+	ret = module_partial_copy(module, data);
+	if (ret < 0) {
+		dev_err(dsp->dev, "module copy failed\n");
+		goto err;
+	}
+
+	mutex_unlock(&dsp->mutex);
+	return ret;
+
+err:
+	module_remove(module);
+	mutex_unlock(&dsp->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_module_insert_partial);
+
+/* register a DSP memory block for use with FW based modules */
+struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
+	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
+	void *private)
+{
+	struct sst_mem_block *block;
+
+	block = kzalloc(sizeof(*block), GFP_KERNEL);
+	if (block == NULL)
+		return NULL;
+
+	block->offset = offset;
+	block->size = size;
+	block->type = type;
+	block->dsp = dsp;
+	block->private = private;
+	block->ops = ops;
+
+	mutex_lock(&dsp->mutex);
+	list_add(&block->list, &dsp->free_block_list);
+	mutex_unlock(&dsp->mutex);
+
+	return block;
+}
+EXPORT_SYMBOL_GPL(sst_mem_block_register);
+
+/* unregister all DSP memory blocks */
+void sst_mem_block_unregister_all(struct sst_dsp *dsp)
+{
+	struct sst_mem_block *block, *tmp;
+
+	mutex_lock(&dsp->mutex);
+
+	/* unregister used blocks */
+	list_for_each_entry_safe(block, tmp, &dsp->used_block_list, list) {
+		list_del(&block->list);
+		kfree(block);
+	}
+	
+	/* unregister free blocks */
+	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
+		list_del(&block->list);
+		kfree(block);
+	}
+
+	mutex_unlock(&dsp->mutex);
+}
+EXPORT_SYMBOL_GPL(sst_mem_block_unregister_all);
+
+struct sst_module_data *sst_module_get_config(struct sst_dsp *dsp, u32 id,
+	enum sst_data_type type)
+{
+	struct sst_module_data *data = NULL;
+	struct sst_module *module;
+
+	mutex_lock(&dsp->mutex);
+
+	list_for_each_entry(module, &dsp->module_list, list) {
+		if (module->id == id) {
+			switch (type) {
+			case SST_DATA_P:
+				data = &module->p;
+				break;
+			case SST_DATA_S:
+				data = &module->s;
+				break;
+			}
+			break;
+		}
+	}
+
+	mutex_unlock(&dsp->mutex);
+	return data;
+}
+EXPORT_SYMBOL_GPL(sst_module_get_config);
 
