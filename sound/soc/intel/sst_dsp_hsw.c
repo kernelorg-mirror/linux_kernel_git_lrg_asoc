@@ -113,32 +113,35 @@ static int hsw_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 		module->info.persistent_size, module->info.scratch_size);
 
 	memset(&template, 0, sizeof(template));
-	template.text_size = module->info.persistent_size;
-	template.data_size = module->info.scratch_size;
-	template.text_offset = module->entry_point;
-	//u32 data_offset;
-	template.text_fixed = true;
-	template.data_fixed = true;
-
-	block = (void *)module + sizeof(*module);
+	template.p.size = module->info.persistent_size;
+	template.s.size = module->info.scratch_size;
+	template.p.entry = module->entry_point;
+	template.p.fixed = true;
+	template.s.fixed = true;
 
 	mod = sst_module_new(fw, &template, NULL);
 	if (mod == NULL)
 		return -ENOMEM;
 
+	block = (void *)module + sizeof(*module);
+
 	for (count = 0; count < module->blocks; count++) {
 
 		if (block->size <= 0) {
-			dev_err(dsp->dev, "block size invalid\n");
+			dev_err(dsp->dev, "block %d size invalid\n", count);
 			return -EINVAL;
 		}
 
 		switch (block->type) {
 		case SST_HSW_IRAM:
 			ram = dsp->addr.iram;
+			template.p.offset = block->ram_offset + 0x80000;
+			template.p.type = SST_MEM_IRAM;
 			break;
 		case SST_HSW_DRAM:
 			ram = dsp->addr.dram;
+			template.p.offset = block->ram_offset + 0x0;
+			template.p.type = SST_MEM_DRAM;
 			break;
 		default:
 			dev_err(dsp->dev, "wrong ram type 0x%x in block0x%x\n",
@@ -146,15 +149,13 @@ static int hsw_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 			return -EINVAL;
 		}
 
+		template.p.size = block->size;
+		template.p.data = (void *)block + sizeof(*block);
+
 		dev_dbg(dsp->dev, "Copy block %d type 0x%x size 0x%x ==> ram %p offset 0x%x\n",
 				count, block->type, block->size, ram, block->ram_offset);
 
-		//sst_fw_copy(dsp, ram + block->ram_offset,
-		//		(void *)block + sizeof(*block), block->size);
-
-		sst_module_insert_section(mod, &dsp->bmap,
-			block->ram_offset, block->size,
-			(void *)block + sizeof(*block));
+		sst_module_insert_partial(mod, &template.p);
 
 		block = (void *)block + sizeof(*block) + block->size;
 	}
@@ -173,10 +174,6 @@ static int hsw_parse_fw_image(struct sst_fw *sst_fw, const struct firmware *fw)
 	struct fw_module_header *module;
 	struct sst_dsp *dsp = sst_fw->dsp;
 	int ret, count;
-
-	//sst_fw = sst_fw_new(dsp, fw, NULL);
-	///if (sst_fw == NULL)
-	//	return -ENOMEM;
 
 	/* Read the header information from the data pointer */
 	header = (struct fw_header *)fw->data;
@@ -339,16 +336,39 @@ static const struct sst_hsw_memregion region[] = {
 	{0x80000, 0xE0000, 12, SST_MEM_IRAM}, /* I-SRAM - 12 * 32kB */
 };	
 
+static u32 hsw_block_get_bit(struct sst_mem_block *block)
+{
+	u32 bit = 0;
+
+	// TODO: Implement code to return bit mask for block
+	// This will be a register bit from VDRTCTL0
+	return bit;
+}
+
 /* enable 32kB memory block */
 static int hsw_block_enable(struct sst_mem_block *block)
 {
-	return 0; // TODO: Implement
+	struct sst_dsp *sst = block->dsp;
+	u32 bit, val;
+
+	val = readl(sst->addr.pci_cfg + SST_VDRTCTL0);
+	bit = hsw_block_get_bit(block);
+
+	writel(val | bit, sst->addr.pci_cfg + SST_VDRTCTL0);
+	return 0;
 }
 
 /* disable 32kB memory block */
 static int hsw_block_disable(struct sst_mem_block *block)
 {
-	return 0; // TODO: Implement
+	struct sst_dsp *sst = block->dsp;
+	u32 bit, val;
+
+	val = readl(sst->addr.pci_cfg + SST_VDRTCTL0);
+	bit = hsw_block_get_bit(block);
+
+	writel(val & ~bit, sst->addr.pci_cfg + SST_VDRTCTL0);
+	return 0;
 }
 
 static struct sst_block_ops sst_hsw_ops = {
@@ -385,7 +405,7 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 		size = (region[i].end - region[i].start) / region[i].blocks;
 
 		for (j = 0; j < region[i].blocks; j++) {
-			sst_mem_block_register(&sst->bmap, offset, size,
+			sst_mem_block_register(sst, offset, size,
 				region[i].type, &sst_hsw_ops, sst);
 			offset += size;
 		}
