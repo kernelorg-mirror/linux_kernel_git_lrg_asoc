@@ -183,8 +183,8 @@ struct sst_pdata;
 #define SST_HSW_BUILD_HASH_LENGTH	40
 
 struct sst_hsw_module_info {
-    uint8_t module_name[SST_HSW_MAX_INFO_SIZE];
-    uint8_t module_version[SST_HSW_MAX_INFO_SIZE];
+    uint8_t name[SST_HSW_MAX_INFO_SIZE];
+    uint8_t version[SST_HSW_MAX_INFO_SIZE];
 } __attribute__((packed));
 
 
@@ -427,7 +427,7 @@ struct sst_hsw_ipc_stream_alloc_req {
 	uint8_t reserved;
 	struct sst_hsw_audio_data_format_ipc format;
 	struct sst_hsw_ipc_stream_ring ringinfo;
-	struct sst_hsw_module_map module_info;
+	struct sst_hsw_module_map map;
 	struct sst_hsw_memory_info persistent_mem;
 	struct sst_hsw_memory_info scratch_mem;
 	uint32_t number_of_notifications;
@@ -537,6 +537,13 @@ int sst_hsw_stream_set_map_config(struct sst_hsw *hsw, struct sst_hsw_stream *st
 	uint32_t map, enum sst_hsw_channel_config config);
 int sst_hsw_stream_set_style(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum sst_hsw_interleaving style);
+int sst_hsw_stream_set_module_info(struct sst_hsw *hsw,
+	struct sst_hsw_stream *stream, enum sst_hsw_module_id module_id,
+	u32 entry_point);
+int sst_hsw_stream_set_pmemory_info(struct sst_hsw *hsw,
+	struct sst_hsw_stream *stream, u32 offset, u32 size);
+int sst_hsw_stream_set_smemory_info(struct sst_hsw *hsw,
+	struct sst_hsw_stream *stream, u32 offset, u32 size);
 
 /* Stream ALSA trigger operations */
 int sst_hsw_stream_pause(struct sst_hsw *hsw, struct sst_hsw_stream *stream, int wait);
@@ -566,5 +573,6 @@ int sst_hsw_dx_get_state(struct sst_hsw *hsw, uint32_t item,
 /* init */
 struct sst_hsw *sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata);
 void sst_hsw_dsp_free(struct sst_hsw *hsw);
+struct sst_dsp *sst_hsw_get_dsp(struct sst_hsw *hsw);
 
 #endif
