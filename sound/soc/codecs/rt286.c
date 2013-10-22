@@ -511,8 +511,12 @@ static void hwCodecConfigure(struct snd_soc_codec *codec)
             rt286_support_power_controls[i], AC_PWRST_D3);
 	}
 
+#if RT_SUPPORT_COMBO_JACK
+	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x4f, 0x5029);
+#else
 	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x4F, 0xb029);
-	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x09, 0xc400);
+#endif
+	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x09, 0xd410);
 	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x0A, 0x0120);
 	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x33, 0x020A);
 
@@ -537,10 +541,6 @@ static void hwCodecConfigure(struct snd_soc_codec *codec)
 		NODE_ID_DMIC2, 0x00);
 
 	mdelay(10);
-
-#if RT_SUPPORT_COMBO_JACK
-	rt286_index_write(codec, NODE_ID_VENDOR_REGISTERS, 0x4f, 0x5029);
-#endif
 
 	rt286_index_update_bits(codec,
 		NODE_ID_VENDOR_REGISTERS, 0x08, 0x0008, 0x0000);
