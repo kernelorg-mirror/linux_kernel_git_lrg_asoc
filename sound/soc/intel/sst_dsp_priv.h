@@ -150,6 +150,7 @@ struct sst_mem_block {
 	/* block config */
 	u32 offset;
 	u32 size;
+	u32 index;
 	enum sst_mem_type type;		/* block memory type IRAM/DRAM */
 	struct sst_block_ops *ops;
 
@@ -237,7 +238,7 @@ void sst_mem_block_drv_managed_free(struct sst_dsp *dsp);
 
 /* Register the DSPs memory blocks - would be nice to read from ACPI */
 struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
-	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
+	u32 size, enum sst_mem_type type, struct sst_block_ops *ops, u32 index,
 	void *private);
 void sst_mem_block_unregister_all(struct sst_dsp *dsp);
 

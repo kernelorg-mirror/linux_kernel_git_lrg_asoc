@@ -978,7 +978,7 @@ EXPORT_SYMBOL_GPL(sst_module_insert_fixed_block);
 
 /* register a DSP memory block for use with FW based modules */
 struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
-	u32 size, enum sst_mem_type type, struct sst_block_ops *ops,
+	u32 size, enum sst_mem_type type, struct sst_block_ops *ops, u32 index,
 	void *private)
 {
 	struct sst_mem_block *block;
@@ -989,6 +989,7 @@ struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
 
 	block->offset = offset;
 	block->size = size;
+	block->index = index;
 	block->type = type;
 	block->dsp = dsp;
 	block->private = private;
