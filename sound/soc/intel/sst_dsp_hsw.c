@@ -21,6 +21,7 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+#define DEBUG
 
 #include <linux/delay.h>
 #include <linux/fs.h>
@@ -387,10 +388,21 @@ static u64 hsw_dmamask = DMA_BIT_MASK(32);
 
 static u32 hsw_block_get_bit(struct sst_mem_block *block)
 {
-	u32 bit = 0;
+	u32 bit = 0, shift = 0;
 
-	// TODO: Implement code to return bit mask for block
-	// This will be a register bit from VDRTCTL0
+	switch (block->type) {
+	case SST_MEM_DRAM:
+		shift = 16;
+		break;
+	case SST_MEM_IRAM:
+		shift = 6;
+		break;
+	default:
+		return 0;
+	}
+
+	bit = 1 << (block->index + shift);
+
 	return bit;
 }
 
@@ -399,6 +411,9 @@ static int hsw_block_enable(struct sst_mem_block *block)
 {
 	struct sst_dsp *sst = block->dsp;
 	u32 bit, val;
+
+	dev_dbg(block->dsp->dev, "enabled block %d type %d at offset 0x%x\n",
+		block->index, block->type, block->offset);
 
 	val = readl(sst->addr.pci_cfg + SST_VDRTCTL0);
 	bit = hsw_block_get_bit(block);
@@ -412,6 +427,9 @@ static int hsw_block_disable(struct sst_mem_block *block)
 {
 	struct sst_dsp *sst = block->dsp;
 	u32 bit, val;
+
+	dev_dbg(block->dsp->dev, "disabled block %d type %d at offset 0x%x\n",
+		block->index, block->type, block->offset);
 
 	val = readl(sst->addr.pci_cfg + SST_VDRTCTL0);
 	bit = hsw_block_get_bit(block);
@@ -511,7 +529,7 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 		/* register individual memory blocks */
 		for (j = 0; j < region[i].blocks; j++) {
 			sst_mem_block_register(sst, offset, size,
-				region[i].type, &sst_hsw_ops, sst);
+				region[i].type, &sst_hsw_ops, j, sst);
 			offset += size;
 		}
 	}
