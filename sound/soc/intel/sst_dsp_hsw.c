@@ -246,7 +246,7 @@ static void dump_shim(struct sst_dsp *sst)
 		printk(KERN_ERR "shim 0x%2.2x value 0x%8.8x\n", i,
 			sst_dsp_shim_read_unlocked(sst, i));
 
-	for (i = 0xa0; i <= 0xac; i += 4)
+	for (i = 0x0; i <= 0xff; i += 4)
 		printk(KERN_ERR "vendor 0x%2.2x value 0x%8.8x\n", i,
 			readl(sst->addr.pci_cfg + i));
 }
@@ -479,7 +479,7 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 	//int acpi_device_set_power(struct acpi_device *device, int state);
 	if (ret < 0)
 		return ret;
-
+dump_shim(sst);
 	if (!dev->dma_mask)
 		dev->dma_mask = &hsw_dmamask;
 	if (!dev->coherent_dma_mask)
