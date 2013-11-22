@@ -54,6 +54,7 @@ const char *acpi_power_state_string(int state)
 		return "(unknown)";
 	}
 }
+EXPORT_SYMBOL_GPL(acpi_power_state_string);
 
 /**
  * acpi_device_get_power - Get power state of an ACPI device.
@@ -129,6 +130,7 @@ int acpi_device_get_power(struct acpi_device *device, int *state)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(acpi_device_get_power);
 
 static int acpi_dev_pm_explicit_set(struct acpi_device *adev, int state)
 {
