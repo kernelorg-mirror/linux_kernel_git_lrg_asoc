@@ -243,12 +243,14 @@ static void dump_shim(struct sst_dsp *sst)
 	int i;
 
 	for (i = 0; i <= 0xF0; i += 4)
-		printk(KERN_ERR "shim 0x%2.2x value 0x%8.8x\n", i,
-			sst_dsp_shim_read_unlocked(sst, i));
+		if (sst_dsp_shim_read_unlocked(sst, i))
+			printk(KERN_ERR "shim 0x%2.2x value 0x%8.8x\n", i,
+				sst_dsp_shim_read_unlocked(sst, i));
 
-	for (i = 0x0; i <= 0xff; i += 4)
-		printk(KERN_ERR "vendor 0x%2.2x value 0x%8.8x\n", i,
-			readl(sst->addr.pci_cfg + i));
+	for (i = 0x00; i <= 0xff; i += 4)
+		if (readl(sst->addr.pci_cfg + i))
+			printk(KERN_ERR "pci 0x%2.2x value 0x%8.8x\n", i,
+				readl(sst->addr.pci_cfg + i));
 }
 
 static irqreturn_t hsw_irq(int irq, void *context)
@@ -309,6 +311,8 @@ static void hsw_boot(struct sst_dsp *sst)
 
 	/* set DSP to RUN */
 	sst_dsp_shim_update_bits(sst, SST_CSR, SST_CSR_STALL, 0x0);
+
+	dump_shim(sst);
 }
 
 static void hsw_reset(struct sst_dsp *sst)
@@ -479,7 +483,7 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 	//int acpi_device_set_power(struct acpi_device *device, int state);
 	if (ret < 0)
 		return ret;
-dump_shim(sst);
+
 	if (!dev->dma_mask)
 		dev->dma_mask = &hsw_dmamask;
 	if (!dev->coherent_dma_mask)
