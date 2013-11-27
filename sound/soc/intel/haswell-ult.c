@@ -467,9 +467,8 @@ static int hsw_audio_probe(struct platform_device *pdev)
 		platform_device_unregister(pdata->hsw_pcm_pdev);
 		sst_hsw_dsp_free(pdata->hsw);
 		dev_err(dev, "snd_soc_register_card() failed: %d\n", ret);
-	}
-
-	sst_hsw_dbg_enable(pdata->hsw, card->debugfs_card_root);
+	} else
+		sst_hsw_dbg_enable(pdata->hsw, card->debugfs_card_root);
 
 	return ret;
 }
