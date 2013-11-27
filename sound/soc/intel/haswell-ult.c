@@ -405,41 +405,13 @@ static struct snd_soc_card haswell = {
 	.num_links = ARRAY_SIZE(haswell_dais),
 };
 
-static acpi_status hsw_audio_walk_resources(struct acpi_resource *res,
-	void *context)
-{
-	struct sst_pdata *pdata = context;
-	struct acpi_resource_extended_irq *pirq;
-	struct acpi_resource_fixed_memory32 *pmem;
-
-	switch (res->type) {
-	case ACPI_RESOURCE_TYPE_EXTENDED_IRQ:
-		pirq = &res->data.extended_irq;
-		pdata->irq = pirq->interrupts[0];
-		return AE_OK;
-
-	case ACPI_RESOURCE_TYPE_FIXED_MEMORY32:
-		pmem = &res->data.fixed_memory32;
-		pdata->address[pdata->num_regions] = pmem->address;
-		pdata->length[pdata->num_regions] = pmem->address_length;
-		pdata->num_regions++;
-		return AE_OK;
-
-	default:
-	case ACPI_RESOURCE_TYPE_END_TAG:
-		return AE_OK;
-	}
-
-	return AE_CTRL_TERMINATE;
-}
-
-static int hsw_audio_add(struct acpi_device *acpi)
+static int hsw_audio_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &haswell;
 	struct haswell_data *pdata;
 	struct sst_pdata sst_pdata;
 	struct sst_hsw_pcm *pcm_plat_data;
-	struct device *dev = &acpi->dev;
+	struct device *dev = &pdev->dev;
 	int ret;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
@@ -452,8 +424,20 @@ static int hsw_audio_add(struct acpi_device *acpi)
 		return -ENOMEM;
 
 	memset(&sst_pdata, 0, sizeof(struct sst_pdata));
-	acpi_walk_resources(acpi->handle, METHOD_NAME__CRS,
-			    hsw_audio_walk_resources, &sst_pdata);
+
+	sst_pdata.irq = platform_get_irq(pdev, 0);
+	for (;;) {
+		struct resource *mmio;
+
+		mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+					     sst_pdata.num_regions);
+		if (!mmio)
+			break;
+
+		sst_pdata.address[sst_pdata.num_regions] = mmio->start;
+		sst_pdata.length[sst_pdata.num_regions] = resource_size(mmio);
+		sst_pdata.num_regions++;
+	}
 
 	if (!strcmp("INT33C8", acpi_device_hid(acpi)))
 		sst_pdata.id = SST_DEV_ID_LYNX_POINT;
@@ -476,7 +460,7 @@ static int hsw_audio_add(struct acpi_device *acpi)
 
 	/* register Haswell card */
 	card->dev = dev;
-	dev_set_drvdata(dev, card);
+	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 	ret = snd_soc_register_card(card);
 	if (ret) {
@@ -490,9 +474,9 @@ static int hsw_audio_add(struct acpi_device *acpi)
 	return ret;
 }
 
-static int hsw_audio_remove(struct acpi_device *acpi)
+static int hsw_audio_remove(struct platform_device *pdev)
 {
-	struct snd_soc_card *card = dev_get_drvdata(&acpi->dev);
+	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct haswell_data *pdata = snd_soc_card_get_drvdata(card);
 
 	snd_soc_unregister_card(card);
@@ -502,11 +486,6 @@ static int hsw_audio_remove(struct acpi_device *acpi)
 	return 0;
 }
 
-// TODO: do we need this atm ?
-static void hsw_audio_notify(struct acpi_device *dev, u32 event)
-{
-}
-
 static struct acpi_device_id hswult_acpi_match[] = {
 	{ "INT33C8", 0 },
 	{ "INT3438", 0 },
@@ -514,30 +493,17 @@ static struct acpi_device_id hswult_acpi_match[] = {
 };
 MODULE_DEVICE_TABLE(acpi, hswult_acpi_match);
 
-static struct acpi_driver hsw_acpi_audio = {
-	.owner = THIS_MODULE,
-	.name = "hsw-ult-audio",
-	.class = "hsw-ult-audio",
-	.ids = hswult_acpi_match,
-	.ops = {
-		.add = hsw_audio_add,
-		.remove = hsw_audio_remove,
-		.notify = hsw_audio_notify,
+static struct platform_driver hsw_audio = {
+	.probe = hsw_audio_probe,
+	.remove = hsw_audio_remove,
+	.driver = {
+		.name = "hsw-audio",
+		.owner = THIS_MODULE,
+		.acpi_match_table = ACPI_PTR(hswult_acpi_match),
 	},
 };
 
-static int __init haswell_init(void)
-{
-	return acpi_bus_register_driver(&hsw_acpi_audio);
-}
-
-static void __exit haswell_exit(void)
-{
-	acpi_bus_unregister_driver(&hsw_acpi_audio);
-}
-
-module_init(haswell_init);
-module_exit(haswell_exit);
+module_platform_driver(hsw_audio)
 
 /* Module information */
 MODULE_AUTHOR("Liam Girdwood, Xingchao Wang");
