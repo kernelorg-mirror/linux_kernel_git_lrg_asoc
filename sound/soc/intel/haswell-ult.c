@@ -369,10 +369,10 @@ static struct snd_soc_dai_link haswell_dais[] = {
 		.platform_name = "snd-soc-dummy",
 		.no_pcm = 1,
 #if defined CONFIG_HSW_ULT_RT286
-		.codec_name = "rt286.0-001c",
+		.codec_name = "i2c-INT343A:00",
 		.codec_dai_name = "rt286-aif1",
 #else
-		.codec_name = "i2c-INT33CA",
+		.codec_name = "i2c-INT33CA:00",
 		.codec_dai_name = "rt5640-aif1",
 #endif
 		.ignore_suspend = 1,
