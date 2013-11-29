@@ -506,11 +506,11 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 	}
 
 	/* check that the DSP can enter D0 */
-	ret = hsw_set_d0(sst, acpi);
-	if (ret < 0) {
-		dev_err(dev, "failed to set DSP D0 and reset SHIM\n");
-		return ret;
-	}
+	//ret = hsw_set_d0(sst, acpi);
+	//if (ret < 0) {
+	//	dev_err(dev, "failed to set DSP D0 and reset SHIM\n");
+	//	return ret;
+	//}
 
 	if (!dev->dma_mask)
 		dev->dma_mask = &hsw_dmamask;

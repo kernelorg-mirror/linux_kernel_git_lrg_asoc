@@ -372,7 +372,7 @@ static struct snd_soc_dai_link haswell_dais[] = {
 		.codec_name = "rt286.0-001c",
 		.codec_dai_name = "rt286-aif1",
 #else
-		.codec_name = "rt5640.0-001c",
+		.codec_name = "i2c-INT33CA",
 		.codec_dai_name = "rt5640-aif1",
 #endif
 		.ignore_suspend = 1,
@@ -439,10 +439,10 @@ static int hsw_audio_probe(struct platform_device *pdev)
 		sst_pdata.num_regions++;
 	}
 
-	if (!strcmp("INT33C8", acpi_device_hid(acpi)))
+//	if (!strcmp("INT33C8", acpi_device_hid(acpi)))
 		sst_pdata.id = SST_DEV_ID_LYNX_POINT;
-	else
-		sst_pdata.id = SST_DEV_ID_WILDCAT_POINT;
+//	else
+//		sst_pdata.id = SST_DEV_ID_WILDCAT_POINT;
 
 	/* initialise IPC and DSP */
 	pdata->hsw = sst_hsw_dsp_init(dev, &sst_pdata);
