@@ -321,6 +321,10 @@ static int acpi_pci_find_device(struct device *dev, acpi_handle *handle)
 			|| pci_dev->hdr_type == PCI_HEADER_TYPE_CARDBUS;
 	/* Please ref to ACPI spec for the syntax of _ADR */
 	addr = (PCI_SLOT(pci_dev->devfn) << 16) | PCI_FUNC(pci_dev->devfn);
+	if (!addr) {
+		dev_info(dev, "ignoring _ADR of zero");
+		return -ENODEV;
+	}
 	*handle = acpi_find_child(ACPI_HANDLE(dev->parent), addr, is_bridge);
 	if (!*handle)
 		return -ENODEV;
