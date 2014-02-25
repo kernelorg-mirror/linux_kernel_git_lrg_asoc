@@ -1106,7 +1106,7 @@ static int rt286_set_dai_sysclk(struct snd_soc_dai *dai,
 	case 24000000:
 		if (RT286_SCLK_S_MCLK == clk_id) {
 			dev_err(codec->dev, "Should not use MCLK\n");
-			return -EINVAL;
+			//return -EINVAL;
 		}
 		break;
 	case 12288000:
@@ -1133,12 +1133,12 @@ static int rt286_set_dai_sysclk(struct snd_soc_dai *dai,
 	return 0;
 }
 
-static int rt286_set_dai_dfs(struct snd_soc_dai *dai, unsigned int fs)
+static int rt286_set_bclk_ratio(struct snd_soc_dai *dai, unsigned int ratio)
 {
 	struct snd_soc_codec *codec = dai->codec;
 
-	dev_dbg(codec->dev, "%s fs=%d\n", __func__, fs);
-	if (50 == fs)
+	dev_dbg(codec->dev, "%s ratio=%d\n", __func__, ratio);
+	if (50 == ratio)
 		rt286_index_update_bits(codec, RT286_VENDOR_REGISTERS,
 			RT286_I2S_CTRL1, 0x1000, 0x1000);
 	else
@@ -1177,10 +1177,10 @@ static irqreturn_t rt286_irq(int irq, void *data)
 	struct rt286_priv *rt286 = data;
 	bool hp = false;
 	bool mic = false;
+	int status = 0;
 
 	rt286_jack_detect(rt286->codec, &hp, &mic);
 
-	int status = 0;
 	if (hp == true)
 		status |= SND_JACK_HEADPHONE;
 
@@ -1259,7 +1259,7 @@ struct snd_soc_dai_ops rt286_aif_dai_ops = {
 	.hw_params = rt286_hw_params,
 	.set_fmt = rt286_set_dai_fmt,
 	.set_sysclk = rt286_set_dai_sysclk,
-	.set_dfs = rt286_set_dai_dfs,
+	.set_bclk_ratio = rt286_set_bclk_ratio,
 };
 
 struct snd_soc_dai_driver rt286_dai[] = {
@@ -1314,6 +1314,7 @@ MODULE_DEVICE_TABLE(i2c, rt286_i2c_id);
 
 static struct acpi_device_id rt286_acpi_match[] = {
 	{ "INT33CA", 0 },
+	{ "INT343A", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, rt286_acpi_match);
@@ -1346,7 +1347,7 @@ static int rt286_i2c_probe(struct i2c_client *i2c,
 	if (pdata)
 		rt286->pdata = *pdata;
 
-	ret = devm_snd_soc_register_codec(&i2c->dev, &soc_codec_dev_rt286,
+	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_rt286,
 				     rt286_dai, ARRAY_SIZE(rt286_dai));
 
 	return ret;
