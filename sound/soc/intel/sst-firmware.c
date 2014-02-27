@@ -117,18 +117,37 @@ EXPORT_SYMBOL_GPL(sst_fw_reload);
 
 void sst_fw_unload(struct sst_fw *sst_fw)
 {
-	struct sst_dsp *dsp = sst_fw->dsp;
-	struct sst_module *module;
+        struct sst_dsp *dsp = sst_fw->dsp;
+        struct sst_module *module, *tmp;
+        struct sst_mem_block *block, *btmp;
 
-	dev_dbg(dsp->dev, "unloading firmware\n");
+        dev_dbg(dsp->dev, "unloading firmware\n");
 
-	mutex_lock(&dsp->mutex);
-	list_for_each_entry(module, &dsp->module_list, list) {
-		if (module->sst_fw == sst_fw)
-			block_module_remove(module);
-	}
-	mutex_unlock(&dsp->mutex);
+        mutex_lock(&dsp->mutex);
+        list_for_each_entry_safe(module, tmp, &dsp->module_list, list) {
+                if (module->sst_fw == sst_fw) {
+                        block_module_remove(module);
+                        list_del(&module->list);
+//                      list_del(&module->list_fw);
+                        kfree(module);
+                }
+        }
+
+        list_for_each_entry_safe(block, btmp, &dsp->used_block_list, list) {
+                if (!list_empty(&block->module_list))
+                        printk(KERN_ERR " *** used block 0x%x not free\n", block->offset);
+        }
+
+        list_for_each_entry_safe(block, btmp, &dsp->free_block_list, list) {
+                if (!list_empty(&block->module_list))
+                        printk(KERN_ERR " *** free block 0x%x not free\n", block->offset);
+        }
+
+
+
+        mutex_unlock(&dsp->mutex);
 }
+
 EXPORT_SYMBOL_GPL(sst_fw_unload);
 
 /* free single firmware object */
@@ -437,22 +456,22 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 		dev_err(dsp->dev,
 			"error: no free blocks for section at offset 0x%x size 0x%x\n",
 			data->offset, data->size);
-		mutex_unlock(&dsp->mutex);
-		return -ENOMEM;
+		//mutex_unlock(&dsp->mutex);
+		//return -ENOMEM;
 	}
 
 	/* prepare DSP blocks for module copy */
 	ret = block_module_prepare(module);
 	if (ret < 0) {
 		dev_err(dsp->dev, "error: fw module prepare failed\n");
-		goto err;
+		//goto err;
 	}
 
 	/* copy partial module data to blocks */
 	sst_memcpy32(dsp->addr.lpe + data->offset, data->data, data->size);
 
 	mutex_unlock(&dsp->mutex);
-	return ret;
+	return 0;
 
 err:
 	block_module_remove(module);
