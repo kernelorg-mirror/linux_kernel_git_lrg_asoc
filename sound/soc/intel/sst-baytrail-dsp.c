@@ -11,7 +11,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  */
-
+#define DEBUG
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>

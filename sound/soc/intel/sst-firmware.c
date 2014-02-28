@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -119,7 +119,6 @@ void sst_fw_unload(struct sst_fw *sst_fw)
 {
         struct sst_dsp *dsp = sst_fw->dsp;
         struct sst_module *module, *tmp;
-        struct sst_mem_block *block, *btmp;
 
         dev_dbg(dsp->dev, "unloading firmware\n");
 
