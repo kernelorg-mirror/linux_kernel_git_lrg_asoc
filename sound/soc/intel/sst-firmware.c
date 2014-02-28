@@ -128,26 +128,12 @@ void sst_fw_unload(struct sst_fw *sst_fw)
                 if (module->sst_fw == sst_fw) {
                         block_module_remove(module);
                         list_del(&module->list);
-//                      list_del(&module->list_fw);
                         kfree(module);
                 }
         }
 
-        list_for_each_entry_safe(block, btmp, &dsp->used_block_list, list) {
-                if (!list_empty(&block->module_list))
-                        printk(KERN_ERR " *** used block 0x%x not free\n", block->offset);
-        }
-
-        list_for_each_entry_safe(block, btmp, &dsp->free_block_list, list) {
-                if (!list_empty(&block->module_list))
-                        printk(KERN_ERR " *** free block 0x%x not free\n", block->offset);
-        }
-
-
-
         mutex_unlock(&dsp->mutex);
 }
-
 EXPORT_SYMBOL_GPL(sst_fw_unload);
 
 /* free single firmware object */
@@ -255,7 +241,11 @@ static int block_alloc_contiguous(struct sst_module *module,
 		size -= block->size;
 	}
 
+	list_for_each_entry(block, &tmp, list)
+		list_add(&block->module_list, &module->block_list);
+
 	list_splice(&tmp, &dsp->used_block_list);
+
 	return 0;
 }
 
@@ -300,8 +290,7 @@ static int block_alloc(struct sst_module *module,
 		/* do we span > 1 blocks */
 		if (data->size > block->size) {
 			ret = block_alloc_contiguous(module, data,
-				block->offset + block->size,
-				data->size - block->size);
+				block->offset, data->size);
 			if (ret == 0)
 				return ret;
 		}
@@ -394,10 +383,9 @@ static int block_alloc_fixed(struct sst_module *module,
 
 		/* does block span more than 1 section */
 		if (data->offset >= block->offset && data->offset < block_end) {
-
 			err = block_alloc_contiguous(module, data,
 				block->offset + block->size,
-				data->size - block->size + data->offset - block->offset);
+				data->size - block->size);
 			if (err < 0)
 				return -ENOMEM;
 
@@ -424,15 +412,9 @@ static int block_alloc_fixed(struct sst_module *module,
 		if (data->offset >= block->offset && data->offset < block_end) {
 
 			err = block_alloc_contiguous(module, data,
-				block->offset + block->size,
-				data->size - block->size);
+				block->offset, data->size);
 			if (err < 0)
 				return -ENOMEM;
-
-			/* add block */
-			block->data_type = data->data_type;
-			list_move(&block->list, &dsp->used_block_list);
-			list_add(&block->module_list, &module->block_list);
 			return 0;
 		}
 
@@ -456,15 +438,15 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 		dev_err(dsp->dev,
 			"error: no free blocks for section at offset 0x%x size 0x%x\n",
 			data->offset, data->size);
-		//mutex_unlock(&dsp->mutex);
-		//return -ENOMEM;
+		mutex_unlock(&dsp->mutex);
+		return -ENOMEM;
 	}
 
 	/* prepare DSP blocks for module copy */
 	ret = block_module_prepare(module);
 	if (ret < 0) {
 		dev_err(dsp->dev, "error: fw module prepare failed\n");
-		//goto err;
+		goto err;
 	}
 
 	/* copy partial module data to blocks */
