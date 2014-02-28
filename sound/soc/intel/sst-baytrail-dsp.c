@@ -230,11 +230,19 @@ static void sst_byt_boot(struct sst_dsp *sst)
 
 static void sst_byt_reset(struct sst_dsp *sst)
 {
-	/* put DSP into reset, set reset vector and stall */
+	/* set reset vector and stall */
 	sst_dsp_shim_update_bits64(sst, SST_CSR,
-		SST_BYT_CSR_RST | SST_BYT_CSR_VECTOR_SEL | SST_BYT_CSR_STALL,
-		SST_BYT_CSR_RST | SST_BYT_CSR_VECTOR_SEL | SST_BYT_CSR_STALL);
+		SST_BYT_CSR_VECTOR_SEL | SST_BYT_CSR_STALL,
+		SST_BYT_CSR_VECTOR_SEL | SST_BYT_CSR_STALL);
 
+	udelay(10);
+
+	/* put DSP into reset */
+	sst_dsp_shim_update_bits64(sst, SST_CSR,
+		SST_BYT_CSR_RST, SST_BYT_CSR_RST);
+
+	/* dummy read to make sure clock is ungated */
+	sst_dsp_shim_read64_unlocked(sst, SST_IPCD);
 	udelay(10);
 
 	/* take DSP out of reset and keep stalled for FW loading */
