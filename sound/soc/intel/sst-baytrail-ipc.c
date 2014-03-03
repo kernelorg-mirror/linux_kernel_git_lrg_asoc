@@ -904,13 +904,17 @@ int sst_byt_dsp_suspend_noirq(struct device *dev, struct sst_pdata *pdata)
 }
 EXPORT_SYMBOL_GPL(sst_byt_dsp_suspend_noirq);
 
+void sst_byt_d3(struct sst_dsp *sst);
+int sst_byt_d0(struct sst_dsp *sst);
+
 int sst_byt_dsp_suspend_late(struct device *dev, struct sst_pdata *pdata)
 {
 	struct sst_byt *byt = pdata->dsp;
 
+	sst_byt_d3(byt->dsp);
 	dev_dbg(byt->dev, "free all blocks and unload fw\n");
 	sst_fw_unload(byt->fw);
-
+	
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sst_byt_dsp_suspend_late);
@@ -919,6 +923,12 @@ int sst_byt_dsp_boot(struct device *dev, struct sst_pdata *pdata)
 {
 	struct sst_byt *byt = pdata->dsp;
 	int ret;
+
+	ret = sst_byt_d0(byt->dsp);
+	if (ret < 0) {
+		dev_err(dev, "cannot wake SHIM up\n");
+		return ret;
+	}
 
 	dev_dbg(byt->dev, "reload dsp fw\n");
 
@@ -957,3 +967,56 @@ int sst_byt_dsp_wait_for_ready(struct device *dev, struct sst_pdata *pdata)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sst_byt_dsp_wait_for_ready);
+
+void byt_test_d3(struct sst_byt *byt)
+{
+	printk(KERN_ERR "dsp reset\n");
+	sst_dsp_reset(byt->dsp);
+	sst_byt_drop_all(byt);
+	printk(KERN_ERR "dsp in reset\n");
+
+	sst_byt_d3(byt->dsp);
+	printk(KERN_ERR "free all blocks and unload fw\n");
+	sst_fw_unload(byt->fw);
+}
+
+void sst_byt_dump_shim(struct sst_dsp *sst);
+
+int byt_test_d0(struct sst_byt *byt)
+{
+	int ret;
+
+	printk(KERN_ERR "start boot\n");
+	ret = sst_byt_d0(byt->dsp);
+	if (ret < 0) {
+		dev_err(byt->dev, "cannot wake SHIM up\n");
+		return ret;
+	}
+
+	printk(KERN_ERR "reload dsp fw\n");
+
+	sst_dsp_reset(byt->dsp);
+
+	ret = sst_fw_reload(byt->fw);
+	if (ret <  0) {
+		dev_err(byt->dev, "error: failed to reload firmware\n");
+		return ret;
+	}
+
+	/* wait for DSP boot completion */
+	byt->boot_complete = false;
+	sst_dsp_boot(byt->dsp);
+	printk(KERN_ERR "dsp booting...\n");
+
+	ret = wait_event_timeout(byt->boot_wait, byt->boot_complete,
+				 msecs_to_jiffies(IPC_BOOT_MSECS));
+	if (ret == 0) {
+		dev_err(byt->dev, "ipc: error DSP boot timeout\n");
+		sst_byt_dump_shim(byt->dsp);
+		return -EIO;
+	}
+
+	printk(KERN_ERR "dsp rebooted\n");
+	return ret;
+}
+

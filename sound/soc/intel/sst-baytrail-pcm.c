@@ -59,6 +59,41 @@ struct sst_byt_priv_data {
 	struct sst_byt_pcm_data pcm[BYT_PCM_COUNT];
 };
 
+void byt_test_d3(struct sst_byt *byt);
+int byt_test_d0(struct sst_byt *byt);
+
+static int pm = 0;
+
+static int byt_volume_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_kcontrol_chip(kcontrol);
+	struct sst_byt_priv_data *pdata = snd_soc_platform_get_drvdata(platform);
+	struct sst_byt *byt = pdata->byt;
+
+	if (ucontrol->value.integer.value[0] == 1) {
+		byt_test_d3(byt);
+		pm = 1;
+	} else {
+		byt_test_d0(byt);
+		pm = 0;
+	}
+
+	return 0;
+}
+
+static int byt_volume_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = pm;
+	return 0;
+}
+
+static const struct snd_kcontrol_new byt_volume_controls[] = {
+	SOC_SINGLE_EXT("PM Test Switch", 0, 0, 1, 0,
+		byt_volume_get, byt_volume_put),
+};
+
 /* this may get called several times by oss emulation */
 static int sst_byt_pcm_hw_params(struct snd_pcm_substream *substream,
 				 struct snd_pcm_hw_params *params)
@@ -412,6 +447,8 @@ static struct snd_soc_platform_driver byt_soc_platform = {
 	.ops		= &sst_byt_pcm_ops,
 	.pcm_new	= sst_byt_pcm_new,
 	.pcm_free	= sst_byt_pcm_free,
+	.controls	= byt_volume_controls,
+	.num_controls	= ARRAY_SIZE(byt_volume_controls),
 };
 
 static const struct snd_soc_component_driver byt_dai_component = {
