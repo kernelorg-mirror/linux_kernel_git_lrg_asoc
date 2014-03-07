@@ -886,6 +886,27 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		goto unmap;
 	}
 
+	if (boot_cpu_data.x86_model == 61) {
+		if (iommu->ecap & (1<<24)) {
+			/* GFX unit. Turn off superpages */
+			if (cap_super_page_val(iommu->cap)) {
+				pr_warn("Disabling VT-d superpages on Broadwell GFX unit\n");
+				iommu->cap &= ~(0xfULL << 34);
+			}
+		} else {
+			if (cap_fault_reg_offset(iommu->cap) != 512) {
+				pr_warn("Correcting Intel Broadwell fault register offset to 0x20\n");
+				iommu->cap &= ~(0x3ffULL << 24);
+				iommu->cap |= 0x20ULL << 24;
+			}
+			if (ecap_iotlb_offset(iommu->ecap) != 256) {
+				pr_warn("Correcting Intel Broadwell IOTLB register offset to 0x10\n");
+				iommu->ecap &= ~(0x3ffULL << 8);
+				iommu->ecap |= 0x10ULL << 8;
+			}
+		}
+	}
+
 	/* the registers might be more than one page */
 	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap),
 			 cap_max_fault_reg_offset(iommu->cap));
