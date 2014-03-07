@@ -303,7 +303,7 @@ static int byt_enable_shim(struct sst_dsp *sst)
 {
 	/* enable shim - do dummy read */
 	writel(0, sst->addr.pci_cfg + 0x84);
-	dev_err(sst->dev, "PMCS read 0x%x\n", readl(sst->addr.pci_cfg + 0x84));
+	dev_err(sst->dev, "PMCS D0 read 0x%x\n", readl(sst->addr.pci_cfg + 0x84));
 
 	/* make sure that ADSP shim is enabled */
 	mdelay(11);
@@ -322,6 +322,15 @@ static int byt_enable_shim(struct sst_dsp *sst)
 int sst_byt_d0(struct sst_dsp *sst)
 {
 	return byt_enable_shim(sst);
+}
+
+int sst_byt_d3(struct sst_dsp *sst)
+{
+	/* disable shim - do dummy read */
+	writel(0x3, sst->addr.pci_cfg + 0x84);
+	dev_err(sst->dev, "PMCS D3 read 0x%x\n", readl(sst->addr.pci_cfg + 0x84));
+
+	return 0;
 }
 
 static int sst_byt_init(struct sst_dsp *sst, struct sst_pdata *pdata)
