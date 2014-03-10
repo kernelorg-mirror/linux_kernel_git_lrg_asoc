@@ -406,4 +406,5 @@ struct sst_ops sst_byt_ops = {
 	.init = sst_byt_init,
 	.free = sst_byt_free,
 	.parse_fw = sst_byt_parse_fw_image,
+	.dump = sst_byt_dump_shim,
 };
