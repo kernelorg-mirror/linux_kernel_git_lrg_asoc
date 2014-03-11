@@ -460,7 +460,6 @@ static int sst_byt_pcm_dev_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-#if 0
 static int sst_byt_pcm_dev_suspend_noirq(struct device *dev)
 {
 	struct sst_pdata *sst_pdata = dev_get_platdata(dev);
@@ -524,7 +523,6 @@ static const struct dev_pm_ops sst_byt_pm_ops = {
 #define SST_BYT_PM_OPS	(&sst_byt_pm_ops)
 #else
 #define SST_BYT_PM_OPS	NULL
-#endif
 #endif
 
 static struct platform_driver sst_byt_pcm_driver = {

@@ -890,7 +890,6 @@ void sst_byt_dsp_free(struct device *dev, struct sst_pdata *pdata)
 }
 EXPORT_SYMBOL_GPL(sst_byt_dsp_free);
 
-#if 0
 /* IRQs must be off here */
 int sst_byt_dsp_suspend_noirq(struct device *dev, struct sst_pdata *pdata)
 {
@@ -963,10 +962,8 @@ int sst_byt_dsp_wait_for_ready(struct device *dev, struct sst_pdata *pdata)
 	}
 
 	dev_dbg(byt->dev, "dsp rebooted\n");
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sst_byt_dsp_wait_for_ready);
-#endif
 
 
