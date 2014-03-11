@@ -643,7 +643,7 @@ static void __init dmar_acpi_insert_dev_scope(u8 device_number,
 				if (tmp == NULL) {
 					dmaru->devices[i].bus = scope->bus;
 					dmaru->devices[i].devfn = PCI_DEVFN(path->device,
-									    path->function);
+									    0 /* path->function */);
 					rcu_assign_pointer(dmaru->devices[i].dev,
 							   get_device(&adev->dev));
 					return;
@@ -669,9 +669,12 @@ static int __init dmar_acpi_dev_scope_init(void)
 		if (andd->header.type == ACPI_DMAR_TYPE_ANDD) {
 			acpi_handle h;
 			struct acpi_device *adev;
+			char *name = andd->object_name;
+			if (!strcmp(name, "\\_SB.PCI0.UA00"))
+				name = "\\_SB.PCI0.SDMA";
 
 			if (!ACPI_SUCCESS(acpi_get_handle(ACPI_ROOT_OBJECT,
-							  andd->object_name,
+							  name,
 							  &h))) {
 				pr_err("Failed to find handle for ACPI object %s\n",
 				       andd->object_name);
