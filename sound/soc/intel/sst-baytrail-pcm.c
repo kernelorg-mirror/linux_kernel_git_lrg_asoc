@@ -133,7 +133,6 @@ static int sst_byt_pcm_hw_free(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-#if 0
 static int sst_byt_pcm_save_stream_context(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -179,7 +178,6 @@ static int sst_byt_pcm_restore_stream_context(struct snd_pcm_substream *substrea
 
 	return 0;
 }
-#endif
 
 static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
@@ -196,18 +194,17 @@ static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		sst_byt_stream_start(byt, pcm_data->stream);
 		break;
 	case SNDRV_PCM_TRIGGER_RESUME:
-		//sst_byt_pcm_restore_stream_context(substream);
+		sst_byt_pcm_restore_stream_context(substream);
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		sst_byt_stream_resume(byt, pcm_data->stream);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		sst_byt_stream_stop(byt, pcm_data->stream);
 		break;
-	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		sst_byt_stream_pause(byt, pcm_data->stream);
-	//case SNDRV_PCM_TRIGGER_SUSPEND:
-		//sst_byt_pcm_save_stream_context(substream);
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+		sst_byt_pcm_save_stream_context(substream);
 		break;
 	default:
 		break;
@@ -460,7 +457,6 @@ static int sst_byt_pcm_dev_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-#if 0
 static int sst_byt_pcm_dev_suspend_noirq(struct device *dev)
 {
 	struct sst_pdata *sst_pdata = dev_get_platdata(dev);
@@ -524,7 +520,6 @@ static const struct dev_pm_ops sst_byt_pm_ops = {
 #define SST_BYT_PM_OPS	(&sst_byt_pm_ops)
 #else
 #define SST_BYT_PM_OPS	NULL
-#endif
 #endif
 
 static struct platform_driver sst_byt_pcm_driver = {
