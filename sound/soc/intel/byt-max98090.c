@@ -20,6 +20,7 @@
 #include <linux/acpi.h>
 #include <linux/device.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/slab.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -146,42 +147,6 @@ static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int byt_hp_jack_status_check(void *data)
-{
-	int spk_enable;
-	int report;
-
-	spk_enable = gpio_get_value_cansleep(CONFIG_SND_BYT_RAMBI_HPDET_GPIO);
-
-	if (spk_enable) {
-		pr_debug("Headphone Insert\n");
-		report = SND_JACK_HEADPHONE;
-	} else {
-		pr_debug("Headphone Remove\n");
-		report = SND_JACK_LINEOUT;
-	}
-
-	return report;
-}
-
-static int byt_mic_jack_status_check(void *data)
-{
-	int mic_enable;
-	int report;
-
-	mic_enable = !gpio_get_value_cansleep(CONFIG_SND_BYT_RAMBI_MICDET_GPIO);
-
-	if (mic_enable) {
-		pr_debug("Headset Mic Insert\n");
-		report = SND_JACK_MICROPHONE;
-	} else {
-		pr_debug("Headset Mic Remove\n");
-		report = SND_JACK_LINEIN;
-	}
-
-	return report;
-}
-
 static struct snd_soc_jack_pin hs_jack_pins[] = {
 	{
 		.pin	= "Headphone",
@@ -206,15 +171,11 @@ static struct snd_soc_jack_gpio hs_jack_gpios[] = {
 		.name			= "hp-gpio",
 		.report			= SND_JACK_HEADPHONE | SND_JACK_LINEOUT,
 		.debounce_time		= 200,
-		.gpio			= CONFIG_SND_BYT_RAMBI_HPDET_GPIO,
-		.jack_status_check	= &byt_hp_jack_status_check,
 	},
 	{
 		.name			= "mic-gpio",
 		.report			= SND_JACK_MICROPHONE | SND_JACK_LINEIN,
 		.debounce_time		= 200,
-		.gpio			= CONFIG_SND_BYT_RAMBI_MICDET_GPIO,
-		.jack_status_check	= &byt_mic_jack_status_check,
 	},
 };
 
@@ -226,6 +187,8 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	struct snd_soc_card *card = runtime->card;
 	struct byt_mc_private *drv = snd_soc_card_get_drvdata(card);
 	struct snd_soc_jack *jack = &drv->jack;
+	struct gpio_desc *mic_desc;
+	struct gpio_desc *hp_desc;
 
 	pr_debug("Enter:%s", __func__);
 	card->dapm.idle_bias_off = true;
@@ -253,6 +216,26 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 
 	snd_soc_dapm_sync(dapm);
 
+	/*
+	 * ASoC still uses legacy GPIOs so we look both GPIOs using
+	 * descriptors here, convert them to numbers and release the
+	 * acquired descriptors. Once ASoC switches over to GPIO descriptor
+	 * APIs we can pass them directly.
+	 */
+	hp_desc = gpiod_get_index(card->dev->parent, NULL, 0);
+	if (IS_ERR(hp_desc))
+		return 0;
+	mic_desc = gpiod_get_index(card->dev->parent, NULL, 1);
+	if (IS_ERR(mic_desc)) {
+		gpiod_put(hp_desc);
+		return 0;
+	}
+
+	hs_jack_gpios[0].gpio = desc_to_gpio(hp_desc);
+	hs_jack_gpios[1].gpio = desc_to_gpio(mic_desc);
+
+	gpiod_put(mic_desc);
+	gpiod_put(hp_desc);
 
 	/* Enable jack detection */
 	ret = snd_soc_jack_new(codec, "Headphone", SND_JACK_HEADPHONE, jack);
