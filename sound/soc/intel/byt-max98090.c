@@ -146,7 +146,7 @@ static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int byt_hp_jack_status_check(void)
+static int byt_hp_jack_status_check(void *data)
 {
 	int spk_enable;
 	int report;
@@ -164,7 +164,7 @@ static int byt_hp_jack_status_check(void)
 	return report;
 }
 
-static int byt_mic_jack_status_check(void)
+static int byt_mic_jack_status_check(void *data)
 {
 	int mic_enable;
 	int report;
