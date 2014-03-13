@@ -2421,6 +2421,9 @@ static int max98090_resume(struct device *dev)
 	struct max98090_priv *max98090 = dev_get_drvdata(dev);
 	unsigned int status;
 
+	/* TODO: Is this wait really needed */
+	msleep(870);
+
 	regcache_mark_dirty(max98090->regmap);
 
 	max98090_reset(max98090);
