@@ -510,6 +510,27 @@ static int max98090_put_enab_tlv(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int test2 = 0;
+
+static int max98090_get_test2(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = test2;
+	return 0;
+}
+
+static int max98090_put_test2(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	test2 = ucontrol->value.integer.value[0];
+	snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+		M98090_SHDNN_MASK, test2 << M98090_SHDNN_SHIFT);
+
+	return 0;
+}
+
 static const char *max98090_perf_pwr_text[] =
 	{ "High Performance", "Low Power" };
 static const char *max98090_pwr_perf_text[] =
@@ -586,6 +607,10 @@ static SOC_ENUM_SINGLE_DECL(max98090_adchp_enum,
 			    max98090_pwr_perf_text);
 
 static const struct snd_kcontrol_new max98090_snd_controls[] = {
+
+	SOC_SINGLE_EXT("AB Test2", 0, 0, 1, 0,
+		max98090_get_test2, max98090_put_test2),
+
 	SOC_ENUM("MIC Bias VCM Bandgap", max98090_vcmbandgap_enum),
 
 	SOC_SINGLE("DMIC MIC Comp Filter Config", M98090_REG_DIGITAL_MIC_CONFIG,
