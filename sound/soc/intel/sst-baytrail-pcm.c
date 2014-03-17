@@ -60,8 +60,8 @@ struct sst_byt_priv_data {
 	/* runtime DSP */
 	struct sst_byt *byt;
 
-	/* DAI data */
-	struct sst_byt_pcm_data pcm[BYT_PCM_COUNT];
+	/* DAI data per stream direction */
+	struct sst_byt_pcm_data pcm[2];
 };
 
 /* this may get called several times by oss emulation */
@@ -71,7 +71,8 @@ static int sst_byt_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 	u32 rate, bits;
 	u8 channels;
@@ -143,7 +144,8 @@ static int sst_byt_pcm_restore_stream_context(struct snd_pcm_substream *substrea
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 	int ret;
 
@@ -183,7 +185,8 @@ static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 
 	dev_dbg(rtd->dev, "PCM: trigger %d\n", cmd);
@@ -245,7 +248,8 @@ static snd_pcm_uframes_t sst_byt_pcm_pointer(struct snd_pcm_substream *substream
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 	snd_pcm_uframes_t offset;
 	int pos;
@@ -265,7 +269,8 @@ static int sst_byt_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 
 	dev_dbg(rtd->dev, "PCM: open\n");
@@ -276,7 +281,7 @@ static int sst_byt_pcm_open(struct snd_pcm_substream *substream)
 
 	snd_soc_set_runtime_hwparams(substream, &sst_byt_pcm_hardware);
 
-	pcm_data->stream = sst_byt_stream_new(byt, rtd->cpu_dai->id + 1,
+	pcm_data->stream = sst_byt_stream_new(byt, substream->stream + 1,
 					      byt_notify_pointer, pcm_data);
 	if (pcm_data->stream == NULL) {
 		dev_err(rtd->dev, "failed to create stream\n");
@@ -293,7 +298,8 @@ static int sst_byt_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct sst_byt_pcm_data *pcm_data = &pdata->pcm[rtd->cpu_dai->id];
+	struct sst_byt_pcm_data *pcm_data =
+		&pdata->pcm[substream->stream];
 	struct sst_byt *byt = pdata->byt;
 	int ret;
 
@@ -364,27 +370,22 @@ static int sst_byt_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	return ret;
 }
 
-static struct snd_soc_dai_driver byt_dais[] = {
-	{
-		.name  = "Front-cpu-dai",
-		.playback = {
-			.stream_name = "System Playback",
-			.channels_min = 2,
-			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_48000,
-			.formats = SNDRV_PCM_FMTBIT_S24_3LE |
-				   SNDRV_PCM_FMTBIT_S16_LE,
-		},
+static struct snd_soc_dai_driver byt_dai = {
+	.name  = "Baytrail LPE",
+	.playback = {
+		.stream_name = "HiFi Playback",
+		.channels_min = 2,
+		.channels_max = 2,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S24_3LE |
+			   SNDRV_PCM_FMTBIT_S16_LE,
 	},
-	{
-		.name  = "Mic1-cpu-dai",
-		.capture = {
-			.stream_name = "Analog Capture",
-			.channels_min = 2,
-			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_48000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE,
-		},
+	.capture = {
+		.stream_name = "HiFi Capture",
+		.channels_min = 2,
+		.channels_max = 2,
+		.rates = SNDRV_PCM_RATE_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	},
 };
 
@@ -402,7 +403,7 @@ static int sst_byt_pcm_probe(struct snd_soc_platform *platform)
 	priv_data->byt = plat_data->dsp;
 	snd_soc_platform_set_drvdata(platform, priv_data);
 
-	for (i = 0; i < ARRAY_SIZE(byt_dais); i++) {
+	for (i = 0; i < 2; i++) {
 		mutex_init(&priv_data->pcm[i].mutex);
 		INIT_WORK(&priv_data->pcm[i].work ,sst_byt_pcm_work);
 	}
@@ -441,7 +442,7 @@ static int sst_byt_pcm_dev_probe(struct platform_device *pdev)
 		goto err_plat;
 
 	ret = snd_soc_register_component(&pdev->dev, &byt_dai_component,
-					 byt_dais, ARRAY_SIZE(byt_dais));
+					 &byt_dai, 1);
 	if (ret < 0)
 		goto err_comp;
 
