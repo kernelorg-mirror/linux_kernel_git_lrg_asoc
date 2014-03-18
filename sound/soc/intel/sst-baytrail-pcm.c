@@ -53,6 +53,7 @@ struct sst_byt_pcm_data {
 
 	bool resume;
 	bool resume_stop;
+	bool xrun;
 };
 
 /* private data for the driver */
@@ -183,6 +184,7 @@ static void sst_byt_pcm_work(struct work_struct *work)
 static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct sst_byt_priv_data *pdata =
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct sst_byt_pcm_data *pcm_data =
@@ -193,6 +195,10 @@ static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+		if (pcm_data->xrun) {
+			pcm_data->xrun = false;
+			break;
+		}
 		if (!pcm_data->resume) {
 			if (pcm_data->resume_stop)
 				pcm_data->resume_stop = false;
@@ -207,6 +213,11 @@ static int sst_byt_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		sst_byt_stream_resume(byt, pcm_data->stream);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
+		if (runtime->pending_state == SNDRV_PCM_STATE_XRUN) {
+			pcm_data->xrun = true;
+			break;
+		}
+
 		if (!pcm_data->resume)
 			sst_byt_stream_stop(byt, pcm_data->stream);
 		else
