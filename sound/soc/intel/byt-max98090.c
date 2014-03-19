@@ -98,14 +98,14 @@ static struct snd_soc_jack_pin hs_jack_pins[] = {
 
 static struct snd_soc_jack_gpio hs_jack_gpios[] = {
 	{
-		.name			= "hp-gpio",
-		.report			= SND_JACK_HEADPHONE | SND_JACK_LINEOUT,
-		.debounce_time		= 200,
+		.name		= "hp-gpio",
+		.report		= SND_JACK_HEADPHONE | SND_JACK_LINEOUT,
+		.debounce_time	= 200,
 	},
 	{
-		.name			= "mic-gpio",
-		.report			= SND_JACK_MICROPHONE | SND_JACK_LINEIN,
-		.debounce_time		= 200,
+		.name		= "mic-gpio",
+		.report		= SND_JACK_MICROPHONE | SND_JACK_LINEIN,
+		.debounce_time	= 200,
 	},
 };
 
