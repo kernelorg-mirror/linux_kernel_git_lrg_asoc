@@ -100,13 +100,6 @@ static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 
 	card->dapm.idle_bias_off = true;
 
-	ret = snd_soc_add_card_controls(card, byt_max98090_controls,
-					ARRAY_SIZE(byt_max98090_controls));
-	if (ret) {
-		dev_err(card->dev, "unable to add card controls\n");
-		return ret;
-	}
-
 	ret = snd_soc_dai_set_sysclk(runtime->codec_dai,
 				     M98090_REG_SYSTEM_CLOCK,
 				     19200000, SND_SOC_CLOCK_IN);
