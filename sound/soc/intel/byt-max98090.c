@@ -26,18 +26,18 @@
 #include <sound/jack.h>
 #include "../codecs/max98090.h"
 
-struct byt_mc_private {
+struct byt_max98090_private {
 	struct snd_soc_jack jack;
 };
 
-static const struct snd_soc_dapm_widget byt_dapm_widgets[] = {
+static const struct snd_soc_dapm_widget byt_max98090_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Int Mic", NULL),
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
 };
 
-static const struct snd_soc_dapm_route byt_audio_map[] = {
+static const struct snd_soc_dapm_route byt_max98090_audio_map[] = {
 	{"IN34", NULL, "Headset Mic"},
 	{"IN34", NULL, "MICBIAS"},
 	{"MICBIAS", NULL, "Headset Mic"},
@@ -48,15 +48,15 @@ static const struct snd_soc_dapm_route byt_audio_map[] = {
 	{"Ext Spk", NULL, "SPKR"},
 };
 
-static const struct snd_kcontrol_new byt_mc_controls[] = {
+static const struct snd_kcontrol_new byt_max98090_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Headphone"),
 	SOC_DAPM_PIN_SWITCH("Headset Mic"),
 	SOC_DAPM_PIN_SWITCH("Int Mic"),
 	SOC_DAPM_PIN_SWITCH("Ext Spk"),
 };
 
-static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
-			     struct snd_pcm_hw_params *params)
+static int byt_max98090_hw_params(struct snd_pcm_substream *substream,
+				  struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
@@ -109,21 +109,21 @@ static struct snd_soc_jack_gpio hs_jack_gpios[] = {
 	},
 };
 
-static int byt_init(struct snd_soc_pcm_runtime *runtime)
+static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 {
 	int ret;
 	struct snd_soc_codec *codec = runtime->codec;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_card *card = runtime->card;
-	struct byt_mc_private *drv = snd_soc_card_get_drvdata(card);
+	struct byt_max98090_private *drv = snd_soc_card_get_drvdata(card);
 	struct snd_soc_jack *jack = &drv->jack;
 	struct gpio_desc *mic_desc;
 	struct gpio_desc *hp_desc;
 
 	card->dapm.idle_bias_off = true;
 
-	ret = snd_soc_add_card_controls(card, byt_mc_controls,
-					ARRAY_SIZE(byt_mc_controls));
+	ret = snd_soc_add_card_controls(card, byt_max98090_controls,
+					ARRAY_SIZE(byt_max98090_controls));
 	if (ret) {
 		dev_err(card->dev, "unable to add card controls\n");
 		return ret;
@@ -180,11 +180,11 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	return ret;
 }
 
-static struct snd_soc_ops byt_aif1_ops = {
-	.hw_params = byt_aif1_hw_params,
+static struct snd_soc_ops byt_max98090_ops = {
+	.hw_params = byt_max98090_hw_params,
 };
 
-static struct snd_soc_dai_link byt_dailink[] = {
+static struct snd_soc_dai_link byt_max98090_dais[] = {
 	{
 		.name = "Baytrail Audio",
 		.stream_name = "Audio",
@@ -192,8 +192,8 @@ static struct snd_soc_dai_link byt_dailink[] = {
 		.codec_dai_name = "HiFi",
 		.codec_name = "i2c-193C9890:00",
 		.platform_name = "baytrail-pcm-audio",
-		.init = byt_init,
-		.ops = &byt_aif1_ops,
+		.init = byt_max98090_init,
+		.ops = &byt_max98090_ops,
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 	},
@@ -201,14 +201,14 @@ static struct snd_soc_dai_link byt_dailink[] = {
 
 static struct snd_soc_card snd_soc_card_byt = {
 	.name = "byt-max98090",
-	.dai_link = byt_dailink,
-	.num_links = ARRAY_SIZE(byt_dailink),
-	.dapm_widgets = byt_dapm_widgets,
-	.num_dapm_widgets = ARRAY_SIZE(byt_dapm_widgets),
-	.dapm_routes = byt_audio_map,
-	.num_dapm_routes = ARRAY_SIZE(byt_audio_map),
-	.controls = byt_mc_controls,
-	.num_controls = ARRAY_SIZE(byt_mc_controls),
+	.dai_link = byt_max98090_dais,
+	.num_links = ARRAY_SIZE(byt_max98090_dais),
+	.dapm_widgets = byt_max98090_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(byt_max98090_widgets),
+	.dapm_routes = byt_max98090_audio_map,
+	.num_dapm_routes = ARRAY_SIZE(byt_max98090_audio_map),
+	.controls = byt_max98090_controls,
+	.num_controls = ARRAY_SIZE(byt_max98090_controls),
 };
 
 #ifdef CONFIG_PM_SLEEP
@@ -222,10 +222,10 @@ static const struct dev_pm_ops byt_max98090_pm_ops = {
 #define BYT_MAX98090_PM_OPS	NULL
 #endif
 
-static int snd_byt_mc_probe(struct platform_device *pdev)
+static int byt_max98090_probe(struct platform_device *pdev)
 {
 	int ret_val = 0;
-	struct byt_mc_private *drv;
+	struct byt_max98090_private *drv;
 
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_ATOMIC);
 	if (!drv) {
@@ -247,10 +247,10 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	return ret_val;
 }
 
-static int snd_byt_mc_remove(struct platform_device *pdev)
+static int byt_max98090_remove(struct platform_device *pdev)
 {
 	struct snd_soc_card *soc_card = platform_get_drvdata(pdev);
-	struct byt_mc_private *drv = snd_soc_card_get_drvdata(soc_card);
+	struct byt_max98090_private *drv = snd_soc_card_get_drvdata(soc_card);
 
 	snd_soc_jack_free_gpios(&drv->jack, ARRAY_SIZE(hs_jack_gpios),
 				hs_jack_gpios);
@@ -261,16 +261,16 @@ static int snd_byt_mc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver snd_byt_mc_driver = {
-	.probe = snd_byt_mc_probe,
-	.remove = snd_byt_mc_remove,
+static struct platform_driver byt_max98090_driver = {
+	.probe = byt_max98090_probe,
+	.remove = byt_max98090_remove,
 	.driver = {
 		.name = "byt-max98090",
 		.owner = THIS_MODULE,
 		.pm = BYT_MAX98090_PM_OPS,
 	},
 };
-module_platform_driver(snd_byt_mc_driver)
+module_platform_driver(byt_max98090_driver)
 
 MODULE_DESCRIPTION("ASoC Intel(R) Baytrail Machine driver");
 MODULE_AUTHOR("Omair Md Abdullah, Jarkko Nikula");
