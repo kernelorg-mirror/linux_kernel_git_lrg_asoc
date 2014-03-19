@@ -173,7 +173,7 @@ static struct snd_soc_dai_link byt_max98090_dais[] = {
 	},
 };
 
-static struct snd_soc_card snd_soc_card_byt = {
+static struct snd_soc_card byt_max98090_card = {
 	.name = "byt-max98090",
 	.dai_link = byt_max98090_dais,
 	.num_links = ARRAY_SIZE(byt_max98090_dais),
@@ -208,15 +208,15 @@ static int byt_max98090_probe(struct platform_device *pdev)
 	}
 
 	/* register the soc card */
-	snd_soc_card_byt.dev = &pdev->dev;
-	snd_soc_card_set_drvdata(&snd_soc_card_byt, drv);
-	ret_val = snd_soc_register_card(&snd_soc_card_byt);
+	byt_max98090_card.dev = &pdev->dev;
+	snd_soc_card_set_drvdata(&byt_max98090_card, drv);
+	ret_val = snd_soc_register_card(&byt_max98090_card);
 	if (ret_val) {
 		dev_err(&pdev->dev,
 			"snd_soc_register_card failed %d\n", ret_val);
 		return ret_val;
 	}
-	platform_set_drvdata(pdev, &snd_soc_card_byt);
+	platform_set_drvdata(pdev, &byt_max98090_card);
 
 	return ret_val;
 }
