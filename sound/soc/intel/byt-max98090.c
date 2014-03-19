@@ -55,28 +55,6 @@ static const struct snd_kcontrol_new byt_max98090_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Ext Spk"),
 };
 
-static int byt_max98090_hw_params(struct snd_pcm_substream *substream,
-				  struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_card *card = rtd->card;
-	int ret;
-
-	/*
-	 * The particular clock id specified below does not matter since the
-	 * max98090 driver ignores it.
-	 */
-	ret = snd_soc_dai_set_sysclk(codec_dai, M98090_REG_SYSTEM_CLOCK,
-				     19200000, SND_SOC_CLOCK_IN);
-	if (ret < 0) {
-		dev_err(card->dev, "Can't set codec clock %d\n", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static struct snd_soc_jack_pin hs_jack_pins[] = {
 	{
 		.pin	= "Headphone",
@@ -126,6 +104,14 @@ static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 					ARRAY_SIZE(byt_max98090_controls));
 	if (ret) {
 		dev_err(card->dev, "unable to add card controls\n");
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(runtime->codec_dai,
+				     M98090_REG_SYSTEM_CLOCK,
+				     19200000, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(card->dev, "Can't set codec clock %d\n", ret);
 		return ret;
 	}
 
@@ -180,10 +166,6 @@ static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 	return ret;
 }
 
-static struct snd_soc_ops byt_max98090_ops = {
-	.hw_params = byt_max98090_hw_params,
-};
-
 static struct snd_soc_dai_link byt_max98090_dais[] = {
 	{
 		.name = "Baytrail Audio",
@@ -193,7 +175,6 @@ static struct snd_soc_dai_link byt_max98090_dais[] = {
 		.codec_name = "i2c-193C9890:00",
 		.platform_name = "baytrail-pcm-audio",
 		.init = byt_max98090_init,
-		.ops = &byt_max98090_ops,
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 	},
