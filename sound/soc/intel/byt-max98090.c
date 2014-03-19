@@ -163,19 +163,19 @@ static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 		return ret;
 
 	ret = snd_soc_jack_add_pins(jack, ARRAY_SIZE(hs_jack_pins),
-					hs_jack_pins);
+				    hs_jack_pins);
 	if (ret)
 		return ret;
 
 	snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S, M98090_IJDET_MASK,
-				1 << M98090_IJDET_SHIFT);
+			    1 << M98090_IJDET_SHIFT);
 
 	snd_soc_jack_report(jack, SND_JACK_LINEOUT | SND_JACK_LINEIN,
-				SND_JACK_HEADSET | SND_JACK_LINEOUT |
-				SND_JACK_LINEIN);
+			    SND_JACK_HEADSET | SND_JACK_LINEOUT |
+			    SND_JACK_LINEIN);
 
 	ret = snd_soc_jack_add_gpios(jack, ARRAY_SIZE(hs_jack_gpios),
-					hs_jack_gpios);
+				     hs_jack_gpios);
 
 	return ret;
 }
