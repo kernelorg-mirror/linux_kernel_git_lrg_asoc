@@ -12,8 +12,6 @@
  * more details.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -62,9 +60,8 @@ static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_card *card = rtd->card;
 	int ret;
-
-	pr_debug("Enter:%s", __func__);
 
 	/*
 	 * The particular clock id specified below does not matter since the
@@ -73,7 +70,7 @@ static int byt_aif1_hw_params(struct snd_pcm_substream *substream,
 	ret = snd_soc_dai_set_sysclk(codec_dai, M98090_REG_SYSTEM_CLOCK,
 				     19200000, SND_SOC_CLOCK_IN);
 	if (ret < 0) {
-		dev_err(codec_dai->dev, "Can't set codec clock %d\n", ret);
+		dev_err(card->dev, "Can't set codec clock %d\n", ret);
 		return ret;
 	}
 
@@ -123,13 +120,12 @@ static int byt_init(struct snd_soc_pcm_runtime *runtime)
 	struct gpio_desc *mic_desc;
 	struct gpio_desc *hp_desc;
 
-	pr_debug("Enter:%s", __func__);
 	card->dapm.idle_bias_off = true;
 
 	ret = snd_soc_add_card_controls(card, byt_mc_controls,
 					ARRAY_SIZE(byt_mc_controls));
 	if (ret) {
-		pr_err("unable to add card controls\n");
+		dev_err(card->dev, "unable to add card controls\n");
 		return ret;
 	}
 
@@ -231,11 +227,9 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	int ret_val = 0;
 	struct byt_mc_private *drv;
 
-	pr_debug("Entry %s\n", __func__);
-
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_ATOMIC);
 	if (!drv) {
-		pr_err("allocation failed\n");
+		dev_err(&pdev->dev, "allocation failed\n");
 		return -ENOMEM;
 	}
 
@@ -244,11 +238,12 @@ static int snd_byt_mc_probe(struct platform_device *pdev)
 	snd_soc_card_set_drvdata(&snd_soc_card_byt, drv);
 	ret_val = snd_soc_register_card(&snd_soc_card_byt);
 	if (ret_val) {
-		pr_err("snd_soc_register_card failed %d\n", ret_val);
+		dev_err(&pdev->dev,
+			"snd_soc_register_card failed %d\n", ret_val);
 		return ret_val;
 	}
 	platform_set_drvdata(pdev, &snd_soc_card_byt);
-	pr_info("%s successful\n", __func__);
+
 	return ret_val;
 }
 
@@ -257,7 +252,6 @@ static int snd_byt_mc_remove(struct platform_device *pdev)
 	struct snd_soc_card *soc_card = platform_get_drvdata(pdev);
 	struct byt_mc_private *drv = snd_soc_card_get_drvdata(soc_card);
 
-	pr_debug("In %s\n", __func__);
 	snd_soc_jack_free_gpios(&drv->jack, ARRAY_SIZE(hs_jack_gpios),
 				hs_jack_gpios);
 
