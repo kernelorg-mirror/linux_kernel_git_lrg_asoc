@@ -1180,8 +1180,8 @@ static const struct snd_soc_dapm_widget max98090_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("MICBIAS", M98090_REG_INPUT_ENABLE,
 		M98090_MBEN_SHIFT, 0, NULL, 0),
-	SND_SOC_DAPM_SUPPLY("SHDN", M98090_REG_DEVICE_SHUTDOWN,
-		M98090_SHDNN_SHIFT, 0, NULL, 0),
+	//SND_SOC_DAPM_SUPPLY("SHDN", M98090_REG_DEVICE_SHUTDOWN,
+	//	M98090_SHDNN_SHIFT, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("SDIEN", M98090_REG_IO_CONFIGURATION,
 		M98090_SDIEN_SHIFT, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("SDOEN", M98090_REG_IO_CONFIGURATION,
@@ -1818,7 +1818,8 @@ static int max98090_set_bias_level(struct snd_soc_codec *codec,
 				   enum snd_soc_bias_level level)
 {
 	struct max98090_priv *max98090 = snd_soc_codec_get_drvdata(codec);
-	int ret;
+	int ret, i;
+	unsigned int pll;
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
@@ -1832,6 +1833,29 @@ static int max98090_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_PREPARE:
+		if (codec->dapm.bias_level != SND_SOC_BIAS_ON) {
+			for (i = 0; i < 10; i ++) {
+
+				/* unmask the PLL interrupt */
+				snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S,
+					M98090_IULK_MASK, 0);
+
+				/* toggle shutdown OFF then ON */
+				snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+					M98090_SHDNN_MASK, 0);
+				snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+					M98090_SHDNN_MASK, M98090_SHDNN_MASK);
+				ret = regmap_read(max98090->regmap,
+					M98090_REG_DEVICE_STATUS, &pll);
+				if (!(pll & M98090_ULK_MASK))
+					break;
+			}
+			/* unmask the PLL interrupt */
+			snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S,
+				M98090_IULK_MASK, 1 << M98090_IULK_SHIFT);
+
+			dev_err(codec->dev, "PLL after bias active fix %d is  0x%x\n", i, pll);
+		}
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
@@ -1842,6 +1866,9 @@ static int max98090_set_bias_level(struct snd_soc_codec *codec,
 					"Failed to sync cache: %d\n", ret);
 				return ret;
 			}
+		} else {
+			snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+				M98090_SHDNN_MASK, 0);
 		}
 		break;
 
@@ -2090,9 +2117,9 @@ static irqreturn_t max98090_interrupt(int irq, void *data)
 {
 	struct snd_soc_codec *codec = data;
 	struct max98090_priv *max98090 = snd_soc_codec_get_drvdata(codec);
-	int ret;
+	int ret, i;
 	unsigned int mask;
-	unsigned int active;
+	unsigned int active, pll;
 
 	dev_dbg(codec->dev, "***** max98090_interrupt *****\n");
 
@@ -2128,9 +2155,35 @@ static irqreturn_t max98090_interrupt(int irq, void *data)
 	if (active & M98090_SLD_MASK)
 		dev_dbg(codec->dev, "M98090_SLD_MASK\n");
 
-	if (active & M98090_ULK_MASK)
-		dev_err(codec->dev, "M98090_ULK_MASK\n");
+	if (active & M98090_ULK_MASK) {
+		/* try and recover immediately to minimise audio artifacts
+		  may have to move this to workq when issue resolved */
+		if (!codec->active)
+			goto jack;
 
+		for (i = 0; i < 10; i ++) {
+
+			/* mask the PLL interrupt */
+			snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S,
+				M98090_IULK_MASK, 0);
+
+			/* toggle shutdown OFF then ON */
+			snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+				M98090_SHDNN_MASK, 0);
+			snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
+				M98090_SHDNN_MASK, M98090_SHDNN_MASK);
+			ret = regmap_read(max98090->regmap,
+				M98090_REG_DEVICE_STATUS, &pll);
+			if (!(pll & M98090_ULK_MASK))
+				break;
+		}
+		/* unmask the PLL interrupt */
+		snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S,
+			M98090_IULK_MASK, 1 << M98090_IULK_SHIFT);
+		dev_err(codec->dev, "PLL after IRQ active fix %d is  0x%x\n", i, pll);
+	}
+
+jack:
 	if (active & M98090_JDET_MASK) {
 		dev_dbg(codec->dev, "M98090_JDET_MASK\n");
 
