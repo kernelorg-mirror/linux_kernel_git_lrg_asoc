@@ -146,8 +146,10 @@ static int byt_max98090_init(struct snd_soc_pcm_runtime *runtime)
 	if (ret)
 		return ret;
 
-	snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S, M98090_IJDET_MASK,
-			    1 << M98090_IJDET_SHIFT);
+	/* enabled codec jack and PLL interrupts */
+	snd_soc_update_bits(codec, M98090_REG_INTERRUPT_S,
+		M98090_IJDET_MASK | M98090_IULK_MASK,
+		1 << M98090_IJDET_SHIFT | 1 << M98090_IULK_SHIFT);
 
 	snd_soc_jack_report(jack, SND_JACK_LINEOUT | SND_JACK_LINEIN,
 			    SND_JACK_HEADSET | SND_JACK_LINEOUT |
