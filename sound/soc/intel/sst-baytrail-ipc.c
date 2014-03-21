@@ -122,6 +122,26 @@ struct sst_byt_tstamp {
 	u32 channel_peak[8];
 } __packed;
 
+struct sst_byt_fw_version {
+	u8 build;
+	u8 minor;
+	u8 major;
+	u8 type;
+} __packed;
+
+struct sst_byt_fw_build_info {
+	unsigned char date[16];
+	unsigned char time[16];
+} __packed;
+
+struct sst_byt_fw_init {
+	struct sst_byt_fw_version fw_version;
+	struct sst_byt_fw_build_info build_info;
+	u16 result;
+	u8 module_id;
+	u8 debug_info;
+} __packed;
+
 /* driver internal IPC message structure */
 struct ipc_message {
 	struct list_head list;
@@ -479,7 +499,17 @@ static int sst_byt_process_reply(struct sst_byt *byt, u64 header)
 
 static void sst_byt_fw_ready(struct sst_byt *byt, u64 header)
 {
+	struct sst_byt_fw_init init;
+
 	dev_dbg(byt->dev, "ipc: DSP is ready 0x%llX\n", header);
+
+	sst_dsp_inbox_read(byt->dsp, &init, sizeof(init));
+	dev_info(byt->dev, "FW version %02x.%02x.%02x.%02x\n",
+		 init.fw_version.major, init.fw_version.minor,
+		 init.fw_version.build, init.fw_version.type);
+	dev_info(byt->dev, "Build Type %x\n", init.fw_version.type);
+	dev_info(byt->dev, "Build date %s Time %s\n",
+		 init.build_info.date, init.build_info.time);
 
 	byt->boot_complete = true;
 	wake_up(&byt->boot_wait);
