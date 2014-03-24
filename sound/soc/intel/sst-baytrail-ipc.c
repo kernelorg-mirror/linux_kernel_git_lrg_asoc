@@ -531,7 +531,7 @@ static void sst_byt_fw_ready(struct sst_byt *byt, u64 header)
 		 init.fw_version.major, init.fw_version.minor,
 		 init.fw_version.build, init.fw_version.type);
 	dev_info(byt->dev, "Build Type %x\n", init.fw_version.type);
-	dev_info(byt->dev, "Build date %s Time %s\n",
+	dev_info(byt->dev, "Build date %s %s\n",
 		 init.build_info.date, init.build_info.time);
 
 	byt->boot_complete = true;
