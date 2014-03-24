@@ -522,17 +522,7 @@ static int sst_byt_process_reply(struct sst_byt *byt, u64 header)
 
 static void sst_byt_fw_ready(struct sst_byt *byt, u64 header)
 {
-	struct sst_byt_fw_init init;
-
 	dev_dbg(byt->dev, "ipc: DSP is ready 0x%llX\n", header);
-
-	sst_dsp_inbox_read(byt->dsp, &init, sizeof(init));
-	dev_info(byt->dev, "FW version: %02x.%02x.%02x.%02x\n",
-		 init.fw_version.major, init.fw_version.minor,
-		 init.fw_version.build, init.fw_version.type);
-	dev_info(byt->dev, "Build type: %x\n", init.fw_version.type);
-	dev_info(byt->dev, "Build date: %s %s\n",
-		 init.build_info.date, init.build_info.time);
 
 	byt->boot_complete = true;
 	wake_up(&byt->boot_wait);
@@ -856,6 +846,7 @@ int sst_byt_dsp_init(struct device *dev, struct sst_pdata *pdata)
 {
 	struct sst_byt *byt;
 	struct sst_fw *byt_sst_fw;
+	struct sst_byt_fw_init init;
 	int err;
 
 	dev_dbg(dev, "initialising Byt DSP IPC\n");
@@ -916,6 +907,15 @@ int sst_byt_dsp_init(struct device *dev, struct sst_pdata *pdata)
 		dev_err(byt->dev, "ipc: error DSP boot timeout\n");
 		goto boot_err;
 	}
+
+	/* show firmware information */
+	sst_dsp_inbox_read(byt->dsp, &init, sizeof(init));
+	dev_info(byt->dev, "FW version: %02x.%02x.%02x.%02x\n",
+		 init.fw_version.major, init.fw_version.minor,
+		 init.fw_version.build, init.fw_version.type);
+	dev_info(byt->dev, "Build type: %x\n", init.fw_version.type);
+	dev_info(byt->dev, "Build date: %s %s\n",
+		 init.build_info.date, init.build_info.time);
 
 	pdata->dsp = byt;
 	byt->fw = byt_sst_fw;
