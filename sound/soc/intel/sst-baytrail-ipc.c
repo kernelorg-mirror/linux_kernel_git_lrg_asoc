@@ -527,11 +527,11 @@ static void sst_byt_fw_ready(struct sst_byt *byt, u64 header)
 	dev_dbg(byt->dev, "ipc: DSP is ready 0x%llX\n", header);
 
 	sst_dsp_inbox_read(byt->dsp, &init, sizeof(init));
-	dev_info(byt->dev, "FW version %02x.%02x.%02x.%02x\n",
+	dev_info(byt->dev, "FW version: %02x.%02x.%02x.%02x\n",
 		 init.fw_version.major, init.fw_version.minor,
 		 init.fw_version.build, init.fw_version.type);
-	dev_info(byt->dev, "Build Type %x\n", init.fw_version.type);
-	dev_info(byt->dev, "Build date %s %s\n",
+	dev_info(byt->dev, "Build type: %x\n", init.fw_version.type);
+	dev_info(byt->dev, "Build date: %s %s\n",
 		 init.build_info.date, init.build_info.time);
 
 	byt->boot_complete = true;
