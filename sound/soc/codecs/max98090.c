@@ -2086,7 +2086,6 @@ static void max98090_pll_work(struct work_struct *work)
 		struct max98090_priv,
 		pll_work);
 	struct snd_soc_codec *codec = max98090->codec;
-	unsigned int pll;
 
 	dev_err(codec->dev, "PLL unlocked\n");
 
@@ -2097,12 +2096,12 @@ static void max98090_pll_work(struct work_struct *work)
 	snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
 		M98090_SHDNN_MASK, 0);
 
-	msleep(50);
+	msleep(2);
 	snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
 		M98090_SHDNN_MASK, M98090_SHDNN_MASK);
 
 	/* give PLL time to lock */
-	msleep(10);
+	msleep(2);
 }
 
 static irqreturn_t max98090_interrupt(int irq, void *data)
