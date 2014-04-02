@@ -2089,12 +2089,12 @@ static void max98090_pll_work(struct work_struct *work)
 	snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
 		M98090_SHDNN_MASK, 0);
 
-	msleep(2);
+	msleep(50);
 	snd_soc_update_bits(codec, M98090_REG_DEVICE_SHUTDOWN,
 		M98090_SHDNN_MASK, M98090_SHDNN_MASK);
 
 	/* give PLL time to lock */
-	msleep(2);
+	msleep(10);
 }
 
 static irqreturn_t max98090_interrupt(int irq, void *data)
