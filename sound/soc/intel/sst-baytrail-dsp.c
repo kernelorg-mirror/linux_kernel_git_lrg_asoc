@@ -23,6 +23,8 @@
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
 
+#include <uapi/linux/elf.h>
+
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
 #include "sst-baytrail-ipc.h"
@@ -33,6 +35,13 @@
 #define SST_BYT_IRAM_OFFSET	0xC0000
 #define SST_BYT_DRAM_OFFSET	0x100000
 #define SST_BYT_SHIM_OFFSET	0x140000
+
+#define SST_BYT_IRAM_PHY_START	0xff2c0000
+#define SST_BYT_IRAM_PHY_END	0xff2d4000 /* 0x14000 - 81k differs from doc */
+#define SST_BYT_DRAM_PHY_START	0xff300000
+#define SST_BYT_DRAM_PHY_END	0xff320000 /* 128k */
+#define SST_BYT_IMR_VIRT_START	0xc0000000 /* virtual addr in LPE */
+#define SST_BYT_IMR_VIRT_END	0xc01fffff /* 2Mb */
 
 enum sst_ram_type {
 	SST_BYT_IRAM	= 1,
@@ -62,6 +71,107 @@ struct sst_byt_fw_module_header {
 	u32 type; /* codec type, pp lib */
 	u32 entry_point;
 };
+
+static inline int sst_validate_elf(struct sst_dsp *dsp, struct sst_fw *sst_fw)
+{
+	Elf32_Ehdr *elf;
+
+	elf = (Elf32_Ehdr *)sst_fw->dma_buf;
+
+	if ((elf->e_ident[0] != 0x7F) || (elf->e_ident[1] != 'E') ||
+	    (elf->e_ident[2] != 'L') || (elf->e_ident[3] != 'F')) {
+		dev_err(dsp->dev, "ELF Header Not found! %d\n", sst_fw->size);
+		return -EINVAL;
+	}
+
+	dev_dbg(dsp->dev, "Valid ELF Header...%d\n", sst_fw->size);
+	return 0;
+}
+
+static int sst_byt_parse_elf_module(struct sst_dsp *dsp, struct sst_fw *fw,
+				Elf32_Ehdr *elf, Elf32_Phdr *pr)
+{
+	struct sst_module *mod;
+	struct sst_module_data block_data;
+	struct sst_module_template template;
+
+
+	if (pr->p_filesz == 0)
+		return 0;
+
+	if ((pr->p_paddr >= SST_BYT_IRAM_PHY_START) &&
+	    (pr->p_paddr < SST_BYT_IRAM_PHY_END)) {
+
+		block_data.offset = dsp->addr.iram_offset +
+			(pr->p_paddr - SST_BYT_IRAM_PHY_START);
+
+		printk(KERN_ERR "PHY IRAM 0x%x iram off 0x%x offset 0x%x\n",
+			pr->p_paddr, dsp->addr.iram_offset, block_data.offset);
+		block_data.type = SST_MEM_IRAM;
+	} else if ((pr->p_paddr >= SST_BYT_DRAM_PHY_START) &&
+		 (pr->p_paddr < SST_BYT_DRAM_PHY_END)) {
+
+		block_data.offset = dsp->addr.dram_offset +
+			(pr->p_paddr - SST_BYT_DRAM_PHY_START);
+
+		printk(KERN_ERR "PHY DRAM 0x%x dram off 0x%x offset 0x%x\n",
+			pr->p_paddr, dsp->addr.dram_offset, block_data.offset);
+		block_data.type = SST_MEM_DRAM;
+	} else if ((pr->p_paddr >= SST_BYT_IMR_VIRT_START) &&
+		 (pr->p_paddr < SST_BYT_IMR_VIRT_END)) {
+		block_data.offset = (dsp->addr.fw_ext - dsp->addr.lpe) +
+			(pr->p_paddr - SST_BYT_IMR_VIRT_START);
+
+		printk(KERN_ERR "VIRT IRAM 0x%x iram off 0x%x offset 0x%x\n",
+			pr->p_paddr, (dsp->addr.fw_ext - dsp->addr.lpe), block_data.offset);
+		block_data.type = SST_MEM_IRAM;
+
+	} else {
+		dev_err(dsp->dev, "wrong ram type 0x%x at 0x%x\n",
+			pr->p_type, pr->p_paddr);
+		return -EINVAL;
+	}
+
+	memset(&template, 0, sizeof(template));
+	template.id = block_data.type;
+	template.entry = 0;//module->entry_point;
+	template.p.type = SST_MEM_DRAM;
+	template.p.data_type = SST_DATA_P;
+	template.s.type = SST_MEM_DRAM;
+	template.s.data_type = SST_DATA_S;
+
+	mod = sst_module_new(fw, &template, NULL);
+	if (mod == NULL)
+		return -ENOMEM;
+
+
+	block_data.size = pr->p_filesz;
+	block_data.data_type = SST_DATA_M;
+	block_data.data = (void *)elf + pr->p_offset;
+	printk(KERN_ERR "  -> copy to offset 0x%x size 0x%x\n",
+		block_data.offset, block_data.size);
+	sst_module_insert_fixed_block(mod, &block_data);
+
+	return 0;
+}
+
+static int
+sst_parse_elf_fw_memcpy(struct sst_dsp *sst, struct sst_fw *sst_fw)
+{
+	Elf32_Ehdr *elf;
+	Elf32_Phdr *pr;
+	int i = 0;
+
+	elf = (Elf32_Ehdr *)sst_fw->dma_buf;
+	pr = (Elf32_Phdr *) (sst_fw->dma_buf + elf->e_phoff);
+
+	while (i < elf->e_phnum) {
+		if (pr[i].p_type == PT_LOAD)
+			sst_byt_parse_elf_module(sst, sst_fw, elf, &pr[i]);
+		i++;
+	}
+	return 0;
+}
 
 static int sst_byt_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 				struct sst_byt_fw_module_header *module)
@@ -159,6 +269,24 @@ static int sst_byt_parse_fw_image(struct sst_fw *sst_fw)
 		}
 		module = (void *)module + sizeof(*module) + module->mod_size;
 	}
+
+	return 0;
+}
+
+static int sst_byt_parse_fw_elf_image(struct sst_fw *sst_fw)
+{
+	struct sst_dsp *dsp = sst_fw->dsp;
+	int ret;
+
+	/* verify FW */
+	ret = sst_validate_elf(dsp, sst_fw);
+	if (ret < 0) {
+		dev_err(dsp->dev, "invalid fw format\n");
+		return ret;
+	}
+
+	/* prepare for memcpy */
+	sst_parse_elf_fw_memcpy(dsp, sst_fw);
 
 	return 0;
 }
@@ -265,11 +393,17 @@ struct sst_adsp_memregion {
 	enum sst_mem_type type;
 };
 
+#if 0
 /* BYT test stuff */
 static const struct sst_adsp_memregion byt_region[] = {
 	{0xC0000, 0x100000, 8, SST_MEM_IRAM}, /* I-SRAM - 8 * 32kB */
 	{0x100000, 0x140000, 8, SST_MEM_DRAM}, /* D-SRAM0 - 8 * 32kB */
 };
+#else
+static const struct sst_adsp_memregion byt_region[] = {
+	{0x00000, 0x1fffff, 1, SST_MEM_IRAM}, /* DDR 2MB */
+};
+#endif
 
 static int sst_byt_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 {
@@ -372,10 +506,11 @@ static int sst_byt_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 	/* register DSP memory blocks - ideally we should get this from ACPI */
 	for (i = 0; i < region_count; i++) {
 		offset = region[i].start;
-		size = (region[i].end - region[i].start) / region[i].blocks;
+		size = ((region[i].end - region[i].start) / region[i].blocks) + 1;
 
 		/* register individual memory blocks */
 		for (j = 0; j < region[i].blocks; j++) {
+printk(KERN_ERR "register block %d offset 0x%x size 0x%x\n", j, offset, size);
 			sst_mem_block_register(sst, offset, size,
 					       region[i].type, NULL, j, sst);
 			offset += size;
@@ -405,6 +540,6 @@ struct sst_ops sst_byt_ops = {
 	.irq_handler = sst_byt_irq,
 	.init = sst_byt_init,
 	.free = sst_byt_free,
-	.parse_fw = sst_byt_parse_fw_image,
+	.parse_fw = sst_byt_parse_fw_elf_image,
 	.dump = sst_byt_dump_shim,
 };

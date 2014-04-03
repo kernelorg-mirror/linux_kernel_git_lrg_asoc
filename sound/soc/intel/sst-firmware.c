@@ -430,7 +430,7 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 	int ret;
 
 	mutex_lock(&dsp->mutex);
-
+#if 0
 	/* alloc blocks that includes this section */
 	ret = block_alloc_fixed(module, data);
 	if (ret < 0) {
@@ -447,7 +447,7 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 		dev_err(dsp->dev, "error: fw module prepare failed\n");
 		goto err;
 	}
-
+#endif
 	/* copy partial module data to blocks */
 	sst_memcpy32(dsp->addr.lpe + data->offset, data->data, data->size);
 
