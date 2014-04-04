@@ -46,6 +46,10 @@ struct sst_acpi_desc {
 	int resindex_fw_base;
 	int irqindex_host_ipc;
 	int resindex_dma_base;
+	int resindex_iram_base;
+	int resindex_dram_base;
+	int resindex_mailbox_base;
+
 	/* Unique number identifying the SST core on platform */
 	int sst_id;
 	/* DMA only valid when resindex_dma_base != -1*/
@@ -177,6 +181,24 @@ static int sst_acpi_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (desc->resindex_dram_base >= 0) {
+		mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+					     desc->resindex_dram_base);
+		if (mmio) {
+			sst_pdata->dram_base = mmio->start;
+			sst_pdata->dram_size = resource_size(mmio);
+		}
+	}
+
+	if (desc->resindex_iram_base >= 0) {
+		mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+					     desc->resindex_iram_base);
+		if (mmio) {
+			sst_pdata->iram_base = mmio->start;
+			sst_pdata->iram_size = resource_size(mmio);
+		}
+	}
+
 	platform_set_drvdata(pdev, sst_acpi);
 
 	/* register machine driver */
@@ -253,9 +275,11 @@ static struct sst_acpi_mach baytrail_machines[] = {
 static struct sst_acpi_desc sst_acpi_baytrail_desc = {
 	.drv_name = "baytrail-pcm-audio",
 	.machines = baytrail_machines,
-	.resindex_lpe_base = 0,
-	.resindex_pcicfg_base = 1,
-	.resindex_fw_base = 2,
+	.resindex_lpe_base = 0, // DDR base
+	.resindex_pcicfg_base = 1, // SHIM base
+	.resindex_fw_base = 2, // Mailbox
+	.resindex_dram_base = 4,
+	.resindex_iram_base = 3,
 	.irqindex_host_ipc = 5,
 	.sst_id = SST_DEV_ID_BYT,
 	.resindex_dma_base = -1,

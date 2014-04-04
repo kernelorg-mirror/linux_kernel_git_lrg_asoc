@@ -43,6 +43,17 @@
 #define SST_BYT_IMR_VIRT_START	0xc0000000 /* virtual addr in LPE */
 #define SST_BYT_IMR_VIRT_END	0xc01fffff /* 2Mb */
 
+#define SST_BYT_DMA0_PHY_ADDR	0xff298000
+#define SST_BYT_DMA1_PHY_ADDR	0xff29c000
+#define SST_BYT_SSP0_PHY_ADDR	0xff2a0000
+#define SST_BYT_SSP2_PHY_ADDR	0xff2a2000
+
+#ifndef CONFIG_X86_64
+#define MEMCPY_TOIO memcpy_toio
+#else
+#define MEMCPY_TOIO memcpy32_toio
+#endif
+
 enum sst_ram_type {
 	SST_BYT_IRAM	= 1,
 	SST_BYT_DRAM	= 2,
@@ -72,6 +83,22 @@ struct sst_byt_fw_module_header {
 	u32 entry_point;
 };
 
+/**
+ * memcpy32_toio: Copy using writel commands
+ *
+ * This is needed because the hardware does not support
+ * 64-bit moveq insructions while writing to PCI MMIO
+ */
+void memcpy32_toio(void *dst, const void *src, int count)
+{
+	int i;
+	const u32 *src_32 = src;
+	u32 *dst_32 = dst;
+
+	for (i = 0; i < count/sizeof(u32); i++)
+		writel(*src_32++, dst_32++);
+}
+
 static inline int sst_validate_elf(struct sst_dsp *dsp, struct sst_fw *sst_fw)
 {
 	Elf32_Ehdr *elf;
@@ -94,7 +121,7 @@ static int sst_byt_parse_elf_module(struct sst_dsp *dsp, struct sst_fw *fw,
 	struct sst_module *mod;
 	struct sst_module_data block_data;
 	struct sst_module_template template;
-
+	int modsize;
 
 	if (pr->p_filesz == 0)
 		return 0;
@@ -119,11 +146,10 @@ static int sst_byt_parse_elf_module(struct sst_dsp *dsp, struct sst_fw *fw,
 		block_data.type = SST_MEM_DRAM;
 	} else if ((pr->p_paddr >= SST_BYT_IMR_VIRT_START) &&
 		 (pr->p_paddr < SST_BYT_IMR_VIRT_END)) {
-		block_data.offset = (dsp->addr.fw_ext - dsp->addr.lpe) +
-			(pr->p_paddr - SST_BYT_IMR_VIRT_START);
+		block_data.offset = (pr->p_paddr - SST_BYT_IMR_VIRT_START);
 
 		printk(KERN_ERR "VIRT IRAM 0x%x iram off 0x%x offset 0x%x\n",
-			pr->p_paddr, (dsp->addr.fw_ext - dsp->addr.lpe), block_data.offset);
+			pr->p_paddr, 0, block_data.offset);
 		block_data.type = SST_MEM_IRAM;
 
 	} else {
@@ -146,6 +172,9 @@ static int sst_byt_parse_elf_module(struct sst_dsp *dsp, struct sst_fw *fw,
 
 
 	block_data.size = pr->p_filesz;
+	modsize = block_data.size % 4;
+	if (modsize)
+		block_data.size += modsize; 
 	block_data.data_type = SST_DATA_M;
 	block_data.data = (void *)elf + pr->p_offset;
 	printk(KERN_ERR "  -> copy to offset 0x%x size 0x%x\n",
@@ -153,6 +182,132 @@ static int sst_byt_parse_elf_module(struct sst_dsp *dsp, struct sst_fw *fw,
 	sst_module_insert_fixed_block(mod, &block_data);
 
 	return 0;
+}
+
+struct sst_ssp_platform_cfg {
+	u8 ssp_cfg_sst;
+	u8 port_number;
+	u8 is_master;
+	u8 pack_mode;
+	u8 num_slots_per_frame;
+	u8 num_bits_per_slot;
+	u8 active_tx_map;
+	u8 active_rx_map;
+	u8 ssp_frame_format;
+	u8 frame_polarity;
+	u8 serial_bitrate_clk_mode;
+	u8 frame_sync_width;
+	u8 dma_handshake_interface_tx;
+	u8 dma_handshake_interface_rx;
+	u8 network_mode;
+	u8 start_delay;
+	u32 ssp_base_add;
+} __packed;
+
+#define SST_MAX_SSP_PORTS 4
+#define SST_MAX_DMA 2
+
+struct sst_board_config_data {
+	struct sst_ssp_platform_cfg ssp_platform_data[SST_MAX_SSP_PORTS];
+	u8 active_ssp_ports;
+	u8 platform_id;
+	u8 board_id;
+	u8 ihf_num_chan;
+	u32 osc_clk_freq;
+} __packed;
+
+
+struct sst_platform_config_data {
+	u32 sst_sram_buff_base;
+	u32 sst_dma_base[SST_MAX_DMA];
+} __packed;
+
+struct sst_fill_config {
+	u32 sign;
+	struct sst_board_config_data sst_bdata;
+	struct sst_platform_config_data sst_pdata;
+	u32 shim_phy_add;
+	u32 mailbox_add;
+} __packed;
+
+static const struct sst_platform_config_data sst_byt_pdata = {
+	.sst_sram_buff_base	= 0xffffffff,
+	.sst_dma_base[0]	= SST_BYT_DMA0_PHY_ADDR,
+	.sst_dma_base[1]	= SST_BYT_DMA1_PHY_ADDR,
+};
+
+static const struct sst_board_config_data sst_byt_rvp_bdata = {
+	.active_ssp_ports = 1,
+	.platform_id = 3,
+	.board_id = 1,
+	.ihf_num_chan = 2,
+	.osc_clk_freq = 25000000,
+	.ssp_platform_data = {
+		[0] = {
+			.ssp_cfg_sst = 1,
+			.port_number = 2,
+			.is_master = 1,
+			.pack_mode = 1,
+			.num_slots_per_frame = 2,
+			.num_bits_per_slot = 24,
+			.active_tx_map = 3,
+			.active_rx_map = 3,
+			.ssp_frame_format = 3,
+			.frame_polarity = 1,
+			.serial_bitrate_clk_mode = 0,
+			.frame_sync_width = 24,
+			.dma_handshake_interface_tx = 5,
+			.dma_handshake_interface_rx = 4,
+			.network_mode = 0,
+			.start_delay = 1,
+			.ssp_base_add = SST_BYT_SSP2_PHY_ADDR,
+		},
+	},
+};
+
+#define SST_CONFIG_SSP_SIGN 0x7ffe8001
+#define SST_BYT_SHIM_PHY_ADDR	0xff340000
+#define SST_BYT_MBOX_PHY_ADDR	0xff344000
+
+void sst_fill_config(struct sst_dsp *sst, unsigned int offset)
+{
+	struct sst_fill_config sst_config;
+
+	sst_config.sign = SST_CONFIG_SSP_SIGN;
+	memcpy(&sst_config.sst_bdata, &sst_byt_rvp_bdata, sizeof(struct sst_board_config_data));
+	memcpy(&sst_config.sst_pdata, &sst_byt_pdata, sizeof(struct sst_platform_config_data));
+	sst_config.shim_phy_add = SST_BYT_SHIM_PHY_ADDR;
+	sst_config.mailbox_add = SST_BYT_MBOX_PHY_ADDR;
+	MEMCPY_TOIO(sst->addr.dram + offset, &sst_config, sizeof(sst_config));
+
+}
+
+#define MRFLD_FW_VIRTUAL_BASE 0xC0000000
+#define MRFLD_FW_DDR_BASE_OFFSET 0x0
+#define MRFLD_FW_FEATURE_BASE_OFFSET 0x4
+#define MRFLD_FW_BSS_RESET_BIT 0
+
+/*
+ * Writing the DDR physical base to DCCM offset
+ * so that FW can use it to setup TLB
+ */
+static void sst_dccm_config_write(void __iomem *dram_base, unsigned int ddr_base)
+{
+	void __iomem *addr;
+	u32 bss_reset = 0;
+
+	addr = (void __iomem *)(dram_base + MRFLD_FW_DDR_BASE_OFFSET);
+	MEMCPY_TOIO(addr, (void *)&ddr_base, sizeof(u32));
+	bss_reset |= (1 << MRFLD_FW_BSS_RESET_BIT);
+	addr = (void __iomem *)(dram_base + MRFLD_FW_FEATURE_BASE_OFFSET);
+	MEMCPY_TOIO(addr, &bss_reset, sizeof(u32));
+	pr_debug("%s: config written to DCCM\n", __func__);
+}
+
+void sst_post_download_byt(struct sst_dsp *sst)
+{
+	sst_dccm_config_write(sst->addr.dram, sst->addr.lpe_base);
+	sst_fill_config(sst, 2 * sizeof(u32));
 }
 
 static int
@@ -288,6 +443,9 @@ static int sst_byt_parse_fw_elf_image(struct sst_fw *sst_fw)
 	/* prepare for memcpy */
 	sst_parse_elf_fw_memcpy(dsp, sst_fw);
 
+	/* setup config and mailbox */
+	sst_post_download_byt(dsp);
+
 	return 0;
 }
 
@@ -393,35 +551,48 @@ struct sst_adsp_memregion {
 	enum sst_mem_type type;
 };
 
-#if 0
 /* BYT test stuff */
 static const struct sst_adsp_memregion byt_region[] = {
-	{0xC0000, 0x100000, 8, SST_MEM_IRAM}, /* I-SRAM - 8 * 32kB */
-	{0x100000, 0x140000, 8, SST_MEM_DRAM}, /* D-SRAM0 - 8 * 32kB */
+	{0x00000, 0x1fffff, 1, SST_MEM_CACHE}, /* DDR 2MB */
+	{0xC0000, 0x100000, 1, SST_MEM_IRAM}, /* I-SRAM - 8 * 32kB */
+	{0x100000, 0x140000, 1, SST_MEM_DRAM}, /* D-SRAM0 - 8 * 32kB */
 };
-#else
-static const struct sst_adsp_memregion byt_region[] = {
-	{0x00000, 0x1fffff, 1, SST_MEM_IRAM}, /* DDR 2MB */
-};
-#endif
 
 static int sst_byt_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 {
 	sst->addr.lpe_base = pdata->lpe_base;
+printk(KERN_ERR "lpe %p 0x%x\n", pdata->lpe_base, pdata->lpe_size);
 	sst->addr.lpe = ioremap(pdata->lpe_base, pdata->lpe_size);
 	if (!sst->addr.lpe)
 		return -ENODEV;
-
+printk(KERN_ERR "pci %p 0x%x\n", pdata->pcicfg_base, pdata->pcicfg_size);
 	/* ADSP PCI MMIO config space */
 	sst->addr.pci_cfg = ioremap(pdata->pcicfg_base, pdata->pcicfg_size);
 	if (!sst->addr.pci_cfg) {
 		iounmap(sst->addr.lpe);
 		return -ENODEV;
 	}
-
+printk(KERN_ERR "mailbox %p 0x%x\n", pdata->fw_base, pdata->fw_size);
 	/* SST Extended FW allocation */
 	sst->addr.fw_ext = ioremap(pdata->fw_base, pdata->fw_size);
 	if (!sst->addr.fw_ext) {
+		iounmap(sst->addr.pci_cfg);
+		iounmap(sst->addr.lpe);
+		return -ENODEV;
+	}
+printk(KERN_ERR "dram %p 0x%x\n", pdata->dram_base, pdata->dram_size);
+	sst->addr.dram = ioremap(pdata->dram_base, pdata->dram_size);
+	if (!sst->addr.dram) {
+		iounmap(sst->addr.fw_ext);
+		iounmap(sst->addr.pci_cfg);
+		iounmap(sst->addr.lpe);
+		return -ENODEV;
+	}
+printk(KERN_ERR "iram %p 0x%x\n", pdata->iram_base, pdata->iram_size);
+	sst->addr.iram = ioremap(pdata->iram_base, pdata->iram_size);
+	if (!sst->addr.iram) {
+		iounmap(sst->addr.dram);
+		iounmap(sst->addr.fw_ext);
 		iounmap(sst->addr.pci_cfg);
 		iounmap(sst->addr.lpe);
 		return -ENODEV;

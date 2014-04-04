@@ -160,6 +160,10 @@ struct sst_pdata {
 	u32 pcicfg_size;
 	u32 fw_base;
 	u32 fw_size;
+	u32 dram_base;
+	u32 dram_size;
+	u32 iram_base;
+	u32 iram_size;
 	int irq;
 
 	/* Firmware */
