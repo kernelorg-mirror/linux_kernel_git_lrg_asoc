@@ -643,7 +643,7 @@ static void __init dmar_acpi_insert_dev_scope(u8 device_number,
 				if (tmp == NULL) {
 					dmaru->devices[i].bus = scope->bus;
 					dmaru->devices[i].devfn = PCI_DEVFN(path->device,
-									    path->function);
+									    0 /* path->function */);
 					rcu_assign_pointer(dmaru->devices[i].dev,
 							   get_device(&adev->dev));
 					return;
@@ -668,9 +668,12 @@ static int __init dmar_acpi_dev_scope_init(void)
 		if (andd->header.type == ACPI_DMAR_TYPE_ANDD) {
 			acpi_handle h;
 			struct acpi_device *adev;
+			char *name = andd->object_name;
+			if (!strcmp(name, "\\_SB.PCI0.UA00"))
+				name = "\\_SB.PCI0.SDMA";
 
 			if (!ACPI_SUCCESS(acpi_get_handle(ACPI_ROOT_OBJECT,
-							  andd->object_name,
+							  name,
 							  &h))) {
 				pr_err("Failed to find handle for ACPI object %s\n",
 				       andd->object_name);
@@ -879,6 +882,27 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		err = -EINVAL;
 		warn_invalid_dmar(phys_addr, " returns all ones");
 		goto unmap;
+	}
+
+	if (boot_cpu_data.x86_model == 61) {
+		if (iommu->ecap & (1<<24)) {
+			/* GFX unit. Turn off superpages */
+			if (cap_super_page_val(iommu->cap)) {
+				pr_warn("Disabling VT-d superpages on Broadwell GFX unit\n");
+				iommu->cap &= ~(0xfULL << 34);
+			}
+		} else {
+			if (cap_fault_reg_offset(iommu->cap) != 512) {
+				pr_warn("Correcting Intel Broadwell fault register offset to 0x20\n");
+				iommu->cap &= ~(0x3ffULL << 24);
+				iommu->cap |= 0x20ULL << 24;
+			}
+			if (ecap_iotlb_offset(iommu->ecap) != 256) {
+				pr_warn("Correcting Intel Broadwell IOTLB register offset to 0x10\n");
+				iommu->ecap &= ~(0x3ffULL << 8);
+				iommu->ecap |= 0x10ULL << 8;
+			}
+		}
 	}
 
 	/* the registers might be more than one page */

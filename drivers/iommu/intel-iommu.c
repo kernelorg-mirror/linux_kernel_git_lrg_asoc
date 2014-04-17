@@ -676,8 +676,14 @@ static struct intel_iommu *device_to_iommu(struct device *dev, u8 *bus, u8 *devf
 	if (dev_is_pci(dev)) {
 		pdev = to_pci_dev(dev);
 		segment = pci_domain_nr(pdev->bus);
-	} else if (ACPI_COMPANION(dev))
-		dev = &ACPI_COMPANION(dev)->dev;
+	} else {
+		for (tmp = dev; tmp; tmp = tmp->parent)
+			if (ACPI_COMPANION(tmp)) {
+				printk("Found ACPI companion %s for %s\n", dev_name(tmp), dev_name(dev));
+				dev = &ACPI_COMPANION(tmp)->dev;
+				break;
+			}
+	}
 
 	rcu_read_lock();
 	for_each_active_iommu(iommu, drhd) {
