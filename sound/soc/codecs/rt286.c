@@ -250,9 +250,8 @@ static int rt286_jack_detect(struct snd_soc_codec *codec, bool *hp, bool *mic)
 static void rt286_jack_detect_work(struct work_struct *work)
 {
 	struct rt286_priv *rt286 =
-		container_of(work, struct rt286_priv, jack_detect_work);
+		container_of(work, struct rt286_priv, jack_detect_work.work);
 	int status = 0;
-
 	bool hp = false;
 	bool mic = false;
 
@@ -343,14 +342,14 @@ static SOC_VALUE_ENUM_SINGLE_DECL(
 	RT286_ADC_SEL_MASK, rt286_adc_src, rt286_adc_values);
 
 static const struct snd_kcontrol_new rt286_adc0_mux =
-	SOC_DAPM_VALUE_ENUM("ADC 0 source", rt286_adc0_enum);
+	SOC_DAPM_ENUM("ADC 0 source", rt286_adc0_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(
 	rt286_adc1_enum, RT286_ADC1_MUX, RT286_ADC_SEL_SFT,
 	RT286_ADC_SEL_MASK, rt286_adc_src, rt286_adc_values);
 
 static const struct snd_kcontrol_new rt286_adc1_mux =
-	SOC_DAPM_VALUE_ENUM("ADC 1 source", rt286_adc1_enum);
+	SOC_DAPM_ENUM("ADC 1 source", rt286_adc1_enum);
 
 static const char * const rt286_dac_src[] = {
 	"Front", "Surround"
