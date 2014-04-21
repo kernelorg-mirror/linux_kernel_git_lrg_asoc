@@ -33,9 +33,20 @@ static const struct snd_soc_dapm_widget broadwell_widgets[] = {
 
 static const struct snd_soc_dapm_route broadwell_rt286_map[] = {
 
-	{"Headphones", NULL, "SPOR"},
-	{"Headphones", NULL, "SPOL"},
-	{"MIC1", NULL, "Mic"},
+	/* speaker */
+	{"Speaker", NULL, "SPOR"},
+	{"Speaker", NULL, "SPOL"},
+
+	/* HP jack connectors - unknown if we have jack deteck */
+	{"Headphones", NULL, "HPO Pin"},
+
+	/* other jacks */
+	{"MIC1", NULL, "Mic Jack"},
+	{"LINE1", NULL, "Line Jack"},
+
+	/* digital mics */
+	{"DMIC1 Pin", NULL, "DMIC1"},
+	{"DMIC2 Pin", NULL, "DMIC2"},
 
 	/* CODEC BE connections */
 	{"SSP0 CODEC IN", NULL, "AIF1 Capture"},
@@ -100,9 +111,13 @@ static int broadwell_rtd_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
-	/* always connected */
+	/* always connected - check HP for jack detect */
 	snd_soc_dapm_enable_pin(dapm, "Headphones");
-	snd_soc_dapm_enable_pin(dapm, "Mic");
+	snd_soc_dapm_enable_pin(dapm, "Speaker");
+	snd_soc_dapm_enable_pin(dapm, "Mic Jack");
+	snd_soc_dapm_enable_pin(dapm, "Line Jack");
+	snd_soc_dapm_enable_pin(dapm, "DMIC1");
+	snd_soc_dapm_enable_pin(dapm, "DMIC2");
 
 	return 0;
 }
