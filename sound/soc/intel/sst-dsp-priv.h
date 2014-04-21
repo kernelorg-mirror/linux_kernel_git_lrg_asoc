@@ -167,7 +167,7 @@ struct sst_module {
 	/* module configuration */
 	u32 id;
 	u32 entry;			/* module entry point */
-	u32 offset;			/* module offset in firmware file */
+	s32 offset;			/* module offset in firmware file */
 	u32 size;			/* module size */
 	struct sst_module_data s;	/* scratch data */
 	struct sst_module_data p;	/* peristant data */
