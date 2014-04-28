@@ -984,6 +984,7 @@ static int rt286_i2c_probe(struct i2c_client *i2c,
 
 	if (pdata)
 		rt286->pdata = *pdata;
+	rt286->pdata.cbj_en = true;
 
 	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_rt286,
 				     rt286_dai, ARRAY_SIZE(rt286_dai));
