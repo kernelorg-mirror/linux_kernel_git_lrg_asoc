@@ -28,7 +28,11 @@
 
 static const struct snd_soc_dapm_widget broadwell_widgets[] = {
 	SND_SOC_DAPM_HP("Headphones", NULL),
-	SND_SOC_DAPM_MIC("Mic", NULL),
+	SND_SOC_DAPM_SPK("Speaker", NULL),
+	SND_SOC_DAPM_MIC("Mic Jack", NULL),
+	SND_SOC_DAPM_MIC("DMIC1", NULL),
+	SND_SOC_DAPM_MIC("DMIC2", NULL),
+	SND_SOC_DAPM_LINE("Line Jack", NULL),
 };
 
 static const struct snd_soc_dapm_route broadwell_rt286_map[] = {
