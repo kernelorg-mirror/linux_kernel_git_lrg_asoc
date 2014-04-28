@@ -650,7 +650,7 @@ static struct snd_pcm_ops hsw_pcm_ops = {
 	.hw_free	= hsw_pcm_hw_free,
 	.trigger	= hsw_pcm_trigger,
 	.pointer	= hsw_pcm_pointer,
-	.mmap		= snd_pcm_lib_default_mmap,
+	.page		= snd_pcm_sgbuf_ops_page,
 };
 
 static void hsw_pcm_free(struct snd_pcm *pcm)
