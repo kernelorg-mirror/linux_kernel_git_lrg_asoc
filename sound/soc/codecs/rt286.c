@@ -1134,6 +1134,7 @@ static int rt286_i2c_probe(struct i2c_client *i2c,
 
 	if (pdata)
 		rt286->pdata = *pdata;
+	rt286->pdata.cbj_en = true;
 
 	regmap_write(rt286->regmap, RT286_SET_AUDIO_POWER, AC_PWRST_D3);
 
