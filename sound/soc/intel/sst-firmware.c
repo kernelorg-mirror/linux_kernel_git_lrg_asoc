@@ -24,14 +24,27 @@
 #include <linux/dmaengine.h>
 #include <linux/pci.h>
 
+/* supported DMA engine drivers */
+#include <linux/dw_dmac.h>
+
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
 
+#define SST_DMA_RESOURCES	2
+#define SST_DSP_DMA_MAX_BURST	0x3
 static void block_module_remove(struct sst_module *module);
 
+struct sst_dma {
+	struct sst_dsp *sst;
+
+	struct platform_device *dma_dev;
+	struct resource dma_resource[SST_DMA_RESOURCES];
+	struct dma_async_tx_descriptor *desc;
+	struct dma_chan *ch;
+};
 static void sst_memcpy32(volatile void __iomem *dest, void *src, u32 bytes)
 {
 	u32 i;
@@ -40,6 +53,176 @@ static void sst_memcpy32(volatile void __iomem *dest, void *src, u32 bytes)
 	for (i = 0; i < bytes; i += 4)
 		memcpy_toio(dest + i, src + i, 4);
 }
+
+static void sst_dma_transfer_complete(void *arg)
+{
+	struct sst_dsp *sst = (struct sst_dsp *)arg;
+
+	dev_dbg(sst->dev, "DMA: callback\n");
+}
+
+int sst_dsp_dma_copy(struct sst_dsp *sst, dma_addr_t src_addr,
+	dma_addr_t dest_addr, size_t size)
+{
+	struct dma_async_tx_descriptor *desc;
+	struct sst_dma *dma = sst->dma;
+
+	if (dma->ch == NULL) {
+		dev_err(sst->dev, "error: no DMA channel\n");
+		return -ENODEV;
+	}
+
+	dev_dbg(sst->dev, "DMA: src: 0x%lx dest 0x%lx size %zu\n",
+		(unsigned long)src_addr, (unsigned long)dest_addr, size);
+
+	desc = dma->ch->device->device_prep_dma_memcpy(dma->ch, dest_addr,
+		src_addr, size, DMA_CTRL_ACK);
+	if (!desc){
+		dev_err(sst->dev, "error: dma prep memcpy failed\n");
+		return -EINVAL;
+	}
+
+	desc->callback = sst_dma_transfer_complete;
+	desc->callback_param = sst;
+
+	desc->tx_submit(desc);
+	dma_wait_for_async_tx(desc);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sst_dsp_dma_copy);
+
+static bool dma_chan_filter(struct dma_chan *chan, void *param)
+{
+	struct sst_dsp *dsp = (struct sst_dsp *)param;
+	struct sst_dma *dma = dsp->dma;
+
+	/* only accept channels from this device */
+	if (chan->device->dev != &dma->dma_dev->dev)
+		return false;
+
+	/* todo: add chan_id testing */
+	return true;
+}
+
+int sst_dsp_dma_get_channel(struct sst_dsp *dsp, int chan_id)
+{
+	struct sst_dma *dma = dsp->dma;
+	struct dma_slave_config slave;
+	dma_cap_mask_t mask;
+	int ret;
+
+	/* The Intel MID DMA engine driver needs the slave config set but
+	 * Synopsis DMA engine driver safely ignores the slave config */
+	dma_cap_zero(mask);
+	dma_cap_set(DMA_SLAVE, mask);
+	dma_cap_set(DMA_MEMCPY, mask);
+
+	dma->ch = dma_request_channel(mask, dma_chan_filter, dsp);
+	if (dma->ch == NULL) {
+		dev_err(dsp->dev, "error: DMA request channel failed\n");
+		return -EIO;
+	}
+
+	memset(&slave, 0, sizeof(slave));
+	slave.direction = DMA_MEM_TO_DEV;
+	slave.src_addr_width =
+		slave.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	slave.src_maxburst = slave.dst_maxburst = SST_DSP_DMA_MAX_BURST;
+
+	ret = dmaengine_slave_config(dma->ch, &slave);
+	if (ret) {
+		dev_err(dsp->dev, "error: unable to set DMA slave config %d\n",
+			ret);
+		dma_release_channel(dma->ch);
+		dma->ch = NULL;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_dsp_dma_get_channel);
+
+void sst_dsp_dma_put_channel(struct sst_dsp *dsp)
+{
+	struct sst_dma *dma = dsp->dma;
+
+	dma_release_channel(dma->ch);
+	dma->ch = NULL;
+}
+EXPORT_SYMBOL_GPL(sst_dsp_dma_put_channel);
+
+/* platform data for DesignWare DMA Engine */
+static struct dw_dma_platform_data dw_pdata = {
+	.chan_allocation_order = CHAN_ALLOCATION_ASCENDING,
+	.chan_priority = CHAN_PRIORITY_ASCENDING,
+};
+
+int sst_dma_new(struct sst_dsp *sst)
+{
+	struct sst_pdata *sst_pdata = sst->pdata;
+	struct sst_dma *dma;
+	const char *dma_dev_name;
+	size_t dma_pdata_size;
+	void *dma_pdata;
+
+	/* configure the correct platform data for whatever DMA engine
+	* is attached to the ADSP IP. */
+	switch (sst->pdata->dma_engine) {
+	case SST_DMA_TYPE_DW:
+		dma_pdata = &dw_pdata;
+		dma_pdata_size = sizeof(dw_pdata);
+		dma_dev_name = "dw_dmac";
+		break;
+	case SST_DMA_TYPE_MID:
+		dma_pdata = NULL;
+		dma_pdata_size = 0;
+		dma_dev_name = "Intel MID DMA";
+		break;
+	default:
+		dev_err(sst->dev, "error: invalid DMA engine %d\n",
+			sst->pdata->dma_engine);
+		return -EINVAL;
+	}
+
+	dma = devm_kzalloc(sst->dev, sizeof(struct sst_dma), GFP_KERNEL);
+	if (!dma)
+		return -ENOMEM;
+
+	dma->sst = sst;
+	sst->dma = dma;
+
+	dma->dma_resource[0].start = sst->addr.lpe_base +
+					sst_pdata->dma_base;
+	dma->dma_resource[0].end   = sst->addr.lpe_base +
+					sst_pdata->dma_base +
+					sst_pdata->dma_size;
+	dma->dma_resource[0].flags = IORESOURCE_MEM;
+	dma->dma_resource[1].start = sst_pdata->irq;
+	dma->dma_resource[1].end = sst_pdata->irq;
+	dma->dma_resource[1].flags = IORESOURCE_IRQ;
+
+	/* now register DMA engine device */
+	dma->dma_dev = platform_device_register_resndata(sst->dev,
+		dma_dev_name, -1, dma->dma_resource, 2,
+		dma_pdata, dma_pdata_size);
+
+	if (dma->dma_dev == NULL) {
+		dev_err(sst->dev, "error: DMA device register failed\n");
+		return -ENODEV;
+	}
+
+	sst->fw_use_dma = true;
+	return 0;
+}
+EXPORT_SYMBOL(sst_dma_new);
+
+void sst_dma_free(struct sst_dma *dma)
+{
+	if (dma->ch)
+		dma_release_channel(dma->ch);
+	platform_device_unregister(dma->dma_dev);
+}
+EXPORT_SYMBOL(sst_dma_free);
 
 /* create new generic firmware object */
 struct sst_fw *sst_fw_new(struct sst_dsp *dsp, 
@@ -71,12 +254,21 @@ struct sst_fw *sst_fw_new(struct sst_dsp *dsp,
 	/* copy FW data to DMA-able memory */
 	memcpy((void *)sst_fw->dma_buf, (void *)fw->data, fw->size);
 
+	if (dsp->fw_use_dma) {
+		err = sst_dsp_dma_get_channel(dsp, 0);
+		if (err < 0)
+			goto chan_err;
+	}
+
 	/* call core specific FW paser to load FW data into DSP */
 	err = dsp->ops->parse_fw(sst_fw);
 	if (err < 0) {
 		dev_err(dsp->dev, "error: parse fw failed %d\n", err);
 		goto parse_err;
 	}
+
+	if (dsp->fw_use_dma)
+		sst_dsp_dma_put_channel(dsp);
 
 	mutex_lock(&dsp->mutex);
 	list_add(&sst_fw->list, &dsp->fw_list);
@@ -85,6 +277,9 @@ struct sst_fw *sst_fw_new(struct sst_dsp *dsp,
 	return sst_fw;
 
 parse_err:
+	if (dsp->fw_use_dma)
+		sst_dsp_dma_put_channel(dsp);
+chan_err:
 	dma_free_coherent(dsp->dev, sst_fw->size,
 				sst_fw->dma_buf,
 				sst_fw->dmable_fw_paddr);
@@ -422,6 +617,7 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 	struct sst_module_data *data)
 {
 	struct sst_dsp *dsp = module->dsp;
+	struct sst_fw *sst_fw = module->sst_fw;
 	int ret;
 
 	mutex_lock(&dsp->mutex);
@@ -444,7 +640,17 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 	}
 
 	/* copy partial module data to blocks */
-	sst_memcpy32(dsp->addr.lpe + data->offset, data->data, data->size);
+	if (dsp->fw_use_dma) {
+		ret = sst_dsp_dma_copy(dsp,
+			sst_fw->dmable_fw_paddr + data->data_offset,
+			dsp->addr.lpe_base + data->offset, data->size);
+		if (ret < 0) {
+			dev_err(dsp->dev, "error: module copy failed\n");
+			goto err;
+		}
+	} else
+		sst_memcpy32(dsp->addr.lpe + data->offset, data->data,
+			data->size);
 
 	mutex_unlock(&dsp->mutex);
 	return ret;
