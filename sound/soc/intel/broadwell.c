@@ -24,33 +24,19 @@
 #include "sst-dsp.h"
 #include "sst-haswell-ipc.h"
 
-#include "../codecs/rt286.h"
+#include "../codecs/rt5640.h"
+//#include "../codecs/rt286.h"
 
 static const struct snd_soc_dapm_widget broadwell_widgets[] = {
 	SND_SOC_DAPM_HP("Headphones", NULL),
-	SND_SOC_DAPM_SPK("Speaker", NULL),
-	SND_SOC_DAPM_MIC("Mic Jack", NULL),
-	SND_SOC_DAPM_MIC("DMIC1", NULL),
-	SND_SOC_DAPM_MIC("DMIC2", NULL),
-	SND_SOC_DAPM_LINE("Line Jack", NULL),
+	SND_SOC_DAPM_MIC("Mic", NULL),
 };
 
 static const struct snd_soc_dapm_route broadwell_rt286_map[] = {
 
-	/* speaker */
-	{"Speaker", NULL, "SPOR"},
-	{"Speaker", NULL, "SPOL"},
-
-	/* HP jack connectors - unknown if we have jack deteck */
-	{"Headphones", NULL, "HPO Pin"},
-
-	/* other jacks */
-	{"MIC1", NULL, "Mic Jack"},
-	{"LINE1", NULL, "Line Jack"},
-
-	/* digital mics */
-	{"DMIC1 Pin", NULL, "DMIC1"},
-	{"DMIC2 Pin", NULL, "DMIC2"},
+	{"Headphones", NULL, "HPOR"},
+	{"Headphones", NULL, "HPOL"},
+	{"IN2P", NULL, "Mic"},
 
 	/* CODEC BE connections */
 	{"SSP0 CODEC IN", NULL, "AIF1 Capture"},
@@ -83,13 +69,16 @@ static int broadwell_rt286_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret;
 
-	ret = snd_soc_dai_set_sysclk(codec_dai, RT286_SCLK_S_PLL, 24000000,
+	ret = snd_soc_dai_set_sysclk(codec_dai, RT5640_SCLK_S_MCLK, 12288000,
 		SND_SOC_CLOCK_IN);
 
 	if (ret < 0) {
 		dev_err(rtd->dev, "can't set codec sysclk configuration\n");
 		return ret;
 	}
+
+	/* set correct codec filter for DAI format and clock config */
+	snd_soc_update_bits(rtd->codec, 0x83, 0xffff, 0x8000);
 
 	return ret;
 }
@@ -117,11 +106,7 @@ static int broadwell_rtd_init(struct snd_soc_pcm_runtime *rtd)
 
 	/* always connected - check HP for jack detect */
 	snd_soc_dapm_enable_pin(dapm, "Headphones");
-	snd_soc_dapm_enable_pin(dapm, "Speaker");
-	snd_soc_dapm_enable_pin(dapm, "Mic Jack");
-	snd_soc_dapm_enable_pin(dapm, "Line Jack");
-	snd_soc_dapm_enable_pin(dapm, "DMIC1");
-	snd_soc_dapm_enable_pin(dapm, "DMIC2");
+	snd_soc_dapm_enable_pin(dapm, "Mic");
 
 	return 0;
 }
@@ -194,8 +179,8 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.cpu_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "snd-soc-dummy",
 		.no_pcm = 1,
-		.codec_name = "i2c-INT343A:00",
-		.codec_dai_name = "rt286-aif1",
+		.codec_name = "i2c-INT33CA:00",
+		.codec_dai_name = "rt5640-aif1",
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 		.ignore_suspend = 1,
