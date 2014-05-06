@@ -224,6 +224,48 @@ void sst_dma_free(struct sst_dma *dma)
 }
 EXPORT_SYMBOL(sst_dma_free);
 
+/* DEBUG ONLY - this function can be removed after DMA is working */
+static int dma_test(struct sst_dsp *dsp)
+{
+	void *buf1, *buf2;
+	dma_addr_t dbuf1, dbuf2;
+	int i, size = 4096;
+
+	buf1 = dma_alloc_coherent(dsp->dma_dev, size, &dbuf1, GFP_DMA);
+	if (buf1 == NULL) {
+		dev_err(dsp->dev, "dma_alloc_coherent1 test failed\n");
+		return -ENOMEM;
+	}
+
+	buf2 = dma_alloc_coherent(dsp->dma_dev, size, &dbuf2, GFP_DMA);
+	if (buf2 == NULL) {
+		dev_err(dsp->dev, "dma_alloc_coherent2 test failed\n");
+		return -ENOMEM;
+	}
+
+	memset(buf1, 0x1, size);
+
+	sst_dsp_dma_get_channel(dsp, 0);
+
+	sst_dsp_dma_copy(dsp, dbuf1, dbuf2, size);
+
+	for (i = 0; i < size; i++) {
+		char *c = buf2 + i;
+		if (*c != 0x1) {
+			printk(KERN_ERR "DMA failed at %d got 0x%x\n", i, *c);
+			goto out;
+		}
+	}
+
+out:
+	sst_dsp_dma_put_channel(dsp);
+
+	dma_free_coherent(dsp->dma_dev, size, buf1, dbuf1);
+	dma_free_coherent(dsp->dma_dev, size, buf2, dbuf2);
+
+	return 0;
+}
+
 /* create new generic firmware object */
 struct sst_fw *sst_fw_new(struct sst_dsp *dsp, 
 	const struct firmware *fw, void *private)
@@ -250,6 +292,9 @@ struct sst_fw *sst_fw_new(struct sst_dsp *dsp,
 		kfree(sst_fw);
 		return NULL;
 	}
+
+	/* DEBUG - remove after DMA working */
+	dma_test(dsp);
 
 	/* copy FW data to DMA-able memory */
 	memcpy((void *)sst_fw->dma_buf, (void *)fw->data, fw->size);
