@@ -49,10 +49,6 @@ struct sst_dma {
 	struct resource dma_resource[SST_DMA_RESOURCES];
 	struct dma_async_tx_descriptor *desc;
 	struct dma_chan *ch;
-
-	/* dummy clk */
-	struct clk_lookup	*lookup_clk;
-	struct clk_hw		*hw_clk;
 };
 static void sst_memcpy32(volatile void __iomem *dest, void *src, u32 bytes)
 {
@@ -61,97 +57,6 @@ static void sst_memcpy32(volatile void __iomem *dest, void *src, u32 bytes)
 	/* copy one 32 bit word at a time as 64 bit access is not supported */
 	for (i = 0; i < bytes; i += 4)
 		memcpy_toio(dest + i, src + i, 4);
-}
-
-/**
- * sst_dsp_dma_register_dummy_clk - install dummy CLK for Synopsys DMA engine
- *
- * @dma		: SST DMA context
- *
- * return 0 if CLK installed otherwise error no
- */
-static int sst_dsp_dma_register_dummy_clk(struct sst_dma *dma)
-{
-	struct clk *hclk;
-	struct clk_init_data *clk_init;
-	int retval = -ENOMEM;
-
-	clk_init = kzalloc(sizeof(struct clk_init_data), GFP_KERNEL);
-	if (clk_init == NULL) {
-		dev_err(dma->sst->dev, "DMA: can't kzalloc memory for clk_init\n");
-		retval = -ENODEV;
-		goto err_clk_init;
-	}
-
-	clk_init->name  = "hclk";
-	clk_init->ops   = &clk_fixed_rate_ops;
-	clk_init->flags = CLK_IS_ROOT;
-
-	dma->hw_clk = kzalloc(sizeof(struct clk_hw), GFP_KERNEL);
-	if (!dma->hw_clk) {
-		dev_err(dma->sst->dev, "DMA: can't kzalloc memory for hw_clk\n");
-		goto err_hwclk_alloc;
-	}
-
-	dma->hw_clk->init = clk_init;
-
-	hclk = clk_register(NULL, dma->hw_clk);
-	if (hclk == NULL) {
-		dev_err(dma->sst->dev, "DMA: hclk not registered\n");
-		retval = -ENODEV;
-		goto err_clk_register;
-	}
-
-	dma->lookup_clk = clkdev_alloc(hclk, dma->hw_clk->init->name, NULL);
-	if (dma->lookup_clk == NULL) {
-		dev_err(dma->sst->dev, "DMA: can't kzalloc memory for lookup_clk\n");
-		goto err_clk_dev_alloc;
-	}
-
-	clkdev_add(dma->lookup_clk);
-
-	return 0;
-
-err_clk_dev_alloc:
-	clk_unregister(hclk);
-err_clk_register:
-	kfree(dma->hw_clk);
-err_hwclk_alloc:
-	kfree(clk_init);
-err_clk_init:
-
-	return retval;
-}
-
-/**
- * sst_dsp_dma_unregister_dummy_clk - unregister dummy CLK
- * for Synopsys DMA engine and relese all CLK resources
- *
- * @dma		: SST DMA context
- *
- */
-static void sst_dsp_dma_unregister_dummy_clk(struct sst_dma *dma)
-{
-	struct clk *hclk;
-
-	if (dma->lookup_clk) {
-		hclk = dma->lookup_clk->clk;
-		/* remove lookup_clk from list and release memory resources */
-		clkdev_drop(dma->lookup_clk);
-
-		clk_unregister(hclk);
-
-		if (dma->hw_clk) {
-			if (dma->hw_clk->init) {
-				/* free clk_init */
-				kfree(dma->hw_clk->init);
-			}
-
-			kfree(dma->hw_clk);	/* free hw_clk */
-		}
-
-		dma->lookup_clk = NULL;
-	}
 }
 
 static void sst_dma_transfer_complete(void *arg)
@@ -314,15 +219,6 @@ int sst_dma_new(struct sst_dsp *sst)
 	if (!dma)
 		return -ENOMEM;
 
-	if (need_dummy_clk) {
-		ret = sst_dsp_dma_register_dummy_clk(dma);
-		if (ret) {
-			dev_err(sst->dev, "DMA: sst_dsp_dma_register_dummy_clk fail\n");
-			ret = -EIO;
-			goto err_dma_clk;
-		}
-	}
-
 	dma->sst = sst;
 	dma->dma_resource[0].start = sst->addr.lpe_base +
 					sst_pdata->dma_base;
@@ -335,9 +231,8 @@ int sst_dma_new(struct sst_dsp *sst)
 	dma->dma_resource[1].flags = IORESOURCE_IRQ;
 
 	/* now register DMA engine device */
-	dma->dma_dev = platform_device_register_resndata(sst->dev,
-		dma_dev_name, -1, dma->dma_resource, 2,
-		dma_pdata, dma_pdata_size);
+	dma->dma_dev = dw_adsp_register(sst->dev, dma_dev_name, dma->dma_resource, 2,
+		dma_pdata, dma_pdata_size, need_dummy_clk);
 
 	if (dma->dma_dev == NULL) {
 		dev_err(sst->dev, "error: DMA device register failed\n");
@@ -350,9 +245,6 @@ int sst_dma_new(struct sst_dsp *sst)
 	return 0;
 
 err_dma_dev:
-	if (dma->lookup_clk)
-		sst_dsp_dma_unregister_dummy_clk(dma);
-err_dma_clk:
 	devm_kfree(sst->dev, dma);
 	return ret;
 }
@@ -367,10 +259,7 @@ void sst_dma_free(struct sst_dma *dma)
 		dma_release_channel(dma->ch);
 
 	if (dma->dma_dev)
-		platform_device_unregister(dma->dma_dev);
-
-	if (dma->lookup_clk)
-		sst_dsp_dma_unregister_dummy_clk(dma);
+		dw_adsp_unregister(dma->dma_dev);
 }
 EXPORT_SYMBOL(sst_dma_free);
 
