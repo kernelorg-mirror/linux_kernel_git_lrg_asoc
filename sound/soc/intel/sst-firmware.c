@@ -767,7 +767,8 @@ void sst_mem_block_unregister_all(struct sst_dsp *dsp)
 EXPORT_SYMBOL_GPL(sst_mem_block_unregister_all);
 
 /* allocate scratch buffer blocks */
-struct sst_module *sst_mem_block_alloc_scratch(struct sst_dsp *dsp)
+struct sst_module *sst_mem_block_alloc_scratch(struct sst_dsp *dsp,
+	struct sst_fw *sst_fw)
 {
 	struct sst_module *sst_module, *scratch;
 	struct sst_mem_block *block, *tmp;
@@ -815,6 +816,8 @@ struct sst_module *sst_mem_block_alloc_scratch(struct sst_dsp *dsp)
 	/* assign the same offset of scratch to each module */
 	list_for_each_entry(sst_module, &dsp->module_list, list)
 		sst_module->s.offset = scratch->s.offset;
+	list_add(&scratch->list, &dsp->module_list);
+	scratch->sst_fw = sst_fw;
 
 	mutex_unlock(&dsp->mutex);
 	return scratch;
