@@ -967,14 +967,15 @@ static const struct dev_pm_ops hsw_pcm_pm = {
 #define hsw_pcm_runtime_idle	NULL
 #define hsw_pcm_runtime_suspend	NULL
 #define hsw_pcm_runtime_resume	NULL
-#define hsw_pcm_pm	NULL
 #endif
 
 static struct platform_driver hsw_pcm_driver = {
 	.driver = {
 		.name = "haswell-pcm-audio",
 		.owner = THIS_MODULE,
+#ifdef CONFIG_PM_RUNTIME
 		.pm = &hsw_pcm_pm,
+#endif
 	},
 
 	.probe = hsw_pcm_dev_probe,
