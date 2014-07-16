@@ -587,6 +587,31 @@ static snd_pcm_uframes_t hsw_pcm_pointer(struct snd_pcm_substream *substream)
 	return offset;
 }
 
+static int hsw_pcm_ack(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct hsw_priv_data *pdata =
+		snd_soc_platform_get_drvdata(rtd->platform);
+	struct hsw_pcm_data *pcm_data = snd_soc_pcm_get_drvdata(rtd);
+	int ret;
+	u32 pos;
+
+	pos = frames_to_bytes(runtime, runtime->control->appl_ptr) %
+		runtime->dma_bytes;
+
+	ret = sst_hsw_stream_set_write_position(pdata->hsw,
+		pcm_data->stream, 0, pos);
+	if (ret < 0) {
+		dev_err(rtd->dev, "PCM: failed to set write position to %d\n",
+			ret);
+		return ret;
+	}
+
+	dev_dbg(rtd->dev, "PCM: ACK %u bytes\n", pos);
+	return ret;
+}
+
 static int hsw_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -665,6 +690,7 @@ static struct snd_pcm_ops hsw_pcm_ops = {
 	.trigger	= hsw_pcm_trigger,
 	.pointer	= hsw_pcm_pointer,
 	.page		= snd_pcm_sgbuf_ops_page,
+	.ack		= hsw_pcm_ack,
 };
 
 static void hsw_pcm_free(struct snd_pcm *pcm)
