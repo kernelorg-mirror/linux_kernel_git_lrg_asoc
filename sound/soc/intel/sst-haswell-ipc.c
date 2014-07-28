@@ -1366,10 +1366,11 @@ int sst_hsw_stream_buffer(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 }
 
 int sst_hsw_stream_set_module_info(struct sst_hsw *hsw,
-	struct sst_hsw_stream *stream, enum sst_hsw_module_id module_id,
-	u32 entry_point)
+	struct sst_hsw_stream *stream, struct sst_module_runtime *runtime)
 {
 	struct sst_hsw_module_map *map = &stream->request.map;
+	struct sst_dsp *dsp = sst_hsw_get_dsp(hsw);
+	struct sst_module *module = runtime->module;
 
 	if (stream->commited) {
 		dev_err(hsw->dev, "error: stream committed for set module\n");
@@ -1378,36 +1379,22 @@ int sst_hsw_stream_set_module_info(struct sst_hsw *hsw,
 
 	/* only support initial module atm */
 	map->module_entries_count = 1;
-	map->module_entries[0].module_id = module_id;
-	map->module_entries[0].entry_point = entry_point;
+	map->module_entries[0].module_id = module->id;
+	map->module_entries[0].entry_point = module->entry;
 
-	return 0;
-}
+	stream->request.persistent_mem.offset =
+		sst_dsp_get_offset(dsp, runtime->persistent_offset, SST_MEM_DRAM);
+	stream->request.persistent_mem.size = module->persistent_size;
 
-int sst_hsw_stream_set_pmemory_info(struct sst_hsw *hsw,
-	struct sst_hsw_stream *stream, u32 offset, u32 size)
-{
-	if (stream->commited) {
-		dev_err(hsw->dev, "error: stream committed for set pmem\n");
-		return -EINVAL;
-	}
+	stream->request.scratch_mem.offset =
+		sst_dsp_get_offset(dsp, dsp->scratch_offset, SST_MEM_DRAM);
+	stream->request.scratch_mem.size = dsp->scratch_size;
 
-	stream->request.persistent_mem.offset = offset;
-	stream->request.persistent_mem.size = size;
-
-	return 0;
-}
-
-int sst_hsw_stream_set_smemory_info(struct sst_hsw *hsw,
-	struct sst_hsw_stream *stream, u32 offset, u32 size)
-{
-	if (stream->commited) {
-		dev_err(hsw->dev, "error: stream committed for set smem\n");
-		return -EINVAL;
-	}
-
-	stream->request.scratch_mem.offset = offset;
-	stream->request.scratch_mem.size = size;
+	dev_dbg(hsw->dev, "Module %d allocate persistent=0x%x(%x), scratch=0x%x(%x)",
+		module->id, stream->request.persistent_mem.offset,
+		stream->request.persistent_mem.size,
+		stream->request.scratch_mem.offset,
+		stream->request.scratch_mem.size);
 
 	return 0;
 }
@@ -1687,6 +1674,47 @@ int sst_hsw_dx_set_state(struct sst_hsw *hsw,
 	return ret;
 }
 
+struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
+	int mod_id)
+{
+	struct sst_dsp *dsp = hsw->dsp;
+	struct sst_module *module;
+	struct sst_module_runtime *runtime;
+	int err;
+
+	module = sst_module_get_from_id(dsp, mod_id);
+	if (module == NULL) {
+		dev_err(dsp->dev, "error: failed to get module %d for pcm\n",
+			mod_id);
+		return NULL;
+	}
+
+	runtime = sst_module_runtime_new(module, mod_id, NULL);
+	if (runtime == NULL) {
+		dev_err(dsp->dev, "error: failed to create module %d runtime\n",
+			mod_id);
+		return NULL;
+	}
+
+	err = sst_module_runtime_alloc_blocks(runtime);
+	if (err < 0) {
+		dev_err(dsp->dev, "error: failed to alloc blocks for module %d runtime\n",
+			mod_id);
+		sst_module_runtime_free(runtime);
+		return NULL;
+	}
+
+	dev_dbg(dsp->dev, "runtime id %d created for module %d\n", runtime->id,
+		mod_id);
+	return runtime;
+}
+
+void sst_hsw_runtime_module_free(struct sst_module_runtime *runtime)
+{
+	sst_module_runtime_free_blocks(runtime);
+	sst_module_runtime_free(runtime);
+}
+
 #ifdef CONFIG_PM
 static int sst_hsw_dx_state_dump(struct sst_hsw *hsw)
 {
@@ -1921,12 +1949,6 @@ static int msg_empty_list_init(struct sst_hsw *hsw)
 	}
 
 	return 0;
-}
-
-void sst_hsw_set_scratch_module(struct sst_hsw *hsw,
-	struct sst_module *scratch)
-{
-	hsw->scratch = scratch;
 }
 
 struct sst_dsp *sst_hsw_get_dsp(struct sst_hsw *hsw)

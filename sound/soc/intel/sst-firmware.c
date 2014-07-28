@@ -40,8 +40,6 @@
 
 #define SST_HSW_MASK_DMA_ADDR_DSP 0xfff00000
 
-static void block_module_remove(struct sst_module *module);
-
 struct sst_dma {
 	struct sst_dsp *sst;
 
@@ -113,6 +111,64 @@ int sst_dsp_dma_copyfrom(struct sst_dsp *sst, dma_addr_t dest_addr,
 		src_addr | SST_HSW_MASK_DMA_ADDR_DSP, size);
 }
 EXPORT_SYMBOL_GPL(sst_dsp_dma_copyfrom);
+
+/* remove module from memory - callers hold locks */
+static void block_list_remove(struct sst_dsp *dsp,
+	struct list_head *block_list)
+{
+	struct sst_mem_block *block, *tmp;
+	int err;
+
+	/* disable each block  */
+	list_for_each_entry(block, block_list, in_use_list) {
+
+		if (block->ops && block->ops->disable) {
+			err = block->ops->disable(block);
+			if (err < 0)
+				dev_err(dsp->dev,
+					"error: cant disable block %d:%d\n",
+					block->type, block->index);
+		}
+	}
+
+	/* mark each block as free */
+	list_for_each_entry_safe(block, tmp, block_list, in_use_list) {
+		list_del(&block->in_use_list);
+		list_move(&block->list, &dsp->free_block_list);
+		dev_dbg(dsp->dev, "block freed %d:%d at offset 0x%x\n",
+			block->type, block->index, block->offset);
+	}
+}
+
+/* prepare the memory block to receive data from host - callers hold locks */
+static int block_list_prepare(struct sst_dsp *dsp,
+	struct list_head *block_list)
+{
+	struct sst_mem_block *block;
+	int ret = 0;
+
+	/* enable each block so that's it'e ready for data */
+	list_for_each_entry(block, block_list, in_use_list) {
+
+		if (block->ops && block->ops->enable) {
+			ret = block->ops->enable(block);
+			if (ret < 0) {
+				dev_err(dsp->dev,
+					"error: cant disable block %d:%d\n",
+					block->type, block->index);
+				goto err;
+			}
+		}
+	}
+	return ret;
+
+err:
+	list_for_each_entry(block, block_list, in_use_list) {
+		if (block->ops && block->ops->disable)
+			block->ops->disable(block);
+	}
+	return ret;
+}
 
 static bool dma_chan_filter(struct dma_chan *chan, void *param)
 {
@@ -363,7 +419,7 @@ void sst_fw_unload(struct sst_fw *sst_fw)
         mutex_lock(&dsp->mutex);
         list_for_each_entry_safe(module, tmp, &dsp->module_list, list) {
                 if (module->sst_fw == sst_fw) {
-                        block_module_remove(module);
+                        block_list_remove(dsp, &module->block_list);
                         list_del(&module->list);
                         kfree(module);
                 }
@@ -421,10 +477,8 @@ struct sst_module *sst_module_new(struct sst_fw *sst_fw,
 	sst_module->dsp = dsp;
 	sst_module->sst_fw = sst_fw;
 
-	memcpy(&sst_module->s, &template->s, sizeof(struct sst_module_data));
-	memcpy(&sst_module->p, &template->p, sizeof(struct sst_module_data));
-
 	INIT_LIST_HEAD(&sst_module->block_list);
+	INIT_LIST_HEAD(&sst_module->runtime_list);
 
 	mutex_lock(&dsp->mutex);
 	list_add(&sst_module->list, &dsp->module_list);
@@ -447,73 +501,117 @@ void sst_module_free(struct sst_module *sst_module)
 }
 EXPORT_SYMBOL_GPL(sst_module_free);
 
-static struct sst_mem_block *find_block(struct sst_dsp *dsp, int type,
-	u32 offset)
+struct sst_module_runtime *sst_module_runtime_new(struct sst_module *module,
+	int id, void *private)
+{
+	struct sst_dsp *dsp = module->dsp;
+	struct sst_module_runtime *runtime;
+
+	runtime = kzalloc(sizeof(*runtime), GFP_KERNEL);
+	if (runtime == NULL)
+		return NULL;
+
+	runtime->id = id;
+	runtime->dsp = dsp;
+	INIT_LIST_HEAD(&runtime->block_list);
+
+	mutex_lock(&dsp->mutex);
+	list_add(&runtime->list, &module->runtime_list);
+	mutex_unlock(&dsp->mutex);
+
+	return runtime;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_new);
+
+void sst_module_runtime_free(struct sst_module_runtime *runtime)
+{
+	struct sst_dsp *dsp = runtime->dsp;
+
+	mutex_lock(&dsp->mutex);
+	list_del(&runtime->list);
+	mutex_unlock(&dsp->mutex);
+
+	kfree(runtime);
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_free);
+
+static struct sst_mem_block *find_block(struct sst_dsp *dsp,
+	struct sst_block_allocator *ba)
 {
 	struct sst_mem_block *block;
 
 	list_for_each_entry(block, &dsp->free_block_list, list) {
-		if (block->type == type && block->offset == offset)
+		if (block->type == ba->type && block->offset == ba->offset)
 			return block;
 	}
 
 	return NULL;
 }
 
-static int block_alloc_contiguous(struct sst_module *module,
-	struct sst_module_data *data, u32 offset, int size)
+static int block_alloc_contiguous(struct sst_dsp *dsp,
+	struct sst_block_allocator *ba, struct list_head *block_list)
 {
 	struct list_head tmp = LIST_HEAD_INIT(tmp);
-	struct sst_dsp *dsp = module->dsp;
 	struct sst_mem_block *block;
+	u32 block_start = 0xffffffff;
 
-	while (size > 0) {
-		block = find_block(dsp, data->type, offset);
+	while (ba->size > 0) {
+		block = find_block(dsp, ba);
 		if (!block) {
 			list_splice(&tmp, &dsp->free_block_list);
 			return -ENOMEM;
 		}
 
 		list_move_tail(&block->list, &tmp);
-		offset += block->size;
-		size -= block->size;
+		ba->offset += block->size;
+		ba->size -= block->size;
 	}
 
-	list_for_each_entry(block, &tmp, list)
-		list_add(&block->module_list, &module->block_list);
+	list_for_each_entry(block, &tmp, list) {
+		if (block->offset < block_start)
+			block_start = block->offset;
+		list_add(&block->in_use_list, block_list);
+
+		dev_dbg(dsp->dev, "block allocated %d:%d at offset 0x%x\n",
+			block->type, block->index, block->offset);
+
+	}
+
+	/* save start offset for scratch blocks */
+	if (ba->data_type == SST_DATA_S)
+		ba->offset = block_start;
 
 	list_splice(&tmp, &dsp->used_block_list);
 	return 0;
 }
 
 /* allocate free DSP blocks for module data - callers hold locks */
-static int block_alloc(struct sst_module *module,
-	struct sst_module_data *data)
+static int block_alloc(struct sst_dsp *dsp, struct sst_block_allocator *ba,
+	struct list_head *block_list)
 {
-	struct sst_dsp *dsp = module->dsp;
 	struct sst_mem_block *block, *tmp;
 	int ret = 0;
 
-	if (data->size == 0)
+	if (ba->size == 0)
 		return 0;
 
 	/* find first free whole blocks that can hold module */
 	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
 
 		/* ignore blocks with wrong type */
-		if (block->type != data->type)
+		if (block->type != ba->type)
 			continue;
 
-		if (data->size > block->size)
+		if (ba->size > block->size)
 			continue;
 
-		data->offset = block->offset;
-		block->data_type = data->data_type;
-		block->bytes_used = data->size % block->size;
-		list_add(&block->module_list, &module->block_list);
+		ba->offset = block->offset;
+		block->data_type = ba->data_type;
+		block->bytes_used = ba->size % block->size;
+		list_add(&block->in_use_list, block_list);
 		list_move(&block->list, &dsp->used_block_list);
-		dev_dbg(dsp->dev, "module %d added block %d:%d at offset 0x%x\n",
-			module->id, block->type, block->index, block->offset);
+		dev_dbg(dsp->dev, "block allocated %d:%d at offset 0x%x\n",
+			block->type, block->index, block->offset);
 		return 0;
 	}
 
@@ -521,13 +619,12 @@ static int block_alloc(struct sst_module *module,
 	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
 
 		/* ignore blocks with wrong type */
-		if (block->type != data->type)
+		if (block->type != ba->type)
 			continue;
 
 		/* do we span > 1 blocks */
-		if (data->size > block->size) {
-			ret = block_alloc_contiguous(module, data,
-				block->offset, data->size);
+		if (ba->size > block->size) {
+			ret = block_alloc_contiguous(dsp, ba, block_list);
 			if (ret == 0)
 				return ret;
 		}
@@ -537,95 +634,72 @@ static int block_alloc(struct sst_module *module,
 	return -ENOMEM;
 }
 
-/* remove module from memory - callers hold locks */
-static void block_module_remove(struct sst_module *module)
+int sst_alloc_blocks(struct sst_dsp *dsp, struct sst_block_allocator *ba,
+	struct list_head *block_list)
 {
-	struct sst_mem_block *block, *tmp;
-	struct sst_dsp *dsp = module->dsp;
-	int err;
+	int ret;
 
-	/* disable each block  */
-	list_for_each_entry(block, &module->block_list, module_list) {
+	//ba->num_blocks = 0;
 
-		if (block->ops && block->ops->disable) {
-			err = block->ops->disable(block);
-			if (err < 0)
-				dev_err(dsp->dev,
-					"error: cant disable block %d:%d\n",
-					block->type, block->index);
-		}
+	mutex_lock(&dsp->mutex);
+
+	ret = block_alloc(dsp, ba, block_list);
+	if (ret < 0) {
+		dev_err(dsp->dev, "error: can't alloc blocks %d\n", ret);
+		goto out;
 	}
 
-	/* mark each block as free */
-	list_for_each_entry_safe(block, tmp, &module->block_list, module_list) {
-		list_del(&block->module_list);
-		list_move(&block->list, &dsp->free_block_list);
-		dev_dbg(dsp->dev, "module %d free block %d:%d at offset 0x%x\n",
-			module->id, block->type, block->index, block->offset);
-	}
-}
+	/* prepare DSP blocks for module usage */
+	ret = block_list_prepare(dsp, block_list);
+	if (ret < 0)
+		dev_err(dsp->dev, "error: prepare failed\n");
 
-/* prepare the memory block to receive data from host - callers hold locks */
-static int block_module_prepare(struct sst_module *module)
-{
-	struct sst_mem_block *block;
-	int ret = 0;
-
-	/* enable each block so that's it'e ready for module P/S data */
-	list_for_each_entry(block, &module->block_list, module_list) {
-
-		if (block->ops && block->ops->enable) {
-			ret = block->ops->enable(block);
-			if (ret < 0) {
-				dev_err(module->dsp->dev,
-					"error: cant disable block %d:%d\n",
-					block->type, block->index);
-				goto err;
-			}
-		}
-	}
-	return ret;
-
-err:
-	list_for_each_entry(block, &module->block_list, module_list) {
-		if (block->ops && block->ops->disable)
-			block->ops->disable(block);
-	}
+out:
+	mutex_unlock(&dsp->mutex);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(sst_alloc_blocks);
+
+int sst_free_blocks(struct sst_dsp *dsp, struct list_head *block_list)
+{
+	mutex_lock(&dsp->mutex);
+	block_list_remove(dsp, block_list);
+	mutex_unlock(&dsp->mutex);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sst_free_blocks);
 
 /* allocate memory blocks for static module addresses - callers hold locks */
-static int block_alloc_fixed(struct sst_module *module,
-	struct sst_module_data *data)
+static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba,
+	struct list_head *block_list)
 {
-	struct sst_dsp *dsp = module->dsp;
 	struct sst_mem_block *block, *tmp;
-	u32 end = data->offset + data->size, block_end;
+	u32 end = ba->offset + ba->size, block_end;
 	int err;
 
 	/* only IRAM/DRAM blocks are managed */
-	if (data->type != SST_MEM_IRAM && data->type != SST_MEM_DRAM)
+	if (ba->type != SST_MEM_IRAM && ba->type != SST_MEM_DRAM)
 		return 0;
 
 	/* are blocks already attached to this module */
-	list_for_each_entry_safe(block, tmp, &module->block_list, module_list) {
+	list_for_each_entry_safe(block, tmp, block_list, in_use_list) {
 
 		/* force compacting mem blocks of the same data_type */
-		if (block->data_type != data->data_type)
+		if (block->data_type != ba->data_type)
 			continue;
 
 		block_end = block->offset + block->size;
 
 		/* find block that holds section */
-		if (data->offset >= block->offset && end < block_end)
+		if (ba->offset >= block->offset && end < block_end)
 			return 0;
 
 		/* does block span more than 1 section */
-		if (data->offset >= block->offset && data->offset < block_end) {
+		if (ba->offset >= block->offset && ba->offset < block_end) {
 
-			err = block_alloc_contiguous(module, data,
-				block->offset + block->size,
-				data->size - block->size);
+			ba->size -= block->size;
+			ba->offset += block->size;
+			err = block_alloc_contiguous(dsp, ba, block_list);
 			if (err < 0)
 				return -ENOMEM;
 
@@ -639,23 +713,21 @@ static int block_alloc_fixed(struct sst_module *module,
 		block_end = block->offset + block->size;
 
 		/* find block that holds section */
-		if (data->offset >= block->offset && end < block_end) {
+		if (ba->offset >= block->offset && end < block_end) {
 
 			/* add block */
-			block->data_type = data->data_type;
+			block->data_type = ba->data_type;
 			list_move(&block->list, &dsp->used_block_list);
-			list_add(&block->module_list, &module->block_list);
-			dev_dbg(dsp->dev, "module %d added block %d:%d at offset 0x%x\n",
-				module->id, block->type, block->index,
-				block->offset);
+			list_add(&block->in_use_list, block_list);
+			dev_dbg(dsp->dev, "block allocated %d:%d at offset 0x%x\n",
+				block->type, block->index, block->offset);
 			return 0;
 		}
 
 		/* does block span more than 1 section */
-		if (data->offset >= block->offset && data->offset < block_end) {
+		if (ba->offset >= block->offset && ba->offset < block_end) {
 
-			err = block_alloc_contiguous(module, data,
-				block->offset, data->size);
+			err = block_alloc_contiguous(dsp, ba, block_list);
 			if (err < 0)
 				return -ENOMEM;
 
@@ -668,27 +740,33 @@ static int block_alloc_fixed(struct sst_module *module,
 }
 
 /* Load fixed module data into DSP memory blocks */
-int sst_module_insert_fixed_block(struct sst_module *module,
-	struct sst_module_data *data)
+int sst_module_alloc_blocks(struct sst_module *module)
 {
 	struct sst_dsp *dsp = module->dsp;
 	struct sst_fw *sst_fw = module->sst_fw;
+	struct sst_block_allocator ba;
 	int ret;
+
+	ba.size = module->size;
+	ba.type = module->type;
+	ba.data_type = module->data_type;
+	ba.offset = module->data_offset;
+//	ba.num_blocks = 0;
 
 	mutex_lock(&dsp->mutex);
 
 	/* alloc blocks that includes this section */
-	ret = block_alloc_fixed(module, data);
+	ret = block_alloc_fixed(dsp, &ba, &module->block_list);
 	if (ret < 0) {
 		dev_err(dsp->dev,
 			"error: no free blocks for section at offset 0x%x size 0x%x\n",
-			data->offset, data->size);
+			module->offset, module->size);
 		mutex_unlock(&dsp->mutex);
 		return -ENOMEM;
 	}
 
 	/* prepare DSP blocks for module copy */
-	ret = block_module_prepare(module);
+	ret = block_list_prepare(dsp, &module->block_list);
 	if (ret < 0) {
 		dev_err(dsp->dev, "error: fw module prepare failed\n");
 		goto err;
@@ -697,38 +775,91 @@ int sst_module_insert_fixed_block(struct sst_module *module,
 	/* copy partial module data to blocks */
 	if (dsp->fw_use_dma) {
 		ret = sst_dsp_dma_copyto(dsp,
-			dsp->addr.lpe_base + data->offset,
-			sst_fw->dmable_fw_paddr + data->data_offset,
-			data->size);
+			dsp->addr.lpe_base + module->offset,
+			sst_fw->dmable_fw_paddr + module->data_offset,
+			module->size);
 		if (ret < 0) {
 			dev_err(dsp->dev, "error: module copy failed\n");
 			goto err;
 		}
 	} else
-		sst_memcpy32(dsp->addr.lpe + data->offset, data->data,
-			data->size);
+		sst_memcpy32(dsp->addr.lpe + module->offset, module->data,
+			module->size);
 
 	mutex_unlock(&dsp->mutex);
 	return ret;
 
 err:
-	block_module_remove(module);
+	block_list_remove(dsp, &module->block_list);
 	mutex_unlock(&dsp->mutex);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(sst_module_insert_fixed_block);
+EXPORT_SYMBOL_GPL(sst_module_alloc_blocks);
 
 /* Unload entire module from DSP memory */
-int sst_block_module_remove(struct sst_module *module)
+int sst_module_free_blocks(struct sst_module *module)
 {
 	struct sst_dsp *dsp = module->dsp;
 
 	mutex_lock(&dsp->mutex);
-	block_module_remove(module);
+	block_list_remove(dsp, &module->block_list);
 	mutex_unlock(&dsp->mutex);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sst_block_module_remove);
+EXPORT_SYMBOL_GPL(sst_module_free_blocks);
+
+int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime)
+{
+	struct sst_dsp *dsp = runtime->dsp;
+	struct sst_module *module = runtime->module;
+	struct sst_block_allocator ba;
+	int ret;
+
+	ba.size = module->persistent_size;
+	ba.type = SST_MEM_DRAM;
+	ba.data_type = SST_DATA_P;
+	ba.offset = module->data_offset;
+//	ba.num_blocks = 0;
+
+	mutex_lock(&dsp->mutex);
+
+	/* alloc blocks that includes this section */
+	ret = block_alloc_fixed(dsp, &ba, &runtime->block_list);
+	if (ret < 0) {
+		dev_err(dsp->dev,
+			"error: no free blocks for runtime module size 0x%x\n",
+			module->persistent_size);
+		mutex_unlock(&dsp->mutex);
+		return -ENOMEM;
+	}
+
+	/* prepare DSP blocks for module copy */
+	ret = block_list_prepare(dsp, &runtime->block_list);
+	if (ret < 0) {
+		dev_err(dsp->dev, "error: runtime block prepare failed\n");
+		goto err;
+	}
+
+	mutex_unlock(&dsp->mutex);
+	return ret;
+
+err:
+	block_list_remove(dsp, &module->block_list);
+	mutex_unlock(&dsp->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_alloc_blocks);
+
+int sst_module_runtime_free_blocks(struct sst_module_runtime *runtime)
+{
+	struct sst_dsp *dsp = runtime->dsp;
+
+	mutex_lock(&dsp->mutex);
+	block_list_remove(dsp, &runtime->block_list);
+	mutex_unlock(&dsp->mutex);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_free_blocks);
 
 /* register a DSP memory block for use with FW based modules */
 struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
@@ -781,80 +912,53 @@ void sst_mem_block_unregister_all(struct sst_dsp *dsp)
 EXPORT_SYMBOL_GPL(sst_mem_block_unregister_all);
 
 /* allocate scratch buffer blocks */
-struct sst_module *sst_mem_block_alloc_scratch(struct sst_dsp *dsp)
+int sst_block_alloc_scratch(struct sst_dsp *dsp)
 {
-	struct sst_module *sst_module, *scratch;
-	struct sst_mem_block *block, *tmp;
-	u32 block_size;
-	int ret = 0;
-
-	scratch = kzalloc(sizeof(struct sst_module), GFP_KERNEL);
-	if (scratch == NULL)
-		return NULL;
+	struct sst_module *module;
+	struct sst_block_allocator ba;
+	u32 scratch = 0;
+	int ret;
 
 	mutex_lock(&dsp->mutex);
 
 	/* calculate required scratch size */
-	list_for_each_entry(sst_module, &dsp->module_list, list) {
-		if (scratch->s.size < sst_module->s.size)
-			scratch->s.size = sst_module->s.size;
+	list_for_each_entry(module, &dsp->module_list, list) {
+		if (scratch < module->scratch_size)
+			scratch = module->scratch_size;
 	}
 
-	dev_dbg(dsp->dev, "scratch buffer required is %d bytes\n",
-		scratch->s.size);
+	dev_dbg(dsp->dev, "scratch buffer required is %d bytes\n", scratch);
 
-	/* init scratch module */
-	scratch->dsp = dsp;
-	scratch->s.type = SST_MEM_DRAM;
-	scratch->s.data_type = SST_DATA_S;
-	INIT_LIST_HEAD(&scratch->block_list);
-
-	/* check free blocks before looking at used blocks for space */
-	if (!list_empty(&dsp->free_block_list))
-		block = list_first_entry(&dsp->free_block_list,
-			struct sst_mem_block, list);
-	else
-		block = list_first_entry(&dsp->used_block_list,
-			struct sst_mem_block, list);
-	block_size = block->size;
+	ba.size = scratch;
+	ba.type = SST_MEM_DRAM;
+	ba.data_type = SST_DATA_S;
+	//ba.offset = ;
 
 	/* allocate blocks for module scratch buffers */
 	dev_dbg(dsp->dev, "allocating scratch blocks\n");
-	ret = block_alloc(scratch, &scratch->s);
+	ret = block_alloc(dsp, &ba, &dsp->scratch_block_list);
 	if (ret < 0) {
 		dev_err(dsp->dev, "error: can't alloc scratch blocks\n");
-		goto err;
+		return ret;
 	}
 
 	/* assign the same offset of scratch to each module */
-	list_for_each_entry(sst_module, &dsp->module_list, list)
-		sst_module->s.offset = scratch->s.offset;
+	list_for_each_entry(module, &dsp->module_list, list)
+		dsp->scratch_offset = ba.offset;
 
 	mutex_unlock(&dsp->mutex);
 	return scratch;
-
-err:
-	list_for_each_entry_safe(block, tmp, &scratch->block_list, module_list)
-		list_del(&block->module_list);
-	mutex_unlock(&dsp->mutex);
-	return NULL;
 }
-EXPORT_SYMBOL_GPL(sst_mem_block_alloc_scratch);
+EXPORT_SYMBOL_GPL(sst_block_alloc_scratch);
 
 /* free all scratch blocks */
-void sst_mem_block_free_scratch(struct sst_dsp *dsp,
-	struct sst_module *scratch)
+void sst_block_free_scratch(struct sst_dsp *dsp)
 {
-	struct sst_mem_block *block, *tmp;
-
 	mutex_lock(&dsp->mutex);
-
-	list_for_each_entry_safe(block, tmp, &scratch->block_list, module_list)
-		list_del(&block->module_list);
-
+	block_list_remove(dsp, &dsp->scratch_block_list);
 	mutex_unlock(&dsp->mutex);
 }
-EXPORT_SYMBOL_GPL(sst_mem_block_free_scratch);
+EXPORT_SYMBOL_GPL(sst_block_free_scratch);
 
 /* get a module from it's unique ID */
 struct sst_module *sst_module_get_from_id(struct sst_dsp *dsp, u32 id)
@@ -875,19 +979,39 @@ struct sst_module *sst_module_get_from_id(struct sst_dsp *dsp, u32 id)
 }
 EXPORT_SYMBOL_GPL(sst_module_get_from_id);
 
-/* returns block address in DSP address space */
-u32 sst_module_get_block_dsp_offset(struct sst_module_data *block,
-	struct sst_dsp *dsp)
+struct sst_module_runtime *sst_module_runtime_get_from_id(
+	struct sst_module *module, u32 id)
 {
-	switch (block->type) {
+	struct sst_module_runtime *runtime;
+	struct sst_dsp *dsp = module->dsp;
+
+	mutex_lock(&dsp->mutex);
+
+	list_for_each_entry(runtime, &module->runtime_list, list) {
+		if (runtime->id == id) {
+			mutex_unlock(&dsp->mutex);
+			return runtime;
+		}
+	}
+
+	mutex_unlock(&dsp->mutex);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_get_from_id);
+
+/* returns block address in DSP address space */
+u32 sst_dsp_get_offset(struct sst_dsp *dsp, u32 offset,
+	enum sst_mem_type type)
+{
+	switch (type) {
 	case SST_MEM_IRAM:
-		return block->offset - dsp->addr.iram_offset +
+		return offset - dsp->addr.iram_offset +
 			dsp->addr.dsp_iram_offset;
 	case SST_MEM_DRAM:
-		return block->offset - dsp->addr.dram_offset +
+		return offset - dsp->addr.dram_offset +
 			dsp->addr.dsp_dram_offset;
 	default:
 		return 0;
 	}
 }
-EXPORT_SYMBOL_GPL(sst_module_get_block_dsp_offset);
+EXPORT_SYMBOL_GPL(sst_dsp_get_offset);

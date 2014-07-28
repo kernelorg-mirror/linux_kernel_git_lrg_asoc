@@ -90,10 +90,16 @@ static const struct snd_pcm_hardware hsw_pcm_hardware = {
 	.buffer_bytes_max	= HSW_PCM_PERIODS_MAX * PAGE_SIZE,
 };
 
+struct hsw_pcm_module_map {
+	int dai_id;
+	enum sst_hsw_module_id mod_id;
+};
+
 /* private data for each PCM DSP stream */
 struct hsw_pcm_data {
 	int dai_id;
 	struct sst_hsw_stream *stream;
+	struct sst_module_runtime *runtime;
 	u32 volume[2];
 	struct snd_pcm_substream *substream;
 	struct snd_compr_stream *cstream;
@@ -500,28 +506,8 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	/* we use hardcoded memory offsets atm, will be updated for new FW */
-	if (stream_type == SST_HSW_STREAM_TYPE_CAPTURE) {
-		sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
-			SST_HSW_MODULE_PCM_CAPTURE, module_data->entry);
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			0x449400, 0x4000);
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			0x400000, 0);
-	} else { /* stream_type == SST_HSW_STREAM_TYPE_SYSTEM */
-		sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
-			SST_HSW_MODULE_PCM_SYSTEM, module_data->entry);
-
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			module_data->offset, module_data->size);
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			0x44d400, 0x3800);
-
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			module_data->offset, module_data->size);
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			0x400000, 0);
-	}
+	sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
+		pcm_data->runtime);
 
 	ret = sst_hsw_stream_commit(hsw, pcm_data->stream);
 	if (ret < 0) {
@@ -687,6 +673,53 @@ static struct snd_pcm_ops hsw_pcm_ops = {
 	.page		= snd_pcm_sgbuf_ops_page,
 };
 
+/* static mappings between PCMs and modules - may be dynamic in future */
+static struct hsw_pcm_module_map mod_map[] = {
+	{0, SST_HSW_MODULE_PCM_SYSTEM},		/* "System Pin" */
+	{1, SST_HSW_MODULE_PCM},		/* "Offload0 Pin" */
+	{2, SST_HSW_MODULE_PCM},		/* "Offload1 Pin" */
+	{3, SST_HSW_MODULE_PCM_REFERENCE},	/* "Loopback Pin" */
+	{4, SST_HSW_MODULE_PCM_CAPTURE},	/* "Capture Pin" */
+};
+
+static int hsw_pcm_create_modules(struct hsw_priv_data *pdata)
+{
+	struct sst_hsw *hsw = pdata->hsw;
+	struct hsw_pcm_data *pcm_data;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mod_map); i++) {
+		pcm_data = &pdata->pcm[i];
+
+		pcm_data->runtime = sst_hsw_runtime_module_create(hsw,
+			mod_map[i].mod_id);
+		if (pcm_data->runtime == NULL)
+			goto err;
+	}
+
+	return 0;
+
+err:
+	for (--i; i >= 0; i--) {
+		pcm_data = &pdata->pcm[i];
+		sst_hsw_runtime_module_free(pcm_data->runtime);
+	}
+
+	return -ENODEV;
+}
+
+static void hsw_pcm_free_modules(struct hsw_priv_data *pdata)
+{
+	struct hsw_pcm_data *pcm_data;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mod_map); i++) {
+		pcm_data = &pdata->pcm[i];
+
+		sst_hsw_runtime_module_free(pcm_data->runtime);
+	}
+}
+
 static void hsw_pcm_free(struct snd_pcm *pcm)
 {
 	snd_pcm_lib_preallocate_free_for_all(pcm);
@@ -841,6 +874,9 @@ static int hsw_pcm_probe(struct snd_soc_platform *platform)
 		}
 	}
 
+	/* allocate runtime modules */
+	hsw_pcm_create_modules(priv_data);
+
 	/* enable runtime PM with auto suspend */
 	pm_runtime_set_autosuspend_delay(platform->dev,
 		SST_RUNTIME_SUSPEND_DELAY);
@@ -867,6 +903,7 @@ static int hsw_pcm_remove(struct snd_soc_platform *platform)
 	int i;
 
 	pm_runtime_disable(platform->dev);
+	hsw_pcm_free_modules(priv_data);
 
 	for (i = 0; i < ARRAY_SIZE(hsw_dais); i++) {
 		if (hsw_dais[i].playback.channels_min)
@@ -946,6 +983,8 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 
+	hsw_pcm_free_modules(pdata);
+
 	return sst_hsw_dsp_runtime_suspend(hsw);
 }
 
@@ -953,8 +992,14 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 {
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
+	int ret;
 
-	return sst_hsw_dsp_runtime_resume(hsw);
+	ret = sst_hsw_dsp_runtime_resume(hsw);
+	if (ret < 0)
+		return ret;
+
+	ret = hsw_pcm_create_modules(pdata);
+	return ret;
 }
 
 static const struct dev_pm_ops hsw_pcm_pm = {
