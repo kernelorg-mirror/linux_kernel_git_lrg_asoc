@@ -14,6 +14,7 @@
  *
  */
 
+#define DEBUG
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/list.h>

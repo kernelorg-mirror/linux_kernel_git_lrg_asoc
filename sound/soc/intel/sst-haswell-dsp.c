@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -91,7 +91,7 @@ static int hsw_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 	struct dma_block_info *block;
 	struct sst_module *mod;
 	struct sst_module_template template;
-	int count;
+	int count, ret;
 	void __iomem *ram;
 
 	/* TODO: allowed module types need to be configurable */
@@ -151,16 +151,21 @@ static int hsw_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 		}
 
 		mod->size = block->size;
-		mod->data_type = SST_DATA_M;
 		mod->data = (void *)block + sizeof(*block);
 		mod->data_offset = mod->data - fw->dma_buf;
 
-		dev_dbg(dsp->dev, "copy firmware block %d type 0x%x "
+		dev_dbg(dsp->dev, "module block %d type 0x%x "
 			"size 0x%x ==> ram %p offset 0x%x\n",
-			count, block->type, block->size, ram,
+			count, mod->type, block->size, ram,
 			block->ram_offset);
 
-		sst_module_alloc_blocks(mod);
+		ret = sst_module_alloc_blocks(mod);
+		if (ret < 0) {
+			dev_err(dsp->dev, "error: could not allocate blocks for module %d\n",
+				count);
+			sst_module_free(mod);
+			return ret;
+		}
 
 		block = (void *)block + sizeof(*block) + block->size;
 	}

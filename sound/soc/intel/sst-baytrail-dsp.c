@@ -110,7 +110,6 @@ static int sst_byt_parse_module(struct sst_dsp *dsp, struct sst_fw *fw,
 		}
 
 		mod->size = block->size;
-		mod->data_type = SST_DATA_M;
 		mod->data = (void *)block + sizeof(*block);
 
 		sst_module_alloc_blocks(mod);

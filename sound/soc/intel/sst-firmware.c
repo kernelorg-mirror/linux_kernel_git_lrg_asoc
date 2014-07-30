@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -317,14 +317,16 @@ EXPORT_SYMBOL(sst_dma_new);
 
 void sst_dma_free(struct sst_dma *dma)
 {
+
 	if (dma == NULL)
 		return;
 
 	if (dma->ch)
 		dma_release_channel(dma->ch);
 
-	if (dma->dma_dev)
-		dw_adsp_unregister(dma->dma_dev);
+	//if (dma->dma_dev)
+	//	dw_adsp_unregister(dma->dma_dev);
+
 }
 EXPORT_SYMBOL(sst_dma_free);
 
@@ -434,6 +436,8 @@ void sst_fw_free(struct sst_fw *sst_fw)
 {
 	struct sst_dsp *dsp = sst_fw->dsp;
 
+	dev_dbg(dsp->dev, "freeing firmware\n");
+
 	mutex_lock(&dsp->mutex);
 	list_del(&sst_fw->list);
 	mutex_unlock(&dsp->mutex);
@@ -449,6 +453,8 @@ EXPORT_SYMBOL_GPL(sst_fw_free);
 void sst_fw_free_all(struct sst_dsp *dsp)
 {
 	struct sst_fw *sst_fw, *t;
+
+	dev_dbg(dsp->dev, "freeing all firmware\n");
 
 	mutex_lock(&dsp->mutex);
 	list_for_each_entry_safe(sst_fw, t, &dsp->fw_list, list) {
@@ -548,6 +554,7 @@ static struct sst_mem_block *find_block(struct sst_dsp *dsp,
 	return NULL;
 }
 
+/* Block allocator must be on block boundary */
 static int block_alloc_contiguous(struct sst_dsp *dsp,
 	struct sst_block_allocator *ba, struct list_head *block_list)
 {
@@ -577,10 +584,6 @@ static int block_alloc_contiguous(struct sst_dsp *dsp,
 
 	}
 
-	/* save start offset for scratch blocks */
-	if (ba->data_type == SST_DATA_S)
-		ba->offset = block_start;
-
 	list_splice(&tmp, &dsp->used_block_list);
 	return 0;
 }
@@ -606,7 +609,6 @@ static int block_alloc(struct sst_dsp *dsp, struct sst_block_allocator *ba,
 			continue;
 
 		ba->offset = block->offset;
-		block->data_type = ba->data_type;
 		block->bytes_used = ba->size % block->size;
 		list_add(&block->in_use_list, block_list);
 		list_move(&block->list, &dsp->used_block_list);
@@ -640,6 +642,9 @@ int sst_alloc_blocks(struct sst_dsp *dsp, struct sst_block_allocator *ba,
 	int ret;
 
 	//ba->num_blocks = 0;
+
+	dev_dbg(dsp->dev, "block request %d bytes at offset 0x%x type %d\n",
+		ba->size, ba->offset, ba->type);
 
 	mutex_lock(&dsp->mutex);
 
@@ -684,8 +689,8 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 	/* are blocks already attached to this module */
 	list_for_each_entry_safe(block, tmp, block_list, in_use_list) {
 
-		/* force compacting mem blocks of the same data_type */
-		if (block->data_type != ba->data_type)
+		/* ignore blocks with wrong type */
+		if (block->type != ba->type)
 			continue;
 
 		block_end = block->offset + block->size;
@@ -698,7 +703,7 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 		if (ba->offset >= block->offset && ba->offset < block_end) {
 
 			ba->size -= block->size;
-			ba->offset += block->size;
+			ba->offset = block_end;
 			err = block_alloc_contiguous(dsp, ba, block_list);
 			if (err < 0)
 				return -ENOMEM;
@@ -712,11 +717,14 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 	list_for_each_entry_safe(block, tmp, &dsp->free_block_list, list) {
 		block_end = block->offset + block->size;
 
+		/* ignore blocks with wrong type */
+		if (block->type != ba->type)
+			continue;
+
 		/* find block that holds section */
 		if (ba->offset >= block->offset && end < block_end) {
 
 			/* add block */
-			block->data_type = ba->data_type;
 			list_move(&block->list, &dsp->used_block_list);
 			list_add(&block->in_use_list, block_list);
 			dev_dbg(dsp->dev, "block allocated %d:%d at offset 0x%x\n",
@@ -727,13 +735,13 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 		/* does block span more than 1 section */
 		if (ba->offset >= block->offset && ba->offset < block_end) {
 
+			ba->offset = block->offset;
 			err = block_alloc_contiguous(dsp, ba, block_list);
 			if (err < 0)
 				return -ENOMEM;
 
 			return 0;
 		}
-
 	}
 
 	return -ENOMEM;
@@ -749,9 +757,11 @@ int sst_module_alloc_blocks(struct sst_module *module)
 
 	ba.size = module->size;
 	ba.type = module->type;
-	ba.data_type = module->data_type;
-	ba.offset = module->data_offset;
+	ba.offset = module->offset;
 //	ba.num_blocks = 0;
+
+	dev_dbg(dsp->dev, "block request 0x%x bytes at offset 0x%x type %d\n",
+		ba.size, ba.offset, ba.type);
 
 	mutex_lock(&dsp->mutex);
 
@@ -817,9 +827,11 @@ int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime)
 
 	ba.size = module->persistent_size;
 	ba.type = SST_MEM_DRAM;
-	ba.data_type = SST_DATA_P;
-	ba.offset = module->data_offset;
+	ba.offset = module->offset;
 //	ba.num_blocks = 0;
+
+	dev_dbg(dsp->dev, "block request %d bytes at offset 0x%x type %d\n",
+		ba.size, ba.offset, ba.type);
 
 	mutex_lock(&dsp->mutex);
 
@@ -931,8 +943,10 @@ int sst_block_alloc_scratch(struct sst_dsp *dsp)
 
 	ba.size = scratch;
 	ba.type = SST_MEM_DRAM;
-	ba.data_type = SST_DATA_S;
-	//ba.offset = ;
+	ba.offset = 0;
+
+	dev_dbg(dsp->dev, "block request %d bytes at offset 0x%x type %d\n",
+		ba.size, ba.offset, ba.type);
 
 	/* allocate blocks for module scratch buffers */
 	dev_dbg(dsp->dev, "allocating scratch blocks\n");

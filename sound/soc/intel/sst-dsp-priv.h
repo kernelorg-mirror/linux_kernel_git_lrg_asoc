@@ -92,15 +92,6 @@ struct sst_mailbox {
 };
 
 /*
- * Audio DSP Firmware data types.
- */
-enum sst_data_type {
-	SST_DATA_M	= 0, /* module block data */
-	SST_DATA_P	= 1, /* peristant data (text, data) */
-	SST_DATA_S	= 2, /* scratch data (usually buffers) */
-};
-
-/*
  * Audio DSP memory block types.
  */
 enum sst_mem_type {
@@ -151,9 +142,8 @@ struct sst_module_template {
 struct sst_block_allocator {
 	u32 id;
 	u32 offset;
-	u32 size;
+	int size;
 	enum sst_mem_type type;
-	enum sst_data_type data_type;
 };
 
 /*
@@ -191,7 +181,6 @@ struct sst_module {
 	u32 scratch_size;		/* global scratch memory required */
 	u32 persistent_size;		/* private memory required */
 	enum sst_mem_type type;		/* destination memory type */
-	enum sst_data_type data_type;	/* type of module data */
 	u32 data_offset;		/* offset in ADSP memory space */
 	void *data;			/* module data */
 
@@ -232,7 +221,6 @@ struct sst_mem_block {
 	struct sst_block_ops *ops;	/* block operations, if any */
 
 	/* block status */
-	enum sst_data_type data_type;	/* data type held in this block */
 	u32 bytes_used;			/* bytes in use by modules */
 	void *private;			/* generic core does not touch this */
 	int users;			/* number of modules using this block */
