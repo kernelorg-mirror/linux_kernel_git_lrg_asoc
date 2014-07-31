@@ -1390,10 +1390,13 @@ int sst_hsw_stream_set_module_info(struct sst_hsw *hsw,
 	stream->request.scratch_mem.offset =
 		sst_dsp_get_offset(dsp, dsp->scratch_offset, SST_MEM_DRAM);
 	stream->request.scratch_mem.size = dsp->scratch_size;
-
-	dev_dbg(hsw->dev, "Module %d allocate persistent=0x%x(%x), scratch=0x%x(%x)",
-		module->id, stream->request.persistent_mem.offset,
-		stream->request.persistent_mem.size,
+// Keyon - check these valuse are the ones returned by block allocator
+	dev_dbg(hsw->dev, "module %d runtime %d using:\n", module->id,
+		runtime->id);
+	dev_dbg(hsw->dev, " persistent offset 0x%x bytes 0x%x\n",
+		stream->request.persistent_mem.offset,
+		stream->request.persistent_mem.size);
+	dev_dbg(hsw->dev, " scratch offset 0x%x bytes 0x%x\n",
 		stream->request.scratch_mem.offset,
 		stream->request.scratch_mem.size);
 

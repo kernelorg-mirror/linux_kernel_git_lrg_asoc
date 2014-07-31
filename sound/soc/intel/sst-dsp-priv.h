@@ -226,7 +226,7 @@ struct sst_mem_block {
 	int users;			/* number of modules using this block */
 
 	/* block lists */
-	struct list_head in_use_list;	/* Module list of blocks */
+	struct list_head module_list;	/* Module list of blocks */
 	struct list_head list;		/* Map list of free/used blocks */
 };
 
