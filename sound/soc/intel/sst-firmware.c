@@ -519,6 +519,7 @@ struct sst_module_runtime *sst_module_runtime_new(struct sst_module *module,
 
 	runtime->id = id;
 	runtime->dsp = dsp;
+	runtime->module = module;
 	INIT_LIST_HEAD(&runtime->block_list);
 
 	mutex_lock(&dsp->mutex);
