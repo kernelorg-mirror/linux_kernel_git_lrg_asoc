@@ -486,28 +486,8 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	/* we use hardcoded memory offsets atm, will be updated for new FW */
-	if (stream_type == SST_HSW_STREAM_TYPE_CAPTURE) {
-		sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
-			SST_HSW_MODULE_PCM_CAPTURE, module_data->entry);
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			0x449400, 0x4000);
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			0x400000, 0);
-	} else { /* stream_type == SST_HSW_STREAM_TYPE_SYSTEM */
-		sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
-			SST_HSW_MODULE_PCM_SYSTEM, module_data->entry);
-
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			module_data->offset, module_data->size);
-		sst_hsw_stream_set_pmemory_info(hsw, pcm_data->stream,
-			0x44d400, 0x3800);
-
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			module_data->offset, module_data->size);
-		sst_hsw_stream_set_smemory_info(hsw, pcm_data->stream,
-			0x400000, 0);
-	}
+	sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
+		pcm_data->runtime);
 
 	ret = sst_hsw_stream_commit(hsw, pcm_data->stream);
 	if (ret < 0) {
