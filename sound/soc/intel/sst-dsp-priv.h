@@ -309,6 +309,15 @@ struct sst_module *sst_module_get_from_id(struct sst_dsp *dsp, u32 id);
 int sst_module_alloc_blocks(struct sst_module *module);
 int sst_module_free_blocks(struct sst_module *module);
 
+/* Create/Free firmware module runtime instances */
+struct sst_module_runtime *sst_module_runtime_new(struct sst_module *module,
+	int id, void *private);
+void sst_module_runtime_free(struct sst_module_runtime *runtime);
+struct sst_module_runtime *sst_module_runtime_get_from_id(
+	struct sst_module *module, u32 id);
+int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime);
+int sst_module_runtime_free_blocks(struct sst_module_runtime *runtime);
+
 /* generic block allocation */
 int sst_alloc_blocks(struct sst_dsp *dsp, struct sst_block_allocator *ba,
 	struct list_head *block_list);
