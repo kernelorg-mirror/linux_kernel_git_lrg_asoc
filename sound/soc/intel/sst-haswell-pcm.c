@@ -108,11 +108,17 @@ struct hsw_pcm_data {
 	bool allocated;
 };
 
+enum hsw_pm_state {
+	HSW_PM_STATE_D3 = 0,
+	HSW_PM_STATE_D0 = 1,
+};
+
 /* private data for the driver */
 struct hsw_priv_data {
 	/* runtime DSP */
 	struct sst_hsw *hsw;
 	struct device *dev;
+	enum hsw_pm_state pm_state;
 
 	/* page tables */
 	struct snd_dma_buffer dmab[HSW_PCM_COUNT][2];
@@ -850,6 +856,7 @@ static int hsw_pcm_probe(struct snd_soc_platform *platform)
 	priv_data = devm_kzalloc(platform->dev, sizeof(*priv_data), GFP_KERNEL);
 	priv_data->hsw = pdata->dsp;
 	priv_data->dev = platform->dev;
+	priv_data->pm_state = HSW_PM_STATE_D0;
 	snd_soc_platform_set_drvdata(platform, priv_data);
 
 	/* allocate DSP buffer page tables */
@@ -971,19 +978,28 @@ static int hsw_pcm_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef CONFIG_PM
 
+#ifdef CONFIG_PM_RUNTIME
 static int hsw_pcm_runtime_idle(struct device *dev)
 {
+// TODO: Do we need this ???
 	return 0;
 }
+#else
+#define hsw_pcm_runtime_idle	NULL
+#endif
 
 static int hsw_pcm_runtime_suspend(struct device *dev)
 {
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 
+	if (pdata->pm_state == HSW_PM_STATE_D3)
+		return 0;
+
 	hsw_pcm_free_modules(pdata);
+	pdata->pm_state = HSW_PM_STATE_D3;
 
 	return sst_hsw_dsp_runtime_suspend(hsw);
 }
@@ -994,6 +1010,9 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
 
+	if (pdata->pm_state == HSW_PM_STATE_D0)
+		return 0;
+
 	ret = sst_hsw_dsp_runtime_resume(hsw);
 	if (ret < 0)
 		return ret;
@@ -1001,28 +1020,33 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 		return 0;
 
 	ret = hsw_pcm_create_modules(pdata);
+	if (ret == 0)
+		pdata->pm_state = HSW_PM_STATE_D0;
 	return ret;
+}
+
+static void hsw_pcm_runtime_complete(struct device *dev)
+{
+	hsw_pcm_runtime_resume(dev);
 }
 
 static const struct dev_pm_ops hsw_pcm_pm = {
 	.runtime_idle = hsw_pcm_runtime_idle,
 	.runtime_suspend = hsw_pcm_runtime_suspend,
 	.runtime_resume = hsw_pcm_runtime_resume,
+	.prepare = hsw_pcm_runtime_suspend,
+	.complete = hsw_pcm_runtime_complete,
 };
-
 #else
-#define hsw_pcm_runtime_idle	NULL
-#define hsw_pcm_runtime_suspend	NULL
-#define hsw_pcm_runtime_resume	NULL
+#define hsw_pcm_pm	NULL
 #endif
 
 static struct platform_driver hsw_pcm_driver = {
 	.driver = {
 		.name = "haswell-pcm-audio",
 		.owner = THIS_MODULE,
-#ifdef CONFIG_PM_RUNTIME
 		.pm = &hsw_pcm_pm,
-#endif
+
 	},
 
 	.probe = hsw_pcm_dev_probe,
