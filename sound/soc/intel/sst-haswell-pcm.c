@@ -1009,10 +1009,10 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 	if (pdata->pm_state == HSW_PM_STATE_D3)
 		return 0;
 
-	hsw_pcm_free_modules(pdata);
+	sst_hsw_dsp_runtime_suspend(hsw);
 	pdata->pm_state = HSW_PM_STATE_D3;
 
-	return sst_hsw_dsp_runtime_suspend(hsw);
+	return 0;
 }
 
 static int hsw_pcm_runtime_resume(struct device *dev)
@@ -1024,15 +1024,25 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 	if (pdata->pm_state == HSW_PM_STATE_D0)
 		return 0;
 
+	ret = sst_hsw_dsp_load(hsw);
+	if (ret < 0) {
+		dev_err(dev, "failed to reload %d\n", ret);
+		return ret;
+	}
+
+	ret = hsw_pcm_create_modules(pdata);
+	if (ret < 0) {
+		dev_err(dev, "failed to create modules %d\n", ret);
+		return ret;
+	}
+
 	ret = sst_hsw_dsp_runtime_resume(hsw);
 	if (ret < 0)
 		return ret;
 	else if (ret == 1) /* no action required */
 		return 0;
 
-	ret = hsw_pcm_create_modules(pdata);
-	if (ret == 0)
-		pdata->pm_state = HSW_PM_STATE_D0;
+	pdata->pm_state = HSW_PM_STATE_D0;
 	return ret;
 }
 
