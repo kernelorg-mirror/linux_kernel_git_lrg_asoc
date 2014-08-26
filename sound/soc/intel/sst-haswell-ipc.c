@@ -1820,12 +1820,12 @@ static void sst_hsw_drop_all(struct sst_hsw *hsw)
 			tx_drop_cnt, rx_drop_cnt);
 }
 
-static int sst_hsw_dsp_boot(struct sst_hsw *hsw)
+int sst_hsw_dsp_load(struct sst_hsw *hsw)
 {
 	struct sst_dsp *dsp = hsw->dsp;
-	int ret = 0;
+	int ret;
 
-	dev_dbg(hsw->dev, "booting audio DSP....");
+	dev_dbg(hsw->dev, "loading audio DSP....");
 
 	ret = sst_dsp_wake(dsp);
 	if (ret < 0) {
@@ -1844,6 +1844,23 @@ static int sst_hsw_dsp_boot(struct sst_hsw *hsw)
 		dev_err(hsw->dev, "error: SST FW reload failed\n");
 		sst_dsp_dma_put_channel(dsp);
 		return -ENOMEM;
+	}
+
+	sst_dsp_dma_put_channel(dsp);
+	return 0;
+}
+
+static int sst_hsw_dsp_restore(struct sst_hsw *hsw)
+{
+	struct sst_dsp *dsp = hsw->dsp;
+	int ret;
+
+	dev_dbg(hsw->dev, "restoring audio DSP....");
+
+	ret = sst_dsp_dma_get_channel(dsp, 0);
+	if (ret < 0) {
+		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
+		return ret;
 	}
 
 	ret = sst_hsw_dx_state_restore(hsw);
@@ -1897,7 +1914,7 @@ int sst_hsw_dsp_runtime_resume(struct sst_hsw *hsw)
 	if (hsw->boot_complete)
 		return 1; /* tell caller no action is required */
 
-	ret = sst_hsw_dsp_boot(hsw);
+	ret = sst_hsw_dsp_restore(hsw);
 	if (ret < 0)
 		dev_err(dev, "error: audio DSP boot failure\n");
 
