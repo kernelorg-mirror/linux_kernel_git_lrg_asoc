@@ -1838,6 +1838,7 @@ static int fw_log_open_data(struct inode *inode, struct file *file)
 	u32 header;
 	int ret;
 
+	pm_runtime_get(log_stream->hsw->dev);
 	file->private_data = inode->i_private;
 
 	req.ringinfo.ring_pt_address = virt_to_phys(log_stream->ring_descr);
@@ -1881,6 +1882,7 @@ static int fw_log_release(struct inode *inode, struct file *file)
 		return ret;
 	}
 
+	pm_runtime_put(log_stream->hsw->dev);
 	return 0;
 }
 
