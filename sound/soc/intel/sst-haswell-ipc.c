@@ -1708,7 +1708,7 @@ int sst_hsw_dx_set_state(struct sst_hsw *hsw,
 }
 
 struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
-	int mod_id)
+	int mod_id, int offset)
 {
 	struct sst_dsp *dsp = hsw->dsp;
 	struct sst_module *module;
@@ -1729,7 +1729,7 @@ struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
 		return NULL;
 	}
 
-	err = sst_module_runtime_alloc_blocks(runtime);
+	err = sst_module_runtime_alloc_blocks(runtime, offset);
 	if (err < 0) {
 		dev_err(dsp->dev, "error: failed to alloc blocks for module %d runtime\n",
 			mod_id);

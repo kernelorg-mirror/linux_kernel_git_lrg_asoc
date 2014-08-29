@@ -490,7 +490,7 @@ int sst_hsw_dbg_enable(struct sst_hsw *hsw,
 
 /* runtime module management */
 struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
-	int mod_id);
+	int mod_id, int offset);
 void sst_hsw_runtime_module_free(struct sst_module_runtime *runtime);
 
 /* PM */
