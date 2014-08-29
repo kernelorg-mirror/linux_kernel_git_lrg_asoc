@@ -86,6 +86,7 @@ enum sst_hsw_device_mclk {
 enum sst_hsw_device_mode {
 	SST_HSW_DEVICE_CLOCK_SLAVE   = 0,
 	SST_HSW_DEVICE_CLOCK_MASTER  = 1,
+	SST_HSW_DEVICE_TDM_CLOCK_MASTER = 2,
 };
 
 /* DX Power State */
@@ -297,7 +298,8 @@ struct sst_hsw_ipc_device_config_req {
 	u32 clock_frequency;
 	u32 mode;
 	u16 clock_divider;
-	u16 reserved;
+	u8 channels;
+	u8 reserved;
 } __attribute__((packed));
 
 /* Audio Data formats */
