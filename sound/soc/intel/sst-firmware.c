@@ -811,7 +811,8 @@ int sst_module_free_blocks(struct sst_module *module)
 }
 EXPORT_SYMBOL_GPL(sst_module_free_blocks);
 
-int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime)
+int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime,
+	int offset)
 {
 	struct sst_dsp *dsp = runtime->dsp;
 	struct sst_module *module = runtime->module;
@@ -824,16 +825,29 @@ int sst_module_runtime_alloc_blocks(struct sst_module_runtime *runtime)
 	ba.size = module->persistent_size;
 	ba.type = SST_MEM_DRAM;
 
-	dev_dbg(dsp->dev, "persistent block request 0x%x bytes type %d\n",
-		ba.size, ba.type);
-
 	mutex_lock(&dsp->mutex);
 
-	/* alloc blocks that includes this section */
-	ret = block_alloc(dsp, &ba, &runtime->block_list);
+	/* do we need to allocate at a fixed address ? */
+	if (offset != 0) {
+
+		ba.offset = offset;
+
+		dev_dbg(dsp->dev, "persistent fixed block request 0x%x bytes type %d offset 0x%x\n",
+			ba.size, ba.type, ba.offset);
+
+		/* alloc blocks that includes this section */
+		ret = block_alloc_fixed(dsp, &ba, &runtime->block_list);
+
+	} else {
+		dev_dbg(dsp->dev, "persistent block request 0x%x bytes type %d\n",
+			ba.size, ba.type);
+
+		/* alloc blocks that includes this section */
+		ret = block_alloc(dsp, &ba, &runtime->block_list);
+	}
 	if (ret < 0) {
 		dev_err(dsp->dev,
-			"error: no free blocks for runtime module size 0x%x\n",
+		"error: no free blocks for runtime module size 0x%x\n",
 			module->persistent_size);
 		mutex_unlock(&dsp->mutex);
 		return -ENOMEM;
@@ -945,16 +959,30 @@ int sst_block_alloc_scratch(struct sst_dsp *dsp)
 		return 0;
 	}
 
-	ba.size = dsp->scratch_size;
-	ba.type = SST_MEM_DRAM;
-	ba.offset = 0;
-
-	dev_dbg(dsp->dev, "block request 0x%x bytes type %d\n",
-		ba.size, ba.type);
-
 	/* allocate blocks for module scratch buffers */
 	dev_dbg(dsp->dev, "allocating scratch blocks\n");
-	ret = block_alloc(dsp, &ba, &dsp->scratch_block_list);
+
+	ba.size = dsp->scratch_size;
+	ba.type = SST_MEM_DRAM;
+
+	/* do we need to allocate at fixed offset */
+	if (dsp->scratch_offset != 0) {
+
+		dev_dbg(dsp->dev, "block request 0x%x bytes type %d at 0x%x\n",
+			ba.size, ba.type, ba.offset);
+
+		ba.offset = dsp->scratch_offset;
+
+		/* alloc blocks that includes this section */
+		ret = block_alloc_fixed(dsp, &ba, &dsp->scratch_block_list);
+
+	} else {
+		dev_dbg(dsp->dev, "block request 0x%x bytes type %d\n",
+			ba.size, ba.type);
+
+		ba.offset = 0;
+		ret = block_alloc(dsp, &ba, &dsp->scratch_block_list);
+	}
 	if (ret < 0) {
 		dev_err(dsp->dev, "error: can't alloc scratch blocks\n");
 		mutex_unlock(&dsp->mutex);
