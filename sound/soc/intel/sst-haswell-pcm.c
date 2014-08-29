@@ -115,6 +115,7 @@ struct hsw_pcm_data {
 	unsigned int wpos;
 	struct mutex mutex;
 	bool allocated;
+	int persistent_offset;
 };
 
 enum hsw_pm_state {
@@ -707,9 +708,11 @@ static int hsw_pcm_create_modules(struct hsw_priv_data *pdata)
 		pcm_data = &pdata->pcm[i];
 
 		pcm_data->runtime = sst_hsw_runtime_module_create(hsw,
-			mod_map[i].mod_id);
+			mod_map[i].mod_id, pcm_data->persistent_offset);
 		if (pcm_data->runtime == NULL)
 			goto err;
+		pcm_data->persistent_offset =
+			pcm_data->runtime->persistent_offset;
 	}
 
 	return 0;
