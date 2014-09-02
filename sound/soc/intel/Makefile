@@ -1,4 +1,3 @@
-EXTRA_CFLAGS += -DDEBUG
 # Core support
 snd-soc-sst-dsp-objs := sst-dsp.o sst-firmware.o
 snd-soc-sst-acpi-objs := sst-acpi.o
