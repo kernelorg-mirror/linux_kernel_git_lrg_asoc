@@ -882,6 +882,98 @@ int sst_module_runtime_free_blocks(struct sst_module_runtime *runtime)
 }
 EXPORT_SYMBOL_GPL(sst_module_runtime_free_blocks);
 
+int sst_module_runtime_save(struct sst_module_runtime *runtime,
+	struct sst_module_runtime_context *context)
+{
+	struct sst_dsp *dsp = runtime->dsp;
+	struct sst_module *module = runtime->module;
+	int ret = 0;
+
+	dev_dbg(dsp->dev, "saving runtime %d memory at 0x%x size 0x%x\n",
+		runtime->id, runtime->persistent_offset,
+		module->persistent_size);
+
+	context->buffer = dma_alloc_coherent(dsp->dma_dev,
+		module->persistent_size,
+		&context->dma_buffer, GFP_DMA | GFP_KERNEL);
+	if (!context->buffer) {
+		dev_err(dsp->dev, "error: DMA context alloc failed\n");
+		return -ENOMEM;
+	}
+
+	mutex_lock(&dsp->mutex);
+
+	if (dsp->fw_use_dma) {
+
+		ret = sst_dsp_dma_get_channel(dsp, 0);
+		if (ret < 0)
+			goto err;
+
+		ret = sst_dsp_dma_copyfrom(dsp, context->dma_buffer,
+			dsp->addr.lpe_base + runtime->persistent_offset,
+			module->persistent_size);
+		sst_dsp_dma_put_channel(dsp);
+		if (ret < 0) {
+			dev_err(dsp->dev, "error: context copy failed\n");
+			goto err;
+		}
+	} else
+		sst_memcpy32(context->buffer, dsp->addr.lpe +
+			runtime->persistent_offset,
+			module->persistent_size);
+
+err:
+	mutex_unlock(&dsp->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_save);
+
+int sst_module_runtime_restore(struct sst_module_runtime *runtime,
+	struct sst_module_runtime_context *context)
+{
+	struct sst_dsp *dsp = runtime->dsp;
+	struct sst_module *module = runtime->module;
+	int ret = 0;
+
+	dev_dbg(dsp->dev, "restoring runtime %d memory at 0x%x size 0x%x\n",
+		runtime->id, runtime->persistent_offset,
+		module->persistent_size);
+
+	mutex_lock(&dsp->mutex);
+
+	if (!context->buffer) {
+		dev_info(dsp->dev, "no context buffer need to restore!\n");
+		goto err;
+	}
+
+	if (dsp->fw_use_dma) {
+
+		ret = sst_dsp_dma_get_channel(dsp, 0);
+		if (ret < 0)
+			goto err;
+
+		ret = sst_dsp_dma_copyto(dsp,
+			dsp->addr.lpe_base + runtime->persistent_offset,
+			context->dma_buffer, module->persistent_size);
+		sst_dsp_dma_put_channel(dsp);
+		if (ret < 0) {
+			dev_err(dsp->dev, "error: module copy failed\n");
+			goto err;
+		}
+	} else
+		sst_memcpy32(dsp->addr.lpe + runtime->persistent_offset,
+			context->buffer, module->persistent_size);
+
+	dma_free_coherent(dsp->dma_dev, module->persistent_size,
+				context->buffer, context->dma_buffer);
+	context->buffer = NULL;
+
+err:
+	mutex_unlock(&dsp->mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sst_module_runtime_restore);
+
 /* register a DSP memory block for use with FW based modules */
 struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
 	u32 size, enum sst_mem_type type, struct sst_block_ops *ops, u32 index,
