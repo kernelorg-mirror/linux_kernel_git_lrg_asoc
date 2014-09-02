@@ -499,5 +499,6 @@ void sst_hsw_runtime_module_free(struct sst_module_runtime *runtime);
 int sst_hsw_dsp_runtime_resume(struct sst_hsw *hsw);
 int sst_hsw_dsp_runtime_suspend(struct sst_hsw *hsw);
 int sst_hsw_dsp_load(struct sst_hsw *hsw);
+int sst_hsw_dsp_runtime_sleep(struct sst_hsw *hsw);
 
 #endif
