@@ -108,6 +108,7 @@ struct hsw_pcm_data {
 	int dai_id;
 	struct sst_hsw_stream *stream;
 	struct sst_module_runtime *runtime;
+	struct sst_module_runtime_context context;
 	struct snd_pcm *hsw_pcm;
 	u32 volume[2];
 	struct snd_pcm_substream *substream;
@@ -707,6 +708,7 @@ static int hsw_pcm_create_modules(struct hsw_priv_data *pdata)
 	for (i = 0; i < ARRAY_SIZE(mod_map); i++) {
 		pcm_data = &pdata->pcm[i];
 
+		/* create new runtime module, use same offset if recreated */
 		pcm_data->runtime = sst_hsw_runtime_module_create(hsw,
 			mod_map[i].mod_id, pcm_data->persistent_offset);
 		if (pcm_data->runtime == NULL)
@@ -1020,6 +1022,7 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 		return 0;
 
 	sst_hsw_dsp_runtime_suspend(hsw);
+	sst_hsw_dsp_runtime_sleep(hsw);
 	pdata->pm_state = HSW_PM_STATE_D3;
 
 	return 0;
@@ -1058,21 +1061,92 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 
 static void hsw_pcm_complete(struct device *dev)
 {
-	hsw_pcm_runtime_resume(dev);
+	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
+	struct sst_hsw *hsw = pdata->hsw;
+	struct hsw_pcm_data *pcm_data;
+	int i, err;
+
+	if (pdata->pm_state == HSW_PM_STATE_D0)
+		return;
+
+	err = sst_hsw_dsp_load(hsw);
+	if (err < 0) {
+		dev_err(dev, "failed to reload %d\n", err);
+		return;
+	}
+
+	err = hsw_pcm_create_modules(pdata);
+	if (err < 0) {
+		dev_err(dev, "failed to create modules %d\n", err);
+		return;
+	}
+
+	for (i = 0; i < HSW_PCM_DAI_ID_CAPTURE + 1; i++) {
+		pcm_data = &pdata->pcm[i];
+
+		if (!pcm_data->substream)
+			continue;
+
+		err = sst_module_runtime_restore(pcm_data->runtime,
+			&pcm_data->context);
+		if (err < 0)
+			dev_err(dev, "failed to restore context for PCM %d\n", i);
+	}
+
+	err = sst_hsw_dsp_runtime_resume(hsw);
+	if (err < 0)
+		return;
+	else if (err == 1) /* no action required */
+		return;
+
+	pdata->pm_state = HSW_PM_STATE_D0;
+	return;
 }
 
 static int hsw_pcm_prepare(struct device *dev)
 {
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
-	int i;
+	struct sst_hsw *hsw = pdata->hsw;
+	struct hsw_pcm_data *pcm_data;
+	int i, err;
 
+	if (pdata->pm_state == HSW_PM_STATE_D3)
+		return 0;
+	/* suspend all active streams */
 	for (i = 0; i < HSW_PCM_DAI_ID_CAPTURE + 1; i++) {
-		snd_pcm_suspend_all(pdata->pcm[i].hsw_pcm);
+		pcm_data = &pdata->pcm[i];
+
+		if (!pcm_data->substream)
+			continue;
+		dev_dbg(dev, "suspending pcm %d\n", i);
+		snd_pcm_suspend_all(pcm_data->hsw_pcm);
+
 		/* We need to wait until the DSP FW stops the streams */
-		msleep(1);
+		msleep(2);
 	}
 
-	return hsw_pcm_runtime_suspend(dev);
+	/* enter D3 state and stall */
+	sst_hsw_dsp_runtime_suspend(hsw);
+
+	/* preserve persistent memory */
+	for (i = 0; i < HSW_PCM_DAI_ID_CAPTURE + 1; i++) {
+		pcm_data = &pdata->pcm[i];
+
+		if (!pcm_data->substream)
+			continue;
+
+		dev_dbg(dev, "saving context pcm %d\n", i);
+		err = sst_module_runtime_save(pcm_data->runtime,
+			&pcm_data->context);
+		if (err < 0)
+			dev_err(dev, "failed to save context for PCM %d\n", i);
+	}
+
+	/* put the DSP to sleep */
+	sst_hsw_dsp_runtime_sleep(hsw);
+	pdata->pm_state = HSW_PM_STATE_D3;
+
+	return 0;
 }
 
 #else
