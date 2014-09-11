@@ -1081,9 +1081,14 @@ int sst_block_alloc_scratch(struct sst_dsp *dsp)
 		return ret;
 	}
 
+	ret = block_list_prepare(dsp, &dsp->scratch_block_list);
+	if (ret < 0) {
+		dev_err(dsp->dev, "error: scratch block prepare failed\n");
+		return ret;
+	}
+
 	/* assign the same offset of scratch to each module */
 	dsp->scratch_offset = ba.offset;
-
 	mutex_unlock(&dsp->mutex);
 	return dsp->scratch_size;
 }
