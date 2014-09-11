@@ -687,14 +687,14 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 		block_end = block->offset + block->size;
 
 		/* find block that holds section */
-		if (ba->offset >= block->offset && end < block_end)
+		if (ba->offset >= block->offset && end <= block_end)
 			return 0;
 
 		/* does block span more than 1 section */
 		if (ba->offset >= block->offset && ba->offset < block_end) {
 
 			/* align ba to block boundary */
-			ba->size -= block->size;
+			ba->size -= block_end - ba->offset;
 			ba->offset = block_end;
 			err = block_alloc_contiguous(dsp, ba, block_list);
 			if (err < 0)
@@ -714,7 +714,7 @@ static int block_alloc_fixed(struct sst_dsp *dsp, struct sst_block_allocator *ba
 			continue;
 
 		/* find block that holds section */
-		if (ba->offset >= block->offset && end < block_end) {
+		if (ba->offset >= block->offset && end <= block_end) {
 
 			/* add block */
 			list_move(&block->list, &dsp->used_block_list);
