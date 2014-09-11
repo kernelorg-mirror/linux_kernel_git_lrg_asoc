@@ -2320,6 +2320,7 @@ int sst_hsw_dsp_runtime_suspend(struct sst_hsw *hsw)
 int sst_hsw_dsp_runtime_sleep(struct sst_hsw *hsw)
 {
 	sst_fw_unload(hsw->sst_fw);
+	sst_block_free_scratch(hsw->dsp);
 
 	hsw->boot_complete = false;
 
