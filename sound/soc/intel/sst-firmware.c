@@ -23,9 +23,11 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/pci.h>
+#include <linux/acpi.h>
 
 /* supported DMA engine drivers */
-#include <linux/dw_dmac.h>
+#include <linux/platform_data/dma-dw.h>
+#include <linux/dma/dw.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -170,6 +172,49 @@ err:
 	return ret;
 }
 
+struct dw_dma_platform_data dw_pdata = {
+	.is_private = 1,
+	.chan_allocation_order = CHAN_ALLOCATION_ASCENDING,
+	.chan_priority = CHAN_PRIORITY_ASCENDING,
+};
+
+static struct dw_dma_chip *dw_probe(struct device *dev, struct resource *mem,
+	int irq)
+{
+	struct dw_dma_chip *chip;
+	int err;
+
+	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
+	if (!chip)
+		return ERR_PTR(-ENOMEM);
+
+	chip->irq = irq;
+	chip->regs = devm_ioremap_resource(dev, mem);
+	if (IS_ERR(chip->regs))
+		return ERR_CAST(chip->regs);
+
+	err = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(31));
+	if (err)
+		return ERR_PTR(err);
+
+	chip->dev = dev;
+	err = dw_dma_probe(chip, &dw_pdata);
+	if (err)
+		return ERR_PTR(err);
+
+	//dev_set_drvdata(dev, chip);
+
+//	if (ACPI_HANDLE(dev))
+//		dw_dma_acpi_controller_register(chip->dw);
+
+	return chip;
+}
+
+static void dw_remove(struct dw_dma_chip *chip)
+{
+	dw_dma_remove(chip);
+}
+
 static bool dma_chan_filter(struct dma_chan *chan, void *param)
 {
 	struct sst_dsp *dsp = (struct sst_dsp *)param;
@@ -262,8 +307,7 @@ int sst_dma_new(struct sst_dsp *sst)
 	mem.flags = IORESOURCE_MEM;
 
 	/* now register DMA engine device */
-	dma->dma = dw_priv_probe(sst->dma_dev, &mem, sst_pdata->irq, DMA_BIT_MASK(31));
-
+	dma->dma = dw_probe(sst->dma_dev, &mem, sst_pdata->irq);
 	if (IS_ERR(dma->dma)) {
 		dev_err(sst->dev, "error: DMA device register failed\n");
 		ret = PTR_ERR(dma->dma);
@@ -290,7 +334,7 @@ void sst_dma_free(struct sst_dma *dma)
 		dma_release_channel(dma->ch);
 
 	if (dma->dma)
-		dw_priv_remove(dma->dma);
+		dw_remove(dma->dma);
 
 }
 EXPORT_SYMBOL(sst_dma_free);
