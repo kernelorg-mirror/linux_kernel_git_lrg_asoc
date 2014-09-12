@@ -44,7 +44,7 @@
 struct sst_dma {
 	struct sst_dsp *sst;
 
-	void *dma;
+	struct dw_dma_chip *chip;
 
 	struct dma_async_tx_descriptor *desc;
 	struct dma_chan *ch;
@@ -229,6 +229,8 @@ int sst_dsp_dma_get_channel(struct sst_dsp *dsp, int chan_id)
 	dma_cap_mask_t mask;
 	int ret;
 
+	dw_dma_enable(dsp->dma->chip);
+
 	/* The Intel MID DMA engine driver needs the slave config set but
 	 * Synopsis DMA engine driver safely ignores the slave config */
 	dma_cap_zero(mask);
@@ -238,6 +240,7 @@ int sst_dsp_dma_get_channel(struct sst_dsp *dsp, int chan_id)
 	dma->ch = dma_request_channel(mask, dma_chan_filter, dsp);
 	if (dma->ch == NULL) {
 		dev_err(dsp->dev, "error: DMA request channel failed\n");
+		dw_dma_disable(dsp->dma->chip);
 		return -EIO;
 	}
 
@@ -253,6 +256,7 @@ int sst_dsp_dma_get_channel(struct sst_dsp *dsp, int chan_id)
 			ret);
 		dma_release_channel(dma->ch);
 		dma->ch = NULL;
+		dw_dma_disable(dsp->dma->chip);
 	}
 
 	return ret;
@@ -268,6 +272,7 @@ void sst_dsp_dma_put_channel(struct sst_dsp *dsp)
 
 	dma_release_channel(dma->ch);
 	dma->ch = NULL;
+	dw_dma_disable(dsp->dma->chip);
 }
 EXPORT_SYMBOL_GPL(sst_dsp_dma_put_channel);
 
@@ -307,15 +312,16 @@ int sst_dma_new(struct sst_dsp *sst)
 	mem.flags = IORESOURCE_MEM;
 
 	/* now register DMA engine device */
-	dma->dma = dw_probe(sst->dma_dev, &mem, sst_pdata->irq);
-	if (IS_ERR(dma->dma)) {
+	dma->chip = dw_probe(sst->dma_dev, &mem, sst_pdata->irq);
+	if (IS_ERR(dma->chip)) {
 		dev_err(sst->dev, "error: DMA device register failed\n");
-		ret = PTR_ERR(dma->dma);
+		ret = PTR_ERR(dma->chip);
 		goto err_dma_dev;
 	}
 
 	sst->dma = dma;
 	sst->fw_use_dma = true;
+	dw_dma_disable(sst->dma->chip);
 	return 0;
 
 err_dma_dev:
@@ -333,8 +339,8 @@ void sst_dma_free(struct sst_dma *dma)
 	if (dma->ch)
 		dma_release_channel(dma->ch);
 
-	if (dma->dma)
-		dw_remove(dma->dma);
+	if (dma->chip)
+		dw_remove(dma->chip);
 
 }
 EXPORT_SYMBOL(sst_dma_free);
