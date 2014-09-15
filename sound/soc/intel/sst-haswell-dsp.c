@@ -252,10 +252,11 @@ static void hsw_set_dsp_D3(struct sst_dsp *sst)
 {
 	u32 val;
 
-	/* switch off audio PLL, DRAM & IRAM blocks */
+	/* enable power gating and switch off DRAM & IRAM blocks */
 	val = readl(sst->addr.pci_cfg + SST_VDRTCTL0);
-	val |= SST_VDRTCL0_APLLSE_MASK | SST_VDRTCL0_DSRAMPGE_MASK |
+	val |= SST_VDRTCL0_DSRAMPGE_MASK |
 		SST_VDRTCL0_ISRAMPGE_MASK;
+	val &= ~(SST_VDRTCL0_D3PGD | SST_VDRTCL0_D3SRAMPGD);
 	writel(val, sst->addr.pci_cfg + SST_VDRTCTL0);
 
 	/* Set D3 state */
@@ -305,7 +306,7 @@ finish:
 
 	/* set default power gating control, enable power gating control for all blocks. that is,
 	can't be accessed, please enable each block before accessing. */
-	writel(0xffffffff, sst->addr.pci_cfg + SST_VDRTCTL0);
+	writel(0xfffffffc, sst->addr.pci_cfg + SST_VDRTCTL0);
 
 	/* select SSP1 19.2MHz base clock, SSP clock 0, turn off Low Power Clock */
 	sst_dsp_shim_update_bits_unlocked(sst, SST_CSR,
@@ -603,7 +604,7 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 
 	/* set default power gating control, enable power gating control for all blocks. that is,
 	can't be accessed, please enable each block before accessing. */
-	writel(0xffffffff, sst->addr.pci_cfg + SST_VDRTCTL0);
+	writel(0xfffffffc, sst->addr.pci_cfg + SST_VDRTCTL0);
 
 	return 0;
 }
