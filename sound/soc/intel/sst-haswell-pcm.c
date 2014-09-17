@@ -130,6 +130,7 @@ struct hsw_priv_data {
 	struct sst_hsw *hsw;
 	struct device *dev;
 	enum hsw_pm_state pm_state;
+	struct snd_soc_card *soc_card;
 
 	/* page tables */
 	struct snd_dma_buffer dmab[HSW_PCM_COUNT][2];
@@ -870,6 +871,7 @@ static int hsw_pcm_probe(struct snd_soc_platform *platform)
 	priv_data->hsw = pdata->dsp;
 	priv_data->dev = platform->dev;
 	priv_data->pm_state = HSW_PM_STATE_D0;
+	priv_data->soc_card = platform->component.card;
 	snd_soc_platform_set_drvdata(platform, priv_data);
 
 	/* allocate DSP buffer page tables */
@@ -1087,6 +1089,8 @@ static void hsw_pcm_complete(struct device *dev)
 			dev_err(dev, "failed to restore context for PCM %d\n", i);
 	}
 
+	snd_soc_resume(pdata->soc_card->dev);
+
 	err = sst_hsw_dsp_runtime_resume(hsw);
 	if (err < 0)
 		return;
@@ -1118,6 +1122,9 @@ static int hsw_pcm_prepare(struct device *dev)
 		/* We need to wait until the DSP FW stops the streams */
 		msleep(2);
 	}
+
+	snd_soc_suspend(pdata->soc_card->dev);
+	snd_soc_poweroff(pdata->soc_card->dev);
 
 	/* enter D3 state and stall */
 	sst_hsw_dsp_runtime_suspend(hsw);
