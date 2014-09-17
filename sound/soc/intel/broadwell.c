@@ -79,7 +79,11 @@ static const struct snd_soc_dapm_route broadwell_rt286_map[] = {
 static int broadwell_rt286_codec_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_card *card = rtd->card;
 	int ret = 0;
+
+	card->dapm.idle_bias_off = true;
+
 	ret = snd_soc_jack_new(codec, "Headset",
 		SND_JACK_HEADSET | SND_JACK_BTN_0, &broadwell_headset);
 
