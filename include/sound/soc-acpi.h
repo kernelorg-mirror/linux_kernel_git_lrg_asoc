@@ -15,67 +15,81 @@ enum snd_soc_desc_type {
 	/* etc */
 };
 
+// TODO: consider making the enums into macros to avoid confusion over structures memebers
+
 enum snd_soc_desc_dai_type {
 	SND_SOC_DESC_DAI_HDA = 0,
 	SND_SOC_DESC_DAI_RESERVED = 1,
 	SND_SOC_DESC_DAI_PDM = 2,
-	SND_SOC_DESC_DAI_PCM = 3, // lrg - changed from SSP
+	SND_SOC_DESC_DAI_PCM = 3,
 	SND_SOC_DESC_DAI_SLIMBUS = 4,
 };
 
 enum snd_soc_desc_dai_direction {
-	SND_SOC_DESC_DAI_DIR_PLAYBACK = 0, // lrg - changed from render
+	SND_SOC_DESC_DAI_DIR_PLAYBACK = 0,
 	SND_SOC_DESC_DAI_DIR_CAPTURE = 1,
 	SND_SOC_DESC_DAI_DIR_BIDIRECTIONAL = 2,
 };
 
-enum mode {
-	master = 0,
-	slave = 1,
+enum snd_soc_desc_dai_mode {
+	SND_SOC_DESC_DAI_MASTER = 0,
+	SND_SOC_DESC_DAI_SLAVE = 1,
 };
 
-enum protocols {
-	i2s = 0,
-	tdm = 1,
-	pcm = 2,
-	pdm = 3,
+enum snd_soc_desc_dai_protocol {
+	SND_SOC_DESC_DAI_I2S = 0,
+	SND_SOC_DESC_DAI_TDM = 1,
+	SND_SOC_DESC_DAI_PCM = 2,
+	SND_SOC_DESC_DAI_PDM = 3,
+	SND_SOC_DESC_DAI_PCMD = 4, /* PCM MSB delayed by 1 BCLK after FRAME */
 };
 
-enum polarity {
-	low = 0,
-	high = 1,
+enum snd_soc_desc_dai_polarity {
+	SND_SOC_DESC_DAI_LOW = 0,
+	SND_SOC_DESC_DAI_HIGH = 1,
 };
 
 /*
- * PCM config
+ * Generic String Descriptor
  */
-struct snd_soc_desc_pcm_config {
-	u16	format_tag;
-	u16	channel;
-	u32	sample_per_second;
-	u32	byte_per_second;
-	u16	block_allign;
-	u16	bits_per_sample;
-	u16	size;
-	u16	valid_bit_per_sample;
-	u32	channel_mask;
-	char	sub_format[16];
-}__attribute__((packed, aligned(1)));	
-
-struct specific_config {
+struct snd_soc_desc_str {
 	u32 	capabilities_size;
 	u8	*capabilities;
 }__attribute__((packed, aligned(1)));
 
-struct format_config {
-	struct wave_format_extensible	format;
-	struct specific_config		format_config;
+
+/*
+ * PCM stream link parameters descriptor
+ */
+struct snd_soc_desc_pcm_params {
+	u16	format_tag;		// what are values ??
+	u16	channels;		/* number of channels */
+	u32	sample_per_second;	/* sample rate */
+	u32	byte_per_second;	// TODO: is this required since we have bits per sample and srate ??
+	u16	block_allign;		// TODO ??
+	u16	bits_per_sample;
+	u16	size;			// TODO: what size ??
+	u16	valid_bit_per_sample;
+	u32	channel_mask;
+	u8	sub_format[16];
+}__attribute__((packed, aligned(1)));	
+
+/*
+ * PCM stream link configuration descriptor
+ */
+struct snd_soc_desc_pcm_config {
+	struct snd_soc_desc_pcm_params	params;
+	struct snd_soc_desc_str		string;
 }__attribute__((packed, aligned(1)));
 
 
-struct formats_config {
-	u8	forma_config_count;
-	struct format_config	*format_configs;
+/*
+ * PCM stream links.
+ */
+struct snd_soc_desc_pcm_configs {
+	u8	num_configs;
+	u8	reserved[3]; // TODO: this gives alignment
+	struct snd_soc_desc_pcm_config config[0];
 }__attribute__((packed, aligned(1)));
 
 
@@ -95,15 +109,14 @@ struct nhlt_endpoint_descriptor {
 /*
  * HW DAI Link Config
  */
-
-struct link_config {
+struct snd_soc_desc_dai_config {
 	u8	link_config_name[16];
 	u8	codec_port[4];
 	u8	clock_mode; /* enum mode */
 	u8	frame_mode; /* enum mode */
 	u8	protocol;   /* enum protocols */
 	u8	frame_polarity; /* enum polarity */
-	u8	reserved[2];
+	u8	reserved[3]; // TODO : changed from 2 to 3 to align
 	u32	frame_width;
 	u32	frame_rate;
 	u8	data_polarity; /* enum polarity */
@@ -114,9 +127,12 @@ struct link_config {
 	u32	active_rx_slots;
 }__attribute__((packed, aligned(1)));
 
-struct specific_config {
-	u32	link_config_count;
-	struct	link_config	*link_configs;
+/*
+ * Multiple HW DAI lInkc configs.
+ */
+struct snd_soc_desc_dai_configs {
+	u32	num_configs;
+	struct	snd_soc_desc_dai_config	config[0];
 }__attribute__((packed, aligned(1)));
 
 
@@ -124,7 +140,7 @@ struct clt_link_descriptor {
 	u32	link_descriptor_length;
 	u8	linktype; /* enum linktypes */
 	u8 	virtual_bus_id;
-	struct specific_config	link_capabilities;
+	struct snd_soc_desc_dai_configs	capabilities;
 }__attribute__((packed, aligned(1)));
 
 /* just an example for dai */
