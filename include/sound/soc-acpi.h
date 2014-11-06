@@ -4,53 +4,59 @@
  * for ambiguous values.
  */
 
-
-/* Vinod, for your intern to complete structures based on slides :) */
+/*
+ * ACPI audio descriptors supported by ALSA/ASoC
+ */
 
 /*
- * We have an internal enum ID for every ACPI descriptor structure type.
+ *  Supported DAI types
  */
-enum snd_soc_desc_type {
-	SND_SOC_DESC_DAI = 0,
-	/* etc */
-};
+#define SND_DESC_DAI_TYPE_HDA		0
+#define SND_DESC_DAI_TYPE_RESERVED1	1
+#define SND_DESC_DAI_TYPE_PDM		2
+#define SND_DESC_DAI_TYPE_PCM		3
+#define SND_DESC_DAI_TYPE_SLIMBUS	4
+#define SND_DESC_DAI_TYPE_RESERVED2	5
+#define SND_DESC_DAI_TYPE_AC97		6
 
-// TODO: consider making the enums into macros to avoid confusion over structures memebers
+/*
+ * Supported DAI direction.
+ * Most DAIs are bidirectional, but some can only do 1 direction.
+ */
+#define SND_DESC_DAI_DIR_PLAYBACK	0
+#define SND_DESC_DAI_DIR_CAPTURE	1
+#define SND_DESC_DAI_DIR_BIDIRECTIONAL	2
 
-enum snd_soc_desc_dai_type {
-	SND_SOC_DESC_DAI_HDA = 0,
-	SND_SOC_DESC_DAI_RESERVED = 1,
-	SND_SOC_DESC_DAI_PDM = 2,
-	SND_SOC_DESC_DAI_PCM = 3,
-	SND_SOC_DESC_DAI_SLIMBUS = 4,
-};
+/*
+ * DAI Clock master with respect to the ???
+ * TODO: clarify if master is wrt to host or codec side
+ * TODO: are we FRAME or BCLK master - some codecs can be mixed master/slave
+ */
 
-enum snd_soc_desc_dai_direction {
-	SND_SOC_DESC_DAI_DIR_PLAYBACK = 0,
-	SND_SOC_DESC_DAI_DIR_CAPTURE = 1,
-	SND_SOC_DESC_DAI_DIR_BIDIRECTIONAL = 2,
-};
+#define SND_DESC_DAI_CLK_MASTER	0
+#define SND_DESC_DAI_CLK_SLAVE	1
 
-enum snd_soc_desc_dai_mode {
-	SND_SOC_DESC_DAI_MASTER = 0,
-	SND_SOC_DESC_DAI_SLAVE = 1,
-};
+/*
+ * DAI hardware protocols
+ */
+#define SND_DESC_DAI_PROT_I2S	0
+#define SND_DESC_DAI_PROT_TDM 	1
+#define SND_DESC_DAI_PROT_PCM	2
+#define SND_DESC_DAI_PROT_PDM	3
+#define SND_DESC_DAI_PROT_PCMD	4 /* PCM MSB delayed by 1 BCLK after FRAME */
 
-enum snd_soc_desc_dai_protocol {
-	SND_SOC_DESC_DAI_I2S = 0,
-	SND_SOC_DESC_DAI_TDM = 1,
-	SND_SOC_DESC_DAI_PCM = 2,
-	SND_SOC_DESC_DAI_PDM = 3,
-	SND_SOC_DESC_DAI_PCMD = 4, /* PCM MSB delayed by 1 BCLK after FRAME */
-};
-
-enum snd_soc_desc_dai_polarity {
-	SND_SOC_DESC_DAI_LOW = 0,
-	SND_SOC_DESC_DAI_HIGH = 1,
-};
+/*
+ * DAI clock polarity. i.e. is signal active high or low.
+ * TODO: are we FRAME or BCLK polarity or both ??
+ */
+#define SND_DESC_DAI_POL_LOW	0
+#define SND_DESC_DAI_POL_HIGH	1
 
 /*
  * Generic String Descriptor
+ * This descriptor can be used to hold general purpose data that does not easily
+ * fit into the other descriptors
+ * TODO: Will the text format be driver specific or will we have a standard syntax ??
  */
 struct snd_soc_desc_str {
 	u32 	capabilities_size;
@@ -88,7 +94,7 @@ struct snd_soc_desc_pcm_config {
  */
 struct snd_soc_desc_pcm_configs {
 	u8	num_configs;
-	u8	reserved[3]; // TODO: this gives alignment
+	u8	reserved[3]; // TODO: added this to give alignment
 	struct snd_soc_desc_pcm_config config[0];
 }__attribute__((packed, aligned(1)));
 
@@ -143,15 +149,6 @@ struct clt_link_descriptor {
 	struct snd_soc_desc_dai_configs	capabilities;
 }__attribute__((packed, aligned(1)));
 
-/* just an example for dai */
-struct snd_soc_descriptor_dai {
-        /* format, clock masters etc */
-};
-
-/* just an example for dai link */
-struct snd_soc_descriptor_dai_link {
-        ....
-};
 
 /* just an example for pin */
 struct snd_soc_descriptor_pin {
