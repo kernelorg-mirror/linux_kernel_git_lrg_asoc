@@ -55,115 +55,104 @@
 /*
  * Generic String Descriptor
  * This descriptor can be used to hold general purpose data that does not easily
- * fit into the other descriptors
+ * fit into the other descriptors.
  * TODO: Will the text format be driver specific or will we have a standard syntax ??
+ * TODO: What data will we store here ? Assuming, pins, jack connections ??
  */
-struct snd_soc_desc_str {
-	u32 	capabilities_size;
-	u8	*capabilities;
+struct snd_desc_str {
+	u32 capabilities_size;
+	u8 capabilities[0];	// TODO: this should be padded to 32bit boundaries
 }__attribute__((packed, aligned(1)));
 
 
 /*
  * PCM stream link parameters descriptor
  */
-struct snd_soc_desc_pcm_params {
-	u16	format_tag;		// what are values ??
-	u16	channels;		/* number of channels */
-	u32	sample_per_second;	/* sample rate */
-	u32	byte_per_second;	// TODO: is this required since we have bits per sample and srate ??
-	u16	block_allign;		// TODO ??
-	u16	bits_per_sample;
-	u16	size;			// TODO: what size ??
-	u16	valid_bit_per_sample;
-	u32	channel_mask;
-	u8	sub_format[16];
+struct snd_desc_pcm_params {
+	u16 format_tag;		// TODO: what are values ??
+	u16 channels;		/* number of channels */
+	u32 sample_per_second;	/* sample rate */
+	u32 byte_per_second;	// TODO: is this required since we have bits per sample and srate ??
+	u16 block_allign;	// TODO: ??
+	u16 bits_per_sample;	/* bits per sample TODO: reanme to frame size ? */
+	u16 size;		// TODO: what size ??
+	u16 valid_bit_per_sample; // TODO: rename to sample size ??
+	u32 channel_mask;	/* channel mask for TDM or for 5.1 mapping ?? - overlap with structure below*/
+	u8 sub_format[16];	// TODO: where is this defined ??
 }__attribute__((packed, aligned(1)));	
 
 /*
- * PCM stream link configuration descriptor
+ * PCM stream link configuration descriptor - Single stream descriptor.
  */
-struct snd_soc_desc_pcm_config {
-	struct snd_soc_desc_pcm_params	params;
-	struct snd_soc_desc_str		string;
+struct snd_desc_pcm_config {
+	struct snd_desc_pcm_params params;
+	struct snd_desc_str string;
 }__attribute__((packed, aligned(1)));
 
 
 /*
- * PCM stream links.
+ * PCM stream links - Multiple stream descriptors.
  */
-struct snd_soc_desc_pcm_configs {
-	u8	num_configs;
-	u8	reserved[3]; // TODO: added this to give alignment
-	struct snd_soc_desc_pcm_config config[0];
+struct snd_desc_pcm_configs {
+	u8 num_configs;		/* number of stream descriptor configs */
+	u8 reserved[3]; 	// TODO: added this to give alignment
+	struct snd_desc_pcm_config config[0];
 }__attribute__((packed, aligned(1)));
 
 
-
-
-struct nhlt_endpoint_descriptor {
-	u32	endpoint_descriptor_length;
-	u16	deviceId;
-        u8	linktype; /* enum linktypes */
-	u8	virtualbusid;
-	u8	direction; /* enum directions */
-	struct specific_config	endpoint_config;
-	struct formats_config	format_configs;
+/*
+ * NHLT Endpoint
+ */
+struct snd_desc_nhlt_endpoint {
+	u32 length;		/* length of structure in bytes */
+	u16 deviceId;
+        u8 linktype;		/* SND_DESC_DAI_TYPE_ */
+	u8 virtualbusid;
+	u8 direction; 		/* SND_DESC_DAI_DIR_ */
+	struct snd_desc_pcm_configs configs;
+	struct snd_desc_str string;
 }__attribute__((packed, aligned(1)));
 
 
 /*
  * HW DAI Link Config
  */
-struct snd_soc_desc_dai_config {
-	u8	link_config_name[16];
-	u8	codec_port[4];
-	u8	clock_mode; /* enum mode */
-	u8	frame_mode; /* enum mode */
-	u8	protocol;   /* enum protocols */
-	u8	frame_polarity; /* enum polarity */
-	u8	reserved[3]; // TODO : changed from 2 to 3 to align
-	u32	frame_width;
-	u32	frame_rate;
-	u8	data_polarity; /* enum polarity */
-	u8	tdm_slots;
-	u8	bit_per_slots;
-	u8	start_delay;
-	u32	active_tx_slots;
-	u32	active_rx_slots;
+struct snd_desc_dai_config {
+	u8 name[16];		/* name of DAI link */
+	u8 codec_port[4];	/* ID of codec port */
+	u8 host_bclk_master; 	/* SND_DESC_DAI_CLK_ wrt host */
+	u8 host_frame_master; 	/* SND_DESC_DAI_CLK_ wrt host*/
+	u8 protocol;   		/* SND_DESC_DAI_PROT_ */
+	u8 frame_polarity;	/* SND_DESC_DAI_POL_ TODO: what about bclk pol ?*/
+	u8 reserved[3]; 	// TODO: changed from 2 to 3 to align
+	u32 frame_width;	/* frame width in bits */
+	u32 frame_rate;		/* frames per second */
+	u8 data_polarity;	/* SND_DESC_DAI_POL_ */
+	u8 tdm_slots;		/* number of TDM slots in use */
+	u8 bit_per_slots;	/* width of TDM slot in bits */
+	u8 start_delay;		/* TODO: start delay after FRAME ?? */
+	u32 active_tx_slots;	/* bitmap of active host Tx plots */
+	u32 active_rx_slots;	/* bitmap of active host Rx plots */
 }__attribute__((packed, aligned(1)));
 
 /*
- * Multiple HW DAI lInkc configs.
+ * Multiple HW DAI link configs.
  */
-struct snd_soc_desc_dai_configs {
+struct snd_desc_dai_configs {
 	u32	num_configs;
-	struct	snd_soc_desc_dai_config	config[0];
+	struct	snd_desc_dai_config config[0];
 }__attribute__((packed, aligned(1)));
 
 
-struct clt_link_descriptor {
-	u32	link_descriptor_length;
-	u8	linktype; /* enum linktypes */
-	u8 	virtual_bus_id;
-	struct snd_soc_desc_dai_configs	capabilities;
+/*
+ * HW DAI Links configs - TODO: can this be combined with struct snd_desc_dai_configs
+ */
+struct snd_desc_dai_descriptor {
+	u32 length;		/* length in bytes */
+	u8 linktype;		/* SND_DESC_DAI_TYPE_ */
+	u8 virtual_bus_id;
+	struct snd_desc_dai_configs config;
 }__attribute__((packed, aligned(1)));
-
-
-/* just an example for pin */
-struct snd_soc_descriptor_pin {
-        ....
-};
-
-/* more descriptor structures here */
-
-
-/* descriptor tuple - shall we just make label/value char arrays
-* if we have fixed sizes in ACPI table ?? */
-struct snd_soc_descriptor_tuple {
-        const char *label;
-        const char *value;
-};
 
 
 /* client component driver API - called by codec, platform drivers */
@@ -171,28 +160,37 @@ struct snd_soc_descriptor_tuple {
 /* lets use the new component structure for handle, if it's not ready upstream 
  * we can help or use existing codec, platform varients */
 
-/* we have snd_soc_descriptor_add_() functions for each descriptor structure */
+/* we have snd_descriptor_add_() functions for each descriptor structure */
 
-int snd_soc_descriptor_add_dai(struct snd_soc_component *c,
-        struct snd_soc_descriptor_dai *dai);
+int snd_descriptor_new_dai(struct snd_component *c,
+        struct snd_desc_dai_descriptor *dai_desc);
 
+/* should be called when driver module is removed */
+void snd_descriptor_free_dai(struct snd_component *c, int vbus_id);
+
+/* TODO: should we rename to snd_desc_new_nhlt ?? */
+int snd_descriptor_new_pcm(struct snd_component *c,
+        struct snd_desc_nhlt_endpoint *pcm_desc);
+
+/* should be called when driver module is removed */
+void snd_descriptor_free_pcm(struct snd_component *c, int vbus_id);
+
+#if 0
+// TODO: this needs to be worked out for pins
 /*.....more client APIs here */
 
-int snd_soc_descriptor_add_pin(struct snd_soc_component *c,
-        struct snd_soc_descriptor_pin *pin);
+int snd_descriptor_add_pin(struct snd_component *c,
+        struct snd_descriptor_pin *pin);
 
-/* general purpose, covers anything */
-int snd_soc_descriptor_add_tuple(struct snd_soc_component *c,
-        struct snd_soc_descriptor_tuple *tuple);
-
+#endif
 
 /* machine driver API - one call for each descriptor type */
 
-int snd_soc_descriptor_get_dai_link(struct snd_soc_card *card, int index,
-        struct snd_soc_descriptor_dai_link **link);
+int snd_descriptor_get_dai(struct snd_card *card,
+        const struct snd_desc_dai_descriptor **dai_desc);
 
-int snd_soc_descriptor_get_tuple(struct snd_soc_card *card, const char *label,
-        const char **value);
+int snd_descriptor_get_pcm(struct snd_card *card,
+        const struct snd_desc_nhlt_endpoint **pcm_desc);
 
 /*..... more machine driver APIs here */
 
@@ -203,13 +201,13 @@ int snd_soc_descriptor_get_tuple(struct snd_soc_card *card, const char *label,
  * otherwise a deafult machine is used - maybe use componnent instead of
  * codec, platform paradigms */
 
-struct snd_soc_card_descriptor {
+struct snd_card_descriptor {
         const char *dmi_name; /* the DMI machine name read from ACPI */
 	const char *machine_drv; /* optional mach driver to invoke */
         const char *component[]; /* NULL terminated list of components */
 };
 
 /* convenience constructor for machines */
-#define SND_SOC_MACH_DESC(dname, dmachine, ...) \
+#define snd_MACH_DESC(dname, dmachine, ...) \
 	{.dmi_name = dname, .machine_drv = dmachine, .components = __VA_ARGS__)
 
