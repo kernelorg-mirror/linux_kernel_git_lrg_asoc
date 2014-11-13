@@ -14,10 +14,12 @@
 
 /*
  * Container for component data.
+ * Each component driver can store multiple descriptors. This structure
+ * represents one component descriptor.
  */
 struct soc_desc_data {
-	enum snd_soc_desc_type type;
-	const void *data;
+	enum snd_soc_desc_type type;	/* type of descriptor data */
+	const void *data;		/* descriptor data */
 	struct list_head list;
 };
 
@@ -32,12 +34,13 @@ struct soc_desc_comp {
 };
 
 /*
- * Tracks the state of every registered component
+ * Singleton that tracks the state of every registered component.
  */
 struct soc_desc_state {
 	/* runtime */
 	const struct snd_soc_card_descriptor *desc;
 	int missing_components;
+	bool dmi_scan_done;
 
 	/* components */
 	struct list_head component_list; /* list of components */
@@ -46,6 +49,7 @@ struct soc_desc_state {
 /* static singleton for the moment */
 static struct soc_desc_state state_ = {
 	.desc = NULL,
+	.dmi_scan_done = false;
 	.missing_components = 0,
 };
 
@@ -59,7 +63,7 @@ static const struct snd_soc_card_descriptor machine[] = {
 	SND_SOC_MACH_DESC("Baytrail", "byt-rt5640", "80860F28", "10EC5640", NULL},
 };
 
-static int thermal_psv(const struct dmi_system_id *d)
+static int dmi_config_found(const struct dmi_system_id *d)
 {
 	dev_info(dev, "found DMI audio config for %s\n", d->ident);
 	state_.desc = d->driver_data;
@@ -71,17 +75,20 @@ static const struct dmi_system_id __initconst dmi_table[] = {
 {
 	.ident = "Intel Harris Beach",
 	.matches = {DMI_MATCH(DMI_BOARD_NAME, "Harris Beach SDS")},
+	.callback = dmi_config_found,
 	.driver_data = &machine[0],
 },
 {
 	.ident = "Intel Wilson Beach",
 	.matches = {DMI_MATCH(DMI_BOARD_NAME, "Wilson Beach SDS")},
+	.callback = dmi_config_found,
 	.driver_data = &machine[1],
 },
 {
 	// TODO: add Asus T100
 	.ident = "Intel Baytrail",
 	.matches = {DMI_MATCH(DMI_BOARD_NAME, "Baytrail Machine")},
+	.callback = dmi_config_found,
 	.driver_data = &machine[2],
 },
 { }
@@ -103,6 +110,8 @@ static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 	} else {
 
 	}
+
+	state->dmi_scan_done = true;
 }
 
 /* initialises state, called by all client calls but run once */
@@ -110,8 +119,9 @@ static int init_state(struct soc_desc_state *state, struct device *dev)
 {
 	int ret;
 
-	if (state->desc)
-		return 0; /* init already done */
+	/* init dmi scan already done ? */
+	if (state->dmi_scan_done)
+		return 0;
 
 	/* initialise the state - match name first */
 	ret = match_dmi_name(state);
@@ -128,7 +138,7 @@ static struct soc_desc_comp *soc_comp_get(struct soc_desc_state *state,
 	struct soc_desc_comp *dcomp;
 
 	/* search existing descriptor components for this one */
-
+	//list_for_each_entry(
 
 	/* not found, then create and append */
 	if (dcomp == NULL) {
