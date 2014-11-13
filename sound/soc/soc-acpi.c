@@ -38,12 +38,13 @@ struct soc_desc_comp {
  */
 struct soc_desc_state {
 	/* runtime */
-	const struct snd_soc_card_descriptor *desc;
-	int missing_components;
 	bool dmi_scan_done;
 
 	/* components */
 	struct list_head component_list; /* list of components */
+
+	/* machine driver */
+	struct platform_device *machine_pdev;
 };
 
 /* static singleton for the moment */
@@ -53,7 +54,7 @@ static struct soc_desc_state state_ = {
 	.missing_components = 0,
 };
 
-/* list of audio configurations we care about */
+/* list of audio component configurations we care about */
 static const struct snd_soc_card_descriptor machine[] = {
 	/* HSW + RT5640 */
 	SND_SOC_MACH_DESC("Haswell", "haswell-audio", "INT33C8", "INT33CA", NULL},
@@ -61,6 +62,11 @@ static const struct snd_soc_card_descriptor machine[] = {
 	SND_SOC_MACH_DESC("Broadwell", "broadwell-audio", "INT343A", "INT3438", NULL},
 	/* BYT + RT25640 */
 	SND_SOC_MACH_DESC("Baytrail", "byt-rt5640", "80860F28", "10EC5640", NULL},
+};
+
+/* machine driver platform device */
+static struct platform_device_info pdevinfo = {
+	.id = -1,
 };
 
 static int dmi_config_found(const struct dmi_system_id *d)
@@ -98,7 +104,7 @@ static const struct dmi_system_id __initconst dmi_table[] = {
 static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 {
 	const char *dmi_name;
-	int i, count;
+	int i, count, ret = 0;
 
 	INIT_LIST_HEAD(&state->component_list);
 
@@ -108,10 +114,17 @@ static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 		/* no match from table so prepare generic machine driver */
 		dev_info(dev, "no DMI audio card config found, using generic\n");
 	} else {
-
+		/* match from table so regsiter machine device */
+		pdevinfo.name = state->desc->machine_drv;
+		state->machine_pdev = platform_device_register_full(&pdevinfo);
+		if (ERR_PTR(state->machine_pdev)) {
+			ret = PTR_ERR(state->machine_pdev);
+			state->machine_pdev = NULL;
+		}
 	}
 
 	state->dmi_scan_done = true;
+	return ret;
 }
 
 /* initialises state, called by all client calls but run once */
@@ -138,7 +151,10 @@ static struct soc_desc_comp *soc_comp_get(struct soc_desc_state *state,
 	struct soc_desc_comp *dcomp;
 
 	/* search existing descriptor components for this one */
-	//list_for_each_entry(
+	list_for_each_entry(dcomp, &state->component_list, list) {
+		if (dcomp->c == c)
+			return dcomp;
+	}
 
 	/* not found, then create and append */
 	if (dcomp == NULL) {
@@ -152,9 +168,18 @@ static struct soc_desc_comp *soc_comp_get(struct soc_desc_state *state,
 	return dcomp;
 }
 
-static void soc_comp_put(struct soc_desc_state *state,
+/* free componnent and all it's descriptor data */
+static void soc_comp_free(struct soc_desc_state *state,
 	struct soc_desc_comp *dcomp)
 {
+	struct soc_desc_data *comp_data, *tmp;
+
+	list_for_each_entry_safe(comp_data, &dcomp->data_list, tmp, list) {
+		list_del(&comp_data->list);
+		kfree(comp_data->data);
+		kfree(comp_data);
+	}
+
 	list_del(&dcomp->list);
 	kfree(dcomp);
 }
@@ -212,7 +237,26 @@ int snd_descriptor_new_dai(struct snd_component *c,
 
 
 /* should be called when driver module is removed */
-void snd_descriptor_free_dai(struct snd_component *c, int vbus_id);
+void snd_descriptor_free_dai(struct snd_component *c, int vbus_id)
+{
+	struct soc_desc_comp *dcomp;
+	struct snd_desc_dai_descriptor *d;
+	int ret;
+
+	/* get descriptor componnent */
+	dcomp = soc_comp_get(c);
+	if (dcomp == NULL) {
+		kfree(d);
+		return -ENOMEM;
+	}
+
+	/* append new data */
+	ret = soc_dcomp_append_data(dcomp, SND_SOC_DESC_DAI, (void*)d);
+	if (ret < 0) {
+		soc_comp_put(&state_, d);
+		kfree(d);
+	}
+}
 
 /* TODO: should we rename to snd_desc_new_nhlt ?? */
 int snd_descriptor_new_pcm(struct snd_component *c,
