@@ -11,6 +11,21 @@
  *  option) any later version.
  */
 
+/* core API - used by core to register machines */
+
+/* this structure can be used to define a custom machine driver if one is needed
+ * otherwise a deafult machine is used - maybe use componnent instead of
+ * codec, platform paradigms */
+
+struct snd_card_descriptor {
+        const char *dmi_name; /* the DMI machine name read from ACPI */
+	const char *machine_drv; /* optional mach driver to invoke */
+        const char *component[]; /* NULL terminated list of components */
+};
+
+/* convenience constructor for machines */
+#define SND_MACH_DESC(dname, dmachine, ...) \
+	{.dmi_name = dname, .machine_drv = dmachine, .components = __VA_ARGS__)
 
 /*
  * Container for component data.
@@ -113,6 +128,7 @@ static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 	if (count == 0) {
 		/* no match from table so prepare generic machine driver */
 		dev_info(dev, "no DMI audio card config found, using generic\n");
+		// TODO: prepare and register generic machine driver here.
 	} else {
 		/* match from table so regsiter machine device */
 		pdevinfo.name = state->desc->machine_drv;
@@ -127,11 +143,12 @@ static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 	return ret;
 }
 
-/* initialises state, called by all client calls but run once */
+/* initialises state, called by all client calls but only run once */
 static int init_state(struct soc_desc_state *state, struct device *dev)
 {
 	int ret;
 
+	// TODO: locking
 	/* init dmi scan already done ? */
 	if (state->dmi_scan_done)
 		return 0;
@@ -182,6 +199,24 @@ static void soc_comp_free(struct soc_desc_state *state,
 
 	list_del(&dcomp->list);
 	kfree(dcomp);
+}
+
+/* should be called when driver module is removed */
+void snd_descriptor_free_component(struct snd_component *c)
+{
+	struct soc_desc_comp *dcomp;
+	struct snd_desc_dai_descriptor *d;
+	int ret;
+
+	/* get descriptor componnent */
+	dcomp = soc_comp_get(c);
+	if (dcomp == NULL) {
+		kfree(d);
+		return -ENOMEM;
+	}
+
+	/* free component */
+	soc_comp_free(&state_, dcomp);
 }
 
 /* append data pointer of any type to component descriptor */
@@ -235,13 +270,23 @@ int snd_descriptor_new_dai(struct snd_component *c,
 	return ret;
 }
 
-
-/* should be called when driver module is removed */
-void snd_descriptor_free_dai(struct snd_component *c, int vbus_id)
+/* add new PCM to the component data */
+int snd_descriptor_new_pcm(struct snd_component *c,
+        struct snd_desc_nhlt_endpoint *pcm_desc)
 {
 	struct soc_desc_comp *dcomp;
 	struct snd_desc_dai_descriptor *d;
 	int ret;
+
+	/* initialise if not already done so */
+	ret = init_state(&state_, c->dev));
+	if (ret < 0)
+		return ret;
+
+	/* allocate memory for descriptor */
+	d = kzalloc(dai_desc->length);
+	if (d = NULL)
+		return -ENOMEM;
 
 	/* get descriptor componnent */
 	dcomp = soc_comp_get(c);
@@ -251,28 +296,26 @@ void snd_descriptor_free_dai(struct snd_component *c, int vbus_id)
 	}
 
 	/* append new data */
-	ret = soc_dcomp_append_data(dcomp, SND_SOC_DESC_DAI, (void*)d);
+	ret = soc_dcomp_append_data(dcomp, SND_SOC_DESC_PCM, (void*)d);
 	if (ret < 0) {
 		soc_comp_put(&state_, d);
 		kfree(d);
 	}
+
+	return ret;
 }
-
-/* TODO: should we rename to snd_desc_new_nhlt ?? */
-int snd_descriptor_new_pcm(struct snd_component *c,
-        struct snd_desc_nhlt_endpoint *pcm_desc);
-
-/* should be called when driver module is removed */
-void snd_descriptor_free_pcm(struct snd_component *c, int vbus_id);
-
 
 /* machine driver API - one call for each descriptor type */
 
 int snd_descriptor_get_dai(struct snd_card *card,
-        const struct snd_desc_dai_descriptor **dai_desc);
+        const struct snd_desc_dai_descriptor **dai_desc, int )
+{
+}
 
 int snd_descriptor_get_pcm(struct snd_card *card,
-        const struct snd_desc_nhlt_endpoint **pcm_desc);
+        const struct snd_desc_nhlt_endpoint **pcm_desc)
+{
+}
 
 /*..... more machine driver APIs here */
 

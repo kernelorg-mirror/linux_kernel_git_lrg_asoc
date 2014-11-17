@@ -66,7 +66,8 @@ struct snd_desc_str {
 
 
 /*
- * PCM stream link parameters descriptor
+ * PCM stream link parameters descriptor.
+ * Stream SW params.
  */
 struct snd_desc_pcm_params {
 	u16 format_tag;		// TODO: what are values ??
@@ -102,6 +103,7 @@ struct snd_desc_pcm_configs {
 
 /*
  * NHLT Endpoint
+ * NHLT Non HD-audio Link Table
  */
 struct snd_desc_nhlt_endpoint {
 	u32 length;		/* length of structure in bytes */
@@ -116,6 +118,7 @@ struct snd_desc_nhlt_endpoint {
 
 /*
  * HW DAI Link Config
+ * Hardware DAI PHY configuration.
  */
 struct snd_desc_dai_config {
 	u8 name[16];		/* name of DAI link */
@@ -155,6 +158,20 @@ struct snd_desc_dai_descriptor {
 }__attribute__((packed, aligned(1)));
 
 
+/*
+ * Platform routing
+ *
+ */
+struct snd_desc_platform_routing {
+	u32 audio_routing_length; 		/* routing info size in bytes */
+	u8 jack_gpio_supported; 		/* TODO: is this really required as num GPIO == 0 would mean not supported ?? supported 0 not supported 1 */
+	u8 jack_gpio_number; 			/* No. of  GPIO pin assigned for jack detection */
+	u8 on_board_speaker_gpio_supported;  	/* TODO: ditto above. supported 0 not supported 1 */
+	u8 on_board_speaker_gpio_number; 		/* No. of  GPIP pin assigned for onboard speaker */
+	u8 routing_info[0];	/* TODO : how routing info will be stored and size unknown */
+}__attribute__((packed, aligned(1)));
+
+
 /* client component driver API - called by codec, platform drivers */
 
 /* lets use the new component structure for handle, if it's not ready upstream 
@@ -165,15 +182,12 @@ struct snd_desc_dai_descriptor {
 int snd_descriptor_new_dai(struct snd_component *c,
         struct snd_desc_dai_descriptor *dai_desc);
 
-/* should be called when driver module is removed */
-void snd_descriptor_free_dai(struct snd_component *c, int vbus_id);
-
 /* TODO: should we rename to snd_desc_new_nhlt ?? */
 int snd_descriptor_new_pcm(struct snd_component *c,
         struct snd_desc_nhlt_endpoint *pcm_desc);
 
 /* should be called when driver module is removed */
-void snd_descriptor_free_pcm(struct snd_component *c, int vbus_id);
+void snd_descriptor_free_component(struct snd_component *c);
 
 #if 0
 // TODO: this needs to be worked out for pins
@@ -194,20 +208,4 @@ int snd_descriptor_get_pcm(struct snd_card *card,
 
 /*..... more machine driver APIs here */
 
-
-/* core API - used by core to register machines */
-
-/* this structure can be used to define a custom machine driver if one is needed
- * otherwise a deafult machine is used - maybe use componnent instead of
- * codec, platform paradigms */
-
-struct snd_card_descriptor {
-        const char *dmi_name; /* the DMI machine name read from ACPI */
-	const char *machine_drv; /* optional mach driver to invoke */
-        const char *component[]; /* NULL terminated list of components */
-};
-
-/* convenience constructor for machines */
-#define snd_MACH_DESC(dname, dmachine, ...) \
-	{.dmi_name = dname, .machine_drv = dmachine, .components = __VA_ARGS__)
 
