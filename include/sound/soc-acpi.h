@@ -29,8 +29,8 @@
 
 /*
  * DAI Clock master with respect to the ???
- * TODO: clarify if master is wrt to host or codec side
- * TODO: are we FRAME or BCLK master - some codecs can be mixed master/slave
+ * Master with respect to host but can be on codec side also
+ * both FRAME or BClK master
  */
 
 #define SND_DESC_DAI_CLK_MASTER	0
@@ -47,7 +47,7 @@
 
 /*
  * DAI clock polarity. i.e. is signal active high or low.
- * TODO: are we FRAME or BCLK polarity or both ??
+ * both polarity
  */
 #define SND_DESC_DAI_POL_LOW	0
 #define SND_DESC_DAI_POL_HIGH	1
@@ -133,7 +133,7 @@ struct snd_desc_dai_config {
 	u8 data_polarity;	/* SND_DESC_DAI_POL_ */
 	u8 tdm_slots;		/* number of TDM slots in use */
 	u8 bit_per_slots;	/* width of TDM slot in bits */
-	u8 start_delay;		/* TODO: start delay after FRAME ?? */
+	u8 start_delay;		/* start delay after FRAME */
 	u32 active_tx_slots;	/* bitmap of active host Tx plots */
 	u32 active_rx_slots;	/* bitmap of active host Rx plots */
 }__attribute__((packed, aligned(1)));
@@ -164,10 +164,10 @@ struct snd_desc_dai_descriptor {
  */
 struct snd_desc_platform_routing {
 	u32 audio_routing_length; 		/* routing info size in bytes */
-	u8 jack_gpio_supported; 		/* TODO: is this really required as num GPIO == 0 would mean not supported ?? supported 0 not supported 1 */
-	u8 jack_gpio_number; 			/* No. of  GPIO pin assigned for jack detection */
-	u8 on_board_speaker_gpio_supported;  	/* TODO: ditto above. supported 0 not supported 1 */
-	u8 on_board_speaker_gpio_number; 		/* No. of  GPIP pin assigned for onboard speaker */
+	u8 jack_gpio_supported;                 /* This field is required as 0 can be a valid GPIO pin no. supported 0 not supported 1*/
+	u8 jack_gpio_number; 			/* GPIO pin no. assigned for jack detection TODO : is u8 sufficient to hold pin no.*/
+	u8 on_board_speaker_gpio_supported;  	/* supported 0 not supported 1 */
+	u8 on_board_speaker_gpio_number; 	/* GPIO pin no. assigned for onboard speaker TODO : is u8 sufficient to hold pin no.*/
 	u8 routing_info[0];	/* TODO : how routing info will be stored and size unknown */
 }__attribute__((packed, aligned(1)));
 
