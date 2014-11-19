@@ -8,6 +8,7 @@
  * ACPI audio descriptors supported by ALSA/ASoC
  */
 
+
 /*
  *  Supported DAI types
  */
@@ -18,6 +19,22 @@
 #define SND_DESC_DAI_TYPE_SLIMBUS	4
 #define SND_DESC_DAI_TYPE_RESERVED2	5
 #define SND_DESC_DAI_TYPE_AC97		6
+
+
+/*
+ * Types of non-hd audio device on the basis of
+ * DAI types.
+ */
+#define SND_DESC_DEVICE_TYPE_PCM_BT_SIDEBAND	0
+#define SND_DESC_DEVICE_TYPE_PCM_MODEM    	1
+#define SND_DESC_DEVICE_TYPE_PCM_FM    	2
+#define SND_DESC_DEVICE_TYPE_PCM_RESERVED1    	3
+#define SND_DESC_DEVICE_TYPE_PCM_ANALOG_CODEC	4
+#define SND_DESC_DEVICE_TYPE_PCM_RESERVED2   	5
+#define SND_DESC_DEVICE_TYPE_PCM_RESERVED3   	6
+#define SND_DESC_DEVICE_TYPE_PCM_RESERVED4   	7
+#define SND_DESC_DEVICE_TYPE_PDM		0
+
 
 /*
  * Supported DAI direction.
@@ -61,7 +78,7 @@
  */
 struct snd_desc_str {
 	u32 capabilities_size;
-	u8 capabilities[0];	// TODO: this should be padded to 32bit boundaries
+	u8 capabilities[0];
 }__attribute__((packed, aligned(1)));
 
 
@@ -70,16 +87,16 @@ struct snd_desc_str {
  * Stream SW params.
  */
 struct snd_desc_pcm_params {
-	u16 format_tag;		// TODO: what are values ??
+	u16 format_tag;		/* waveform-audio format */
 	u16 channels;		/* number of channels */
 	u32 sample_per_second;	/* sample rate */
-	u32 byte_per_second;	// TODO: is this required since we have bits per sample and srate ??
-	u16 block_allign;	// TODO: ??
-	u16 bits_per_sample;	/* bits per sample TODO: reanme to frame size ? */
-	u16 size;		// TODO: what size ??
-	u16 valid_bit_per_sample; // TODO: rename to sample size ??
-	u32 channel_mask;	/* channel mask for TDM or for 5.1 mapping ?? - overlap with structure below*/
-	u8 sub_format[16];	// TODO: where is this defined ??
+	u32 byte_per_second;	/* Required since value may be different from bits_per_sample * sample_per_second / 8 */
+	u16 block_allign;	/* Block allignment in bytes*/
+	u16 frame_size;		/* bits per sample */
+	u16 size;		/* Size in bytes of extra format information appended */
+	u16 sample_size; 	/* Size in bits*/
+	u32 channel_mask;	/* specify assignment of channels in the stream to speaker positions */
+	u8 sub_format[16];	/* subformat of data may be PCM format or vendor specific */
 }__attribute__((packed, aligned(1)));	
 
 /*
@@ -96,7 +113,7 @@ struct snd_desc_pcm_config {
  */
 struct snd_desc_pcm_configs {
 	u8 num_configs;		/* number of stream descriptor configs */
-	u8 reserved[3]; 	// TODO: added this to give alignment
+	u8 reserved[3];
 	struct snd_desc_pcm_config config[0];
 }__attribute__((packed, aligned(1)));
 
@@ -107,10 +124,15 @@ struct snd_desc_pcm_configs {
  */
 struct snd_desc_nhlt_endpoint {
 	u32 length;		/* length of structure in bytes */
-	u16 deviceId;
-        u8 linktype;		/* SND_DESC_DAI_TYPE_ */
-	u8 virtualbusid;
+	u8 linktype;		/* SND_DESC_DAI_TYPE_ */
+	u8 instanceid;          /* Unique identifier within NHLT table. Assigned in incremental order */
+	u16 vendorid;           /* Virtual device vendor id */
+	u16 deviceid;           /* Virtual device device id */
+	u16 revisionid;         /* Virtual device revision id */
+	u32 subsystemid;        /* Virtual device sbusstem id */
+	u8 devicetype;          /* SND_DESC_DEVICE_TYPE */
 	u8 direction; 		/* SND_DESC_DAI_DIR_ */
+	u8 virtualbusid;
 	struct snd_desc_pcm_configs configs;
 	struct snd_desc_str string;
 }__attribute__((packed, aligned(1)));
@@ -125,9 +147,10 @@ struct snd_desc_dai_config {
 	u8 codec_port[4];	/* ID of codec port */
 	u8 host_bclk_master; 	/* SND_DESC_DAI_CLK_ wrt host */
 	u8 host_frame_master; 	/* SND_DESC_DAI_CLK_ wrt host*/
-	u8 protocol;   		/* SND_DESC_DAI_PROT_ */
-	u8 frame_polarity;	/* SND_DESC_DAI_POL_ TODO: what about bclk pol ?*/
-	u8 reserved[3]; 	// TODO: changed from 2 to 3 to align
+	u8 protocol;            /* SND_DESC_DAI_PROT_ */
+	u8 frame_polarity;	/* SND_DESC_DAI_POL_ */
+	u8 bclk_polarity;       /* SND_DESC_DAI_POL_ */
+	u8 reserved[3];
 	u32 frame_width;	/* frame width in bits */
 	u32 frame_rate;		/* frames per second */
 	u8 data_polarity;	/* SND_DESC_DAI_POL_ */
@@ -148,7 +171,9 @@ struct snd_desc_dai_configs {
 
 
 /*
- * HW DAI Links configs - TODO: can this be combined with struct snd_desc_dai_configs
+ * HW DAI Links configs
+ *                              We can't combine these structures because snd_desc_dai_config
+ *                              is specific to i2s. it is not common for all.
  */
 struct snd_desc_dai_descriptor {
 	u32 length;		/* length in bytes */
@@ -165,10 +190,10 @@ struct snd_desc_dai_descriptor {
 struct snd_desc_platform_routing {
 	u32 audio_routing_length; 		/* routing info size in bytes */
 	u8 jack_gpio_supported;                 /* This field is required as 0 can be a valid GPIO pin no. supported 0 not supported 1*/
-	u8 jack_gpio_number; 			/* GPIO pin no. assigned for jack detection TODO : is u8 sufficient to hold pin no.*/
+	u8 jack_gpio_number; 			/* GPIO pin no. assigned for jack detection */
 	u8 on_board_speaker_gpio_supported;  	/* supported 0 not supported 1 */
-	u8 on_board_speaker_gpio_number; 	/* GPIO pin no. assigned for onboard speaker TODO : is u8 sufficient to hold pin no.*/
-	u8 routing_info[0];	/* TODO : how routing info will be stored and size unknown */
+	u8 on_board_speaker_gpio_number; 	/* GPIO pin no. assigned for onboard speaker */
+	u8 routing_info[audio_routing_length - 8];
 }__attribute__((packed, aligned(1)));
 
 
@@ -182,8 +207,7 @@ struct snd_desc_platform_routing {
 int snd_descriptor_new_dai(struct snd_component *c,
         struct snd_desc_dai_descriptor *dai_desc);
 
-/* TODO: should we rename to snd_desc_new_nhlt ?? */
-int snd_descriptor_new_pcm(struct snd_component *c,
+int snd_des_new_nhlt(struct snd_component *c,
         struct snd_desc_nhlt_endpoint *pcm_desc);
 
 /* should be called when driver module is removed */
