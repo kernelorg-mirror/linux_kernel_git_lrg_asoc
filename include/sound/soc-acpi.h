@@ -142,9 +142,9 @@ struct snd_desc_nhlt_endpoint {
  * HW DAI Link Config
  * Hardware DAI PHY configuration.
  */
-struct snd_desc_dai_config {
+struct snd_desc_dai_config { //TODO should we rename it to snd_desc_i2s_config . Since is specific to i2s.
 	u8 name[16];		/* name of DAI link */
-	u8 codec_port[4];	/* ID of codec port */
+	u8 codec_port[8];	/* ID of codec port */
 	u8 host_bclk_master; 	/* SND_DESC_DAI_CLK_ wrt host */
 	u8 host_frame_master; 	/* SND_DESC_DAI_CLK_ wrt host*/
 	u8 protocol;            /* SND_DESC_DAI_PROT_ */
@@ -193,7 +193,7 @@ struct snd_desc_platform_routing {
 	u8 jack_gpio_number; 			/* GPIO pin no. assigned for jack detection */
 	u8 on_board_speaker_gpio_supported;  	/* supported 0 not supported 1 */
 	u8 on_board_speaker_gpio_number; 	/* GPIO pin no. assigned for onboard speaker */
-	u8 routing_info[audio_routing_length - 8];
+	u8 routing_info[audio_routing_length - 8];/* info about pin connction table */
 }__attribute__((packed, aligned(1)));
 
 
