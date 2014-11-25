@@ -115,6 +115,32 @@ static const struct dmi_system_id __initconst dmi_table[] = {
 { }
 };
 
+/* probe a generic machine driver */
+static int probe_generic_machine(struct soc_desc_state *state)
+{
+	/* check that all componnents are probed else return defer */
+
+	/* for each component */
+
+		/* get DAI links */
+
+		/* get PCMs */
+
+		/* determine which DAI is FE/BE */
+
+		/* register DAI links and PCMs */
+
+		/* get pins and register */
+
+		/* get gpios and register */
+
+	/* for each compoent end */
+
+	/* register soc card*/
+
+	return 0;
+}
+
 /* match DMI name against descriptor list */
 static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 {
@@ -128,7 +154,8 @@ static int match_dmi_name(struct soc_desc_state *state, struct device *dev)
 	if (count == 0) {
 		/* no match from table so prepare generic machine driver */
 		dev_info(dev, "no DMI audio card config found, using generic\n");
-		// TODO: prepare and register generic machine driver here.
+
+		ret = probe_generic_machine(state);
 	} else {
 		/* match from table so regsiter machine device */
 		pdevinfo.name = state->desc->machine_drv;
@@ -275,7 +302,7 @@ int snd_descriptor_new_pcm(struct snd_component *c,
         struct snd_desc_nhlt_endpoint *pcm_desc)
 {
 	struct soc_desc_comp *dcomp;
-	struct snd_desc_dai_descriptor *d;
+	struct snd_desc_nhlt_endpoint *d;
 	int ret;
 
 	/* initialise if not already done so */
@@ -305,16 +332,112 @@ int snd_descriptor_new_pcm(struct snd_component *c,
 	return ret;
 }
 
+/* add new GPIO data to the component */
+int snd_descriptor_new_gpio(struct snd_component *c,
+        struct snd_desc_platform_gpio *gpio_desc)
+{
+	struct soc_desc_comp *dcomp;
+	struct snd_desc_platform_gpio *d;
+	int ret;
+
+	/* initialise if not already done so */
+	ret = init_state(&state_, c->dev));
+	if (ret < 0)
+		return ret;
+
+	/* allocate memory for descriptor */
+	d = kzalloc(dai_desc->length);
+	if (d = NULL)
+		return -ENOMEM;
+
+	/* get descriptor componnent */
+	dcomp = soc_comp_get(c);
+	if (dcomp == NULL) {
+		kfree(d);
+		return -ENOMEM;
+	}
+
+	/* append new data */
+	ret = soc_dcomp_append_data(dcomp, SND_SOC_DESC_GPIO, (void*)d);
+	if (ret < 0) {
+		soc_comp_put(&state_, d);
+		kfree(d);
+	}
+
+	return ret;
+}
+
+
+/* add new DAI data to the component */
+int snd_descriptor_new_pin(struct snd_component *c,
+        struct snd_desc_platform_pins *pin_desc)
+{
+	struct soc_desc_comp *dcomp;
+	struct snd_desc_dai_descriptor *d;
+	int ret;
+
+	/* initialise if not already done so */
+	ret = init_state(&state_, c->dev));
+	if (ret < 0)
+		return ret;
+
+	/* allocate memory for descriptor */
+	d = kzalloc(dai_desc->length);
+	if (d = NULL)
+		return -ENOMEM;
+
+	/* get descriptor componnent */
+	dcomp = soc_comp_get(c);
+	if (dcomp == NULL) {
+		kfree(d);
+		return -ENOMEM;
+	}
+
+	/* append new data */
+	ret = soc_dcomp_append_data(dcomp, SND_SOC_DESC_PIN, (void*)d);
+	if (ret < 0) {
+		soc_comp_put(&state_, d);
+		kfree(d);
+	}
+
+	return ret;
+}
+
 /* machine driver API - one call for each descriptor type */
 
-int snd_descriptor_get_dai(struct snd_card *card,
-        const struct snd_desc_dai_descriptor **dai_desc, int )
+/*
+ * Get the DAI desciptor for named component
+ */
+int snd_descriptor_get_dai(struct snd_card *card, const char *component,
+        const struct snd_desc_dai_descriptor **dai_desc)
 {
 }
 
-int snd_descriptor_get_pcm(struct snd_card *card,
+/*
+ * Get the PCM desciptor for named component
+ */
+int snd_descriptor_get_pcm(struct snd_card *card, const char *component,
         const struct snd_desc_nhlt_endpoint **pcm_desc)
 {
+
+}
+
+/*
+ * Get the GPIO desciptor for named component
+ */
+int snd_descriptor_get_gpios(struct snd_card *card, const char *component,
+        const struct snd_desc_platform_gpios **gpio_desc)
+{
+
+}
+
+/*
+ * Get the PIN desciptor for named component
+ */
+int snd_descriptor_get_pins(struct snd_card *card, const char *component,
+        const struct snd_desc_plaform_pins **pin_desc)
+{
+
 }
 
 /*..... more machine driver APIs here */

@@ -70,6 +70,18 @@
 #define SND_DESC_DAI_POL_HIGH	1
 
 /*
+ * GPIO Functions.
+ * Any functon that can be contolled or sensed by an audio GPIO.
+ */
+#define SND_DESC_GPIO_FUNC_HEADPHONES	0
+#define SND_DESC_GPIO_FUNC_HEADSET	1
+#define SND_DESC_GPIO_FUNC_SPEAKERS	2
+#define SND_DESC_GPIO_FUNC_LINE_IN	3
+#define SND_DESC_GPIO_FUNC_LINE_OUT	4
+#define SND_DESC_GPIO_FUNC_EXT_AMP	5
+#define SND_DESC_GPIO_FUNC_SWITCH	6
+
+/*
  * Generic String Descriptor
  * This descriptor can be used to hold general purpose data that does not easily
  * fit into the other descriptors.
@@ -142,59 +154,77 @@ struct snd_desc_nhlt_endpoint {
  * HW DAI Link Config
  * Hardware DAI PHY configuration.
  */
-struct snd_desc_dai_config { //TODO should we rename it to snd_desc_i2s_config . Since is specific to i2s.
+struct snd_desc_dai_config {
+	/* high level topology */
 	u8 name[16];		/* name of DAI link */
+	u8 linktype;		/* SND_DESC_DAI_TYPE_ */
+	u8 virtual_bus_id;	/* virtual bus ID of DAI link */
+	u8 reserved1[2];
 	u8 codec_port[8];	/* ID of codec port */
+
+	/* link hardware format and clocking */
 	u8 host_bclk_master; 	/* SND_DESC_DAI_CLK_ wrt host */
 	u8 host_frame_master; 	/* SND_DESC_DAI_CLK_ wrt host*/
 	u8 protocol;            /* SND_DESC_DAI_PROT_ */
 	u8 frame_polarity;	/* SND_DESC_DAI_POL_ */
 	u8 bclk_polarity;       /* SND_DESC_DAI_POL_ */
-	u8 reserved[3];
+	u8 data_polarity;	/* SND_DESC_DAI_POL_ */
+	u8 start_delay;		/* start delay after FRAME */
+	u8 reserved2[1];
 	u32 frame_width;	/* frame width in bits */
 	u32 frame_rate;		/* frames per second */
-	u8 data_polarity;	/* SND_DESC_DAI_POL_ */
+
+	/* Time division multiplexing */
 	u8 tdm_slots;		/* number of TDM slots in use */
 	u8 bit_per_slots;	/* width of TDM slot in bits */
-	u8 start_delay;		/* start delay after FRAME */
+	u8 reserved3[2];
 	u32 active_tx_slots;	/* bitmap of active host Tx plots */
 	u32 active_rx_slots;	/* bitmap of active host Rx plots */
 }__attribute__((packed, aligned(1)));
 
 /*
- * Multiple HW DAI link configs.
- */
-struct snd_desc_dai_configs {
-	u32	num_configs;
-	struct	snd_desc_dai_config config[0];
-}__attribute__((packed, aligned(1)));
-
-
-/*
- * HW DAI Links configs
- *                              We can't combine these structures because snd_desc_dai_config
- *                              is specific to i2s. it is not common for all.
+ * HW DAI Links config
+ * DAI link table.
  */
 struct snd_desc_dai_descriptor {
-	u32 length;		/* length in bytes */
-	u8 linktype;		/* SND_DESC_DAI_TYPE_ */
-	u8 virtual_bus_id;
-	struct snd_desc_dai_configs config;
+	u32 num_dai_link;
+	struct	snd_desc_dai_config link[0];
 }__attribute__((packed, aligned(1)));
 
 
 /*
- * Platform routing
- *
+ * Platform GPIO
  */
-struct snd_desc_platform_routing {
-	u32 audio_routing_length; 		/* routing info size in bytes */
-	u8 jack_gpio_supported;                 /* This field is required as 0 can be a valid GPIO pin no. supported 0 not supported 1*/
-	u8 jack_gpio_number; 			/* GPIO pin no. assigned for jack detection */
-	u8 on_board_speaker_gpio_supported;  	/* supported 0 not supported 1 */
-	u8 on_board_speaker_gpio_number; 	/* GPIO pin no. assigned for onboard speaker */
-	u8 routing_info[audio_routing_length - 8];/* info about pin connction table */
-}__attribute__((packed, aligned(1)));
+struct snd_desc_gpio {
+	u16 gpio_number;		/* GPIO host number */
+	u8 gpio_function;		/* SND_DESC_GPIO_FUNC_ */
+	u8 gpio_id;			/* GPIO ID number, i.e. hp0, hp1 */
+} __attribute__((packed, aligned(1)));
+
+/*
+ * Array of Platform GPIOs
+ */
+struct snd_desc_platform_gpios {
+	u32 num_gpios;
+	struct snd_desc_gpio gpio[0];
+} __attribute__((packed, aligned(1)));
+
+/*
+ * Platform Pin
+ */
+struct snd_desc_pin {
+	u8 source[16];			/* Source pin name */
+	u8 sink[16];			/* Sink pin name */
+} __attribute__((packed, aligned(1)));
+
+/*
+ * Array of Platform Pins
+ */
+struct snd_desc_platform_pins {
+	u32 num_pins;
+	struct snd_desc_pin pin[0];
+} __attribute__((packed, aligned(1)));
+
 
 
 /* client component driver API - called by codec, platform drivers */
@@ -210,25 +240,29 @@ int snd_descriptor_new_dai(struct snd_component *c,
 int snd_des_new_nhlt(struct snd_component *c,
         struct snd_desc_nhlt_endpoint *pcm_desc);
 
+int snd_des_new_gpios(struct snd_component *c,
+        struct snd_desc_platform_gpios *gpios);
+
+int snd_des_new_pins(struct snd_component *c,
+        struct snd_desc_platform_pins *pins);
+
 /* should be called when driver module is removed */
 void snd_descriptor_free_component(struct snd_component *c);
 
-#if 0
-// TODO: this needs to be worked out for pins
-/*.....more client APIs here */
-
-int snd_descriptor_add_pin(struct snd_component *c,
-        struct snd_descriptor_pin *pin);
-
-#endif
 
 /* machine driver API - one call for each descriptor type */
 
-int snd_descriptor_get_dai(struct snd_card *card,
+int snd_descriptor_get_dai(struct snd_card *card, const char *component,
         const struct snd_desc_dai_descriptor **dai_desc);
 
-int snd_descriptor_get_pcm(struct snd_card *card,
+int snd_descriptor_get_pcm(struct snd_card *card, const char *component,
         const struct snd_desc_nhlt_endpoint **pcm_desc);
+
+int snd_descriptor_get_gpios(struct snd_card *card, const char *component,
+        const struct snd_desc_platform_gpios **gpio_desc);
+
+int snd_descriptor_get_pins(struct snd_card *card, const char *component,
+        const struct snd_desc_plaform_pins **pin_desc);
 
 /*..... more machine driver APIs here */
 
