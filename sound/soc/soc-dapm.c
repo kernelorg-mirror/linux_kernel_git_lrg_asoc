@@ -53,8 +53,8 @@ static int snd_soc_dapm_add_path(struct snd_soc_dapm_context *dapm,
 	int (*connected)(struct snd_soc_dapm_widget *source,
 			 struct snd_soc_dapm_widget *sink));
 static struct snd_soc_dapm_widget *
-snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
-			 const struct snd_soc_dapm_widget *widget);
+	soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
+	const struct snd_soc_dapm_widget *widget);
 
 /* dapm power sequences - make this per codec in the future */
 static int dapm_up_seq[] = {
@@ -3028,7 +3028,7 @@ int snd_soc_dapm_put_pin_switch(struct snd_kcontrol *kcontrol,
 EXPORT_SYMBOL_GPL(snd_soc_dapm_put_pin_switch);
 
 static struct snd_soc_dapm_widget *
-snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
+soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
 			 const struct snd_soc_dapm_widget *widget)
 {
 	struct snd_soc_dapm_widget *w;
@@ -3154,6 +3154,35 @@ snd_soc_dapm_new_control(struct snd_soc_dapm_context *dapm,
 }
 
 /**
+ * snd_soc_dapm_new_control - create a new dapm control
+ * @dapm: DAPM context
+ * @widget: widget template
+ *
+ * Creates a new DAPM control based upon the template.
+ *
+ * Returns widget for success else NULL for error.
+ */
+struct snd_soc_dapm_widget *snd_soc_dapm_new_control(
+	struct snd_soc_dapm_context *dapm,
+	const struct snd_soc_dapm_widget *widget)
+{
+	struct snd_soc_dapm_widget *w;
+
+	mutex_lock_nested(&dapm->card->dapm_mutex, SND_SOC_DAPM_CLASS_INIT);
+	w = soc_dapm_new_control(dapm, widget);
+	if (!w) {
+		dev_err(dapm->dev, "ASoC: Failed to create DAPM control %s\n",
+			widget->name);
+		goto out;
+	}
+
+out:
+	mutex_unlock(&dapm->card->dapm_mutex);
+	return w;
+}
+EXPORT_SYMBOL_GPL(snd_soc_dapm_new_control);
+
+/**
  * snd_soc_dapm_new_controls - create new dapm controls
  * @dapm: DAPM context
  * @widget: widget array
@@ -3173,7 +3202,7 @@ int snd_soc_dapm_new_controls(struct snd_soc_dapm_context *dapm,
 
 	mutex_lock_nested(&dapm->card->dapm_mutex, SND_SOC_DAPM_CLASS_INIT);
 	for (i = 0; i < num; i++) {
-		w = snd_soc_dapm_new_control(dapm, widget);
+		w = soc_dapm_new_control(dapm, widget);
 		if (!w) {
 			dev_err(dapm->dev,
 				"ASoC: Failed to create DAPM control %s\n",
