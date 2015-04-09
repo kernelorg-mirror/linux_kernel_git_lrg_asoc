@@ -41,6 +41,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <sound/soc-topology.h>
 #include <sound/initval.h>
 
 #include <trace/events/asoc.h>
@@ -2161,6 +2162,9 @@ static void dapm_free_widgets(struct snd_soc_dapm_context *dapm)
 
 		list_for_each_entry_safe(p, next_p, &w->sinks, list_source)
 			dapm_free_path(p);
+
+		/* check and free and dynamic widget kcontrols */
+		snd_soc_tplg_widget_remove(w);
 
 		kfree(w->kcontrols);
 		kfree(w->name);

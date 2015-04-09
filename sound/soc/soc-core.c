@@ -40,6 +40,7 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/soc-dpcm.h>
+#include <sound/soc-topology.h>
 #include <sound/initval.h>
 
 #define CREATE_TRACE_POINTS
@@ -2379,6 +2380,7 @@ int snd_soc_register_card(struct snd_soc_card *card)
 		card->rtd_aux[i].card = card;
 
 	INIT_LIST_HEAD(&card->dapm_dirty);
+	INIT_LIST_HEAD(&card->dobj_list);
 	card->instantiated = 0;
 	mutex_init(&card->mutex);
 	mutex_init(&card->dapm_mutex);
@@ -2693,6 +2695,7 @@ static void snd_soc_component_add_unlocked(struct snd_soc_component *component)
 	}
 
 	list_add(&component->list, &component_list);
+	INIT_LIST_HEAD(&component->dobj_list);
 }
 
 static void snd_soc_component_add(struct snd_soc_component *component)
@@ -2774,6 +2777,7 @@ void snd_soc_unregister_component(struct device *dev)
 	return;
 
 found:
+	snd_soc_tplg_component_remove(cmpnt, SND_SOC_TPLG_ID_ALL);
 	snd_soc_component_del(cmpnt);
 	snd_soc_component_cleanup(cmpnt);
 	kfree(cmpnt);
