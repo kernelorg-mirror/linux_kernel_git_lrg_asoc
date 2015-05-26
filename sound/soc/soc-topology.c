@@ -1507,7 +1507,7 @@ static int soc_tplg_pcm_dai_elems_load(struct soc_tplg *tplg,
 	}
 
 	dev_dbg(tplg->dev, "ASoC: adding %d PCM DAIs\n", count);
-	tplg->pos += sizeof(struct snd_soc_tplg_pcm_dai) + count;
+	tplg->pos += sizeof(struct snd_soc_tplg_pcm_dai) * count;
 
 	dobj = kzalloc(sizeof(struct snd_soc_dobj), GFP_KERNEL);
 	if (dobj == NULL)
