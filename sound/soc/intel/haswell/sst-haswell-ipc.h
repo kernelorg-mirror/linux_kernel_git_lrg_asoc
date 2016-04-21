@@ -48,6 +48,7 @@ struct sst_pdata;
 struct sst_module;
 struct sst_module_runtime;
 extern struct sst_ops haswell_ops;
+extern struct sst_ops sst_baytrail_ops;
 
 /* Stream Allocate Path ID */
 enum sst_hsw_stream_path_id {
@@ -77,6 +78,7 @@ enum sst_hsw_stream_format {
 enum sst_hsw_device_id {
 	SST_HSW_DEVICE_SSP_0   = 0,
 	SST_HSW_DEVICE_SSP_1   = 1,
+	SST_HSW_DEVICE_SSP_2   = 2,
 };
 
 /* Device Master Clock Frequency */
@@ -344,7 +346,7 @@ struct sst_hsw_audio_data_format_ipc {
 	u32 style;
 	u8 ch_num;
 	u8 valid_bit;
-	u8 reserved[2];
+	u32 period_frames;
 } __attribute__((packed));
 
 /* Stream Allocate Request */
@@ -442,6 +444,8 @@ int sst_hsw_stream_set_valid(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	u32 bits);
 int sst_hsw_stream_set_rate(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	int rate);
+int sst_hsw_stream_set_period(struct sst_hsw *hsw,
+	struct sst_hsw_stream *stream, u32 frames);
 int sst_hsw_stream_set_bits(struct sst_hsw *hsw, struct sst_hsw_stream *stream,
 	enum sst_hsw_bitdepth bits);
 int sst_hsw_stream_set_channels(struct sst_hsw *hsw,

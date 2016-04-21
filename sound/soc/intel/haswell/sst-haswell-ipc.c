@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -436,6 +436,122 @@ static struct sst_hsw_stream *get_stream_by_id(struct sst_hsw *hsw,
 	return NULL;
 }
 
+struct sst_dfsentry {
+	struct dentry *dfsentry;
+	size_t size;
+	void *buf;
+	struct sst_dsp *sst;
+};
+
+static int sst_dfsentry_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+
+	return 0;
+}
+
+static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
+				 size_t count, loff_t *ppos)
+{
+	struct sst_dfsentry *dfse = file->private_data;
+	int size;
+	u32 *buf;
+	loff_t pos = *ppos;
+	size_t ret;
+
+	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
+
+	size = dfse->size;
+
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= size || !count)
+		return 0;
+	if (count > size - pos)
+		count = size - pos;
+
+	size = (count + 3) & (~3);
+	buf = kzalloc(size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	pm_runtime_get(dfse->sst->dev);
+	sst_memcpy_fromio_32(dfse->sst, buf, dfse->buf + pos, size);
+	pm_runtime_put(dfse->sst->dev);
+
+	ret = copy_to_user(buffer, buf, count);
+	kfree(buf);
+
+	if (ret == count)
+		return -EFAULT;
+	count -= ret;
+	*ppos = pos + count;
+
+	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
+
+	return count;
+}
+
+static const struct file_operations sst_dfs_fops = {
+	.open = sst_dfsentry_open,
+	.read = sst_dfsentry_read,
+	.llseek = default_llseek,
+};
+
+static int hsw_debugfs_entry_create(struct sst_dsp *sst, void __iomem *base, size_t size, char *name)
+{
+	struct sst_dfsentry *dfse;
+
+	if (!sst)
+		return -EINVAL;
+
+	dfse = kzalloc(sizeof(*dfse), GFP_KERNEL);
+
+	if (!dfse)
+		return -ENOMEM;
+	dfse->buf = base;
+	dfse->size = size;//mbox size
+
+	dfse->dfsentry = debugfs_create_file(name, 0444, sst->debugfs_root,
+					     dfse, &sst_dfs_fops);
+	if (!dfse->dfsentry) {
+		dev_err(sst->dev, "cannot create debugfs entry.\n");
+		kfree(dfse);
+		return -ENODEV;
+	}
+
+	dfse->sst = sst;
+
+	return 0;
+}
+
+static int hsw_debugfs_init(struct sst_dsp *sst)
+{
+	int ret = 0;
+
+	ret = hsw_debugfs_entry_create(sst, sst->mailbox.in_base, 4096, "mbox");
+	if (ret < 0)
+		return ret;
+
+	ret = hsw_debugfs_entry_create(sst, sst->addr.shim, 256, "shim");
+	if (ret < 0)
+		return ret;
+
+	ret = hsw_debugfs_entry_create(sst,
+		(void __iomem *)((char *)sst->addr.lpe + 0xa2000), 0x90,
+		"ssp2");
+	if (ret < 0)
+		return ret;
+
+	ret = hsw_debugfs_entry_create(sst,
+		(void __iomem *)((char *)sst->addr.lpe + 0x9c000), 0x400,
+		"dmac1");
+
+	return ret;
+
+}
+
+
 static void hsw_fw_ready(struct sst_hsw *hsw, u32 header)
 {
 	struct sst_hsw_ipc_fw_ready fw_ready;
@@ -516,8 +632,16 @@ static void hsw_notification_work(struct work_struct *work)
 	}
 
 	/* tell DSP that notification has been handled */
-	sst_dsp_shim_update_bits(hsw->dsp, SST_IPCD,
-		SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
+	if (1) {
+		/* Baytrail */
+		sst_dsp_shim_update_bits64(hsw->dsp, SST_IPCD,
+			SST_BYT_IPCD_BUSY | SST_BYT_IPCD_DONE,
+				SST_BYT_IPCD_DONE);
+	} else {
+		/* Haswell / Broadwell */
+		sst_dsp_shim_update_bits(hsw->dsp, SST_IPCD,
+			SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
+	}
 
 	/* unmask busy interrupt */
 	sst_dsp_shim_update_bits(hsw->dsp, SST_IMRX, SST_IMRX_BUSY, 0);
@@ -582,7 +706,7 @@ static int hsw_process_reply(struct sst_hsw *hsw, u32 header)
 			hsw->ipc.pending = false;
 		} else {
 			/* copy data from the DSP */
-			sst_dsp_outbox_read(hsw->dsp, msg->rx_data,
+			sst_dsp_inbox_read(hsw->dsp, msg->rx_data,
 				msg->rx_size);
 		}
 		break;
@@ -721,13 +845,12 @@ static int hsw_log_message(struct sst_hsw *hsw, u32 header)
 	return ret;
 }
 
-static int hsw_process_notification(struct sst_hsw *hsw)
+static int hsw_process_notification(struct sst_hsw *hsw, u64 header)
 {
-	struct sst_dsp *sst = hsw->dsp;
-	u32 type, header;
+	u32 type;
 	int handled = 1;
 
-	header = sst_dsp_shim_read_unlocked(sst, SST_IPCD);
+	/* upper 32 bits not used atm */
 	type = msg_get_global_type(header);
 
 	trace_ipc_request("processing -->", header);
@@ -751,8 +874,8 @@ static int hsw_process_notification(struct sst_hsw *hsw)
 	case IPC_GLB_MAX_IPC_MESSAGE_TYPE:
 	case IPC_GLB_RESTORE_CONTEXT:
 	case IPC_GLB_SHORT_REPLY:
-		dev_err(hsw->dev, "error: message type %d header 0x%x\n",
-			type, header);
+		dev_err(hsw->dev, "error: message type %d header 0x%16llx\n",
+				type, header);
 		break;
 	case IPC_GLB_STREAM_MESSAGE:
 		handled = hsw_stream_message(hsw, header);
@@ -764,7 +887,7 @@ static int hsw_process_notification(struct sst_hsw *hsw)
 		handled = hsw_module_message(hsw, header);
 		break;
 	default:
-		dev_err(hsw->dev, "error: unexpected type %d hdr 0x%8.8x\n",
+		dev_err(hsw->dev, "error: unexpected type %d hdr 0x%16llx\n",
 			type, header);
 		break;
 	}
@@ -804,7 +927,7 @@ static irqreturn_t hsw_irq_thread(int irq, void *context)
 	if (ipcd & SST_IPCD_BUSY) {
 
 		/* Handle Notification and Delayed reply from DSP Core */
-		hsw_process_notification(hsw);
+		hsw_process_notification(hsw, ipcd);
 
 		/* clear BUSY bit and set DONE bit - accept new messages */
 		sst_dsp_shim_update_bits_unlocked(sst, SST_IPCD,
@@ -822,6 +945,59 @@ static irqreturn_t hsw_irq_thread(int irq, void *context)
 
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t byt_irq_thread(int irq, void *context)
+{
+	struct sst_dsp *sst = (struct sst_dsp *) context;
+	struct sst_hsw *hsw = sst_dsp_get_thread_context(sst);
+	struct sst_generic_ipc *ipc = &hsw->ipc;
+	u64 ipcx, ipcd;
+	unsigned long flags;
+
+	spin_lock_irqsave(&sst->spinlock, flags);
+
+	ipcx = sst_dsp_ipc_msg64_rx(hsw->dsp);
+	ipcd = sst_dsp_shim_read64_unlocked(sst, SST_IPCD);
+
+	/* reply message from DSP */
+	if (ipcx & SST_BYT_IPCX_DONE) {
+
+		/* Handle Immediate reply from DSP Core */
+		hsw_process_reply(hsw, ipcx);
+
+		/* clear DONE bit - tell DSP we have completed */
+		sst_dsp_shim_update_bits64_unlocked(sst, SST_IPCX,
+			SST_BYT_IPCX_DONE, 0);
+
+		/* unmask Done interrupt */
+		sst_dsp_shim_update_bits64_unlocked(sst, SST_IMRX,
+			SST_IMRX_DONE, 0);
+	}
+
+	/* new message from DSP */
+	if (ipcd & SST_BYT_IPCD_BUSY) {
+
+		/* Handle Notification and Delayed reply from DSP Core */
+		hsw_process_notification(hsw, ipcd);
+
+		/* clear BUSY bit and set DONE bit - accept new messages */
+		sst_dsp_shim_update_bits64_unlocked(sst, SST_IPCD,
+			SST_BYT_IPCD_BUSY | SST_BYT_IPCD_DONE,
+			SST_BYT_IPCD_DONE);
+
+		/* unmask busy interrupt */
+		sst_dsp_shim_update_bits64_unlocked(sst, SST_IMRX,
+			SST_IMRX_BUSY, 0);
+	}
+
+	spin_unlock_irqrestore(&sst->spinlock, flags);
+
+	/* continue to send any remaining messages... */
+	queue_kthread_work(&ipc->kworker, &ipc->kwork);
+
+	return IRQ_HANDLED;
+}
+
 
 int sst_hsw_fw_get_version(struct sst_hsw *hsw,
 	struct sst_hsw_ipc_fw_version *version)
@@ -1036,6 +1212,18 @@ out:
 	spin_unlock_irqrestore(&sst->spinlock, flags);
 
 	return ret;
+}
+
+int sst_hsw_stream_set_period(struct sst_hsw *hsw,
+	struct sst_hsw_stream *stream, u32 frames)
+{
+	if (stream->commited) {
+		dev_err(hsw->dev, "error: stream committed for set bits\n");
+		return -EINVAL;
+	}
+
+	stream->request.format.period_frames = frames;
+	return 0;
 }
 
 int sst_hsw_stream_set_bits(struct sst_hsw *hsw,
@@ -1460,7 +1648,7 @@ struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
 	struct sst_module *module;
 	struct sst_module_runtime *runtime;
 	int err;
-
+mod_id = 0;
 	module = sst_module_get_from_id(dsp, mod_id);
 	if (module == NULL) {
 		dev_err(dsp->dev, "error: failed to get module %d for pcm\n",
@@ -1474,7 +1662,7 @@ struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
 			mod_id);
 		return NULL;
 	}
-
+return runtime;
 	err = sst_module_runtime_alloc_blocks(runtime, offset);
 	if (err < 0) {
 		dev_err(dsp->dev, "error: failed to alloc blocks for module %d runtime\n",
@@ -1500,7 +1688,7 @@ static int sst_hsw_dx_state_dump(struct sst_hsw *hsw)
 	struct sst_dsp *sst = hsw->dsp;
 	u32 item, offset, size;
 	int ret = 0;
-
+return 0;
 	trace_ipc_request("PM state dump. Items #", SST_HSW_MAX_DX_REGIONS);
 
 	if (hsw->dx.entries_no > SST_HSW_MAX_DX_REGIONS) {
@@ -1553,7 +1741,7 @@ static int sst_hsw_dx_state_restore(struct sst_hsw *hsw)
 	struct sst_dsp *sst = hsw->dsp;
 	u32 item, offset, size;
 	int ret;
-
+return 0;
 	for (item = 0; item < hsw->dx.entries_no; item++) {
 		if (hsw->dx.mem_info[item].source == SST_HSW_DX_TYPE_MEMORY_DUMP
 			&& hsw->dx.mem_info[item].offset > DSP_DRAM_ADDR_OFFSET
@@ -1590,13 +1778,13 @@ int sst_hsw_dsp_load(struct sst_hsw *hsw)
 		dev_err(hsw->dev, "error: failed to wake audio DSP\n");
 		return -ENODEV;
 	}
-
+#if 0
 	ret = sst_dsp_dma_get_channel(dsp, 0);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
 		return ret;
 	}
-
+#endif
 	list_for_each_entry_safe_reverse(sst_fw, t, &dsp->fw_list, list) {
 		ret = sst_fw_reload(sst_fw);
 		if (ret < 0) {
@@ -1609,7 +1797,7 @@ int sst_hsw_dsp_load(struct sst_hsw *hsw)
 	if (ret < 0)
 		return -EINVAL;
 
-	sst_dsp_dma_put_channel(dsp);
+//	sst_dsp_dma_put_channel(dsp);
 	return 0;
 }
 
@@ -1619,20 +1807,21 @@ static int sst_hsw_dsp_restore(struct sst_hsw *hsw)
 	int ret;
 
 	dev_dbg(hsw->dev, "restoring audio DSP....");
-
+#if 0
 	ret = sst_dsp_dma_get_channel(dsp, 0);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
 		return ret;
 	}
-
+#endif
 	ret = sst_hsw_dx_state_restore(hsw);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: SST FW context restore failed\n");
 		sst_dsp_dma_put_channel(dsp);
 		return -ENOMEM;
 	}
-	sst_dsp_dma_put_channel(dsp);
+
+//	sst_dsp_dma_put_channel(dsp);
 
 	/* wait for DSP boot completion */
 	sst_dsp_boot(dsp);
@@ -2060,6 +2249,11 @@ static struct sst_dsp_device hsw_dev = {
 	.ops = &haswell_ops,
 };
 
+static struct sst_dsp_device byt_dev = {
+	.thread = byt_irq_thread,
+	.ops = &sst_baytrail_ops,
+};
+
 static void hsw_tx_msg(struct sst_generic_ipc *ipc, struct ipc_message *msg)
 {
 	/* send the message */
@@ -2067,19 +2261,60 @@ static void hsw_tx_msg(struct sst_generic_ipc *ipc, struct ipc_message *msg)
 	sst_dsp_ipc_msg_tx(ipc->dsp, msg->header);
 }
 
+static void byt_tx_msg(struct sst_generic_ipc *ipc, struct ipc_message *msg)
+{
+	/* send the message */
+	sst_dsp_outbox_write(ipc->dsp, msg->tx_data, msg->tx_size);
+	sst_dsp_ipc_msg64_tx(ipc->dsp, msg->header);
+}
+
 static void hsw_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
 {
 	struct sst_dsp *sst = ipc->dsp;
-	u32 isr, ipcd, imrx, ipcx;
+	u32 ipcd, ipcx ,isrd, imrx, isrx, imrd;
 
 	ipcx = sst_dsp_shim_read_unlocked(sst, SST_IPCX);
-	isr = sst_dsp_shim_read_unlocked(sst, SST_ISRX);
 	ipcd = sst_dsp_shim_read_unlocked(sst, SST_IPCD);
+	isrx = sst_dsp_shim_read_unlocked(sst, SST_ISRX);
+	isrd = sst_dsp_shim_read_unlocked(sst, SST_ISRD);
 	imrx = sst_dsp_shim_read_unlocked(sst, SST_IMRX);
+	imrd = sst_dsp_shim_read_unlocked(sst, SST_IMRD);
 
 	dev_err(ipc->dev,
-		"ipc: --%s-- ipcx 0x%8.8x isr 0x%8.8x ipcd 0x%8.8x imrx 0x%8.8x\n",
-		text, ipcx, isr, ipcd, imrx);
+		"ipc: --%s--\n ipcx 0x%8x\n ipcd 0x%8x\n"
+		" imrx 0x%8x\n imrd 0x%8x\n"
+		" isrx 0x%8x\n isrd 0x%8x\n",
+		text, ipcx, ipcd, imrx, imrd, isrx, isrd);
+}
+
+static void byt_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
+{
+	struct sst_dsp *sst = ipc->dsp;
+	u64 ipcd, ipcx ,isrd, imrx, isrx, imrd;
+	int i;
+
+	ipcx = sst_dsp_shim_read64_unlocked(sst, SST_IPCX);
+	ipcd = sst_dsp_shim_read64_unlocked(sst, SST_IPCD);
+	isrx = sst_dsp_shim_read64_unlocked(sst, SST_ISRX);
+	isrd = sst_dsp_shim_read64_unlocked(sst, SST_ISRD);
+	imrx = sst_dsp_shim_read64_unlocked(sst, SST_IMRX);
+	imrd = sst_dsp_shim_read64_unlocked(sst, SST_IMRD);
+
+	dev_err(ipc->dev,
+		"ipc: --%s--\n ipcx 0x%16llx\n ipcd 0x%16llx\n"
+		" imrx 0x%16llx\n imrd 0x%16llx\n"
+		" isrx 0x%16llx\n isrd 0x%16llx\n",
+		text, ipcx, ipcd, imrx, imrd, isrx, isrd);
+
+	for (i = 0; i < 0xff; i+=8 ) {
+		dev_err(ipc->dev, "shim 0x%2.2x value 0x%16.16llx\n",i, 
+			sst_dsp_shim_read64_unlocked(sst, i));
+	}
+
+	for (i = 10; i < 30; i++) {
+		dev_err(sst->dev, "mbox: %d value 0x%8.8x\n", i,
+			readl(sst->addr.lpe + i * 4 + 0x144000 + 0x900));
+	}
 }
 
 static void hsw_tx_data_copy(struct ipc_message *msg, char *tx_data,
@@ -2099,10 +2334,18 @@ static u64 hsw_reply_msg_match(u64 header, u64 *mask)
 
 static bool hsw_is_dsp_busy(struct sst_dsp *dsp)
 {
+	u32 ipcx;
+
+	ipcx = sst_dsp_shim_read64_unlocked(dsp, SST_IPCX);
+	return (ipcx & (SST_IPCX_BUSY | SST_IPCX_DONE));
+}
+
+static bool byt_is_dsp_busy(struct sst_dsp *dsp)
+{
 	u64 ipcx;
 
-	ipcx = sst_dsp_shim_read_unlocked(dsp, SST_IPCX);
-	return (ipcx & (SST_IPCX_BUSY | SST_IPCX_DONE));
+	ipcx = sst_dsp_shim_read64_unlocked(dsp, SST_IPCX);
+	return (ipcx & (SST_BYT_IPCX_BUSY | SST_BYT_IPCX_DONE));
 }
 
 int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
@@ -2110,6 +2353,7 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 	struct sst_hsw_ipc_fw_version version;
 	struct sst_hsw *hsw;
 	struct sst_generic_ipc *ipc;
+	struct sst_dsp_device *dsp_dev;
 	int ret;
 
 	dev_dbg(dev, "initialising Audio DSP IPC\n");
@@ -2122,11 +2366,35 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 
 	ipc = &hsw->ipc;
 	ipc->dev = dev;
-	ipc->ops.tx_msg = hsw_tx_msg;
-	ipc->ops.shim_dbg = hsw_shim_dbg;
-	ipc->ops.tx_data_copy = hsw_tx_data_copy;
-	ipc->ops.reply_msg_match = hsw_reply_msg_match;
-	ipc->ops.is_dsp_busy = hsw_is_dsp_busy;
+
+	/* set up ops depending on hardware */
+	switch (pdata->id) {
+	case SST_DEV_ID_BYT:
+		/* Baytrail */
+		dsp_dev = &byt_dev;
+		dsp_dev->thread_context = hsw;
+		ipc->ops.tx_msg = byt_tx_msg;
+		ipc->ops.shim_dbg = byt_shim_dbg;
+		ipc->ops.tx_data_copy = hsw_tx_data_copy;
+		ipc->ops.reply_msg_match = hsw_reply_msg_match;
+		ipc->ops.is_dsp_busy = byt_is_dsp_busy;
+		break;
+	case SST_DEV_ID_LYNX_POINT:
+	case SST_DEV_ID_WILDCAT_POINT:
+		/* Haswell / Broadwell */
+		dsp_dev = &hsw_dev;
+		dsp_dev->thread_context = hsw;
+		ipc->ops.tx_msg = hsw_tx_msg;
+		ipc->ops.shim_dbg = hsw_shim_dbg;
+		ipc->ops.tx_data_copy = hsw_tx_data_copy;
+		ipc->ops.reply_msg_match = hsw_reply_msg_match;
+		ipc->ops.is_dsp_busy = hsw_is_dsp_busy;
+		break;
+	default:
+		ret = -EINVAL;
+		dev_err(dev, "error: unsupported DSP ID 0x%x\n", pdata->id);
+		goto ipc_init_err;
+	}
 
 	ipc->tx_data_max_size = IPC_MAX_MAILBOX_BYTES;
 	ipc->rx_data_max_size = IPC_MAX_MAILBOX_BYTES;
@@ -2137,10 +2405,9 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 
 	INIT_LIST_HEAD(&hsw->stream_list);
 	init_waitqueue_head(&hsw->boot_wait);
-	hsw_dev.thread_context = hsw;
 
 	/* init SST shim */
-	hsw->dsp = sst_dsp_new(dev, &hsw_dev, pdata);
+	hsw->dsp = sst_dsp_new(dev, dsp_dev, pdata);
 	if (hsw->dsp == NULL) {
 		ret = -ENODEV;
 		goto dsp_new_err;
@@ -2181,11 +2448,11 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 		msecs_to_jiffies(IPC_BOOT_MSECS));
 	if (ret == 0) {
 		ret = -EIO;
-		dev_err(hsw->dev, "error: audio DSP boot timeout IPCD 0x%x IPCX 0x%x\n",
-			sst_dsp_shim_read_unlocked(hsw->dsp, SST_IPCD),
-			sst_dsp_shim_read_unlocked(hsw->dsp, SST_IPCX));
+		ipc->ops.shim_dbg(ipc, "DSP boot timeout");
 		goto boot_err;
 	}
+
+	hsw_debugfs_init(hsw->dsp);
 
 	/* init module state after boot */
 	sst_hsw_init_module_state(hsw);
@@ -2197,7 +2464,7 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 	ret = sst_hsw_mixer_get_info(hsw);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: failed to get stream info\n");
-		goto boot_err;
+		//goto boot_err;
 	}
 
 	pdata->dsp = hsw;
