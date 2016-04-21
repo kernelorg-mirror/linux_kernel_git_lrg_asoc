@@ -33,8 +33,8 @@
 #include "../common/sst-dsp-priv.h"
 #include "../common/sst-dsp.h"
 
-#define HSW_PCM_COUNT		6
-#define HSW_VOLUME_MAX		0x7FFFFFFF	/* 0dB */
+#define HSW_PCM_COUNT		1
+#define HSW_VOLUME_MAX		(1 << 16)	/* 0dB */
 
 #define SST_OLD_POSITION(d, r, o) ((d) +		\
 			frames_to_bytes(r, o))
@@ -43,6 +43,7 @@
 
 /* simple volume table */
 static const u32 volume_map[] = {
+#if 0
 	HSW_VOLUME_MAX >> 30,
 	HSW_VOLUME_MAX >> 29,
 	HSW_VOLUME_MAX >> 28,
@@ -57,6 +58,7 @@ static const u32 volume_map[] = {
 	HSW_VOLUME_MAX >> 19,
 	HSW_VOLUME_MAX >> 18,
 	HSW_VOLUME_MAX >> 17,
+#endif
 	HSW_VOLUME_MAX >> 16,
 	HSW_VOLUME_MAX >> 15,
 	HSW_VOLUME_MAX >> 14,
@@ -407,7 +409,7 @@ static int hsw_waves_param_put(struct snd_kcontrol *kcontrol,
 }
 
 /* TLV used by both global and stream volumes */
-static const DECLARE_TLV_DB_SCALE(hsw_vol_tlv, -9000, 300, 1);
+static const DECLARE_TLV_DB_SCALE(hsw_vol_tlv, -4800, 300, 1);
 
 /* System Pin has no volume control */
 static const struct snd_kcontrol_new hsw_volume_controls[] = {
@@ -415,6 +417,7 @@ static const struct snd_kcontrol_new hsw_volume_controls[] = {
 	SOC_DOUBLE_EXT_TLV("Master Playback Volume", 0, 0, 8,
 		ARRAY_SIZE(volume_map) - 1, 0,
 		hsw_volume_get, hsw_volume_put, hsw_vol_tlv),
+#if 0
 	/* Offload 0 volume */
 	SOC_DOUBLE_EXT_TLV("Media0 Playback Volume", 1, 0, 8,
 		ARRAY_SIZE(volume_map) - 1, 0,
@@ -433,6 +436,7 @@ static const struct snd_kcontrol_new hsw_volume_controls[] = {
 	/* set parameters to module waves */
 	SND_SOC_BYTES_EXT("Waves Set Param", WAVES_PARAM_COUNT,
 		hsw_waves_param_get, hsw_waves_param_put),
+#endif
 };
 
 /* Create DMA buffer page table for DSP */
@@ -618,6 +622,8 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 	sst_hsw_stream_set_style(hsw, pcm_data->stream,
 		SST_HSW_INTERLEAVING_PER_CHANNEL);
 
+	sst_hsw_stream_set_period(hsw, pcm_data->stream, params_period_size(params));
+
 	if (runtime->dma_bytes % PAGE_SIZE)
 		pages = (runtime->dma_bytes / PAGE_SIZE) + 1;
 	else
@@ -634,10 +640,11 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 
 	dsp = sst_hsw_get_dsp(hsw);
 
+	// TODO: we are not actually using the module config anymore ??
 	module_data = sst_module_get_from_id(dsp, module_id);
 	if (module_data == NULL) {
-		dev_err(rtd->dev, "error: failed to get module config\n");
-		return -EINVAL;
+		//dev_err(rtd->dev, "error: failed to get module config\n");
+		//return -EINVAL;
 	}
 
 	sst_hsw_stream_set_module_info(hsw, pcm_data->stream,
@@ -649,6 +656,7 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
+#if 0
 	if (!pcm_data->allocated) {
 		/* Set previous saved volume */
 		sst_hsw_stream_set_volume(hsw, pcm_data->stream, 0,
@@ -658,10 +666,10 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 		pcm_data->allocated = true;
 	}
 
-	ret = sst_hsw_stream_pause(hsw, pcm_data->stream, 1);
-	if (ret < 0)
-		dev_err(rtd->dev, "error: failed to pause %d\n", ret);
-
+//	ret = sst_hsw_stream_pause(hsw, pcm_data->stream, 1);
+	//if (ret < 0)
+	//	dev_err(rtd->dev, "error: failed to pause %d\n", ret);
+#endif
 	return 0;
 }
 
@@ -822,6 +830,10 @@ static int hsw_pcm_open(struct snd_pcm_substream *substream)
 	snd_soc_pcm_set_drvdata(rtd, pcm_data);
 	pcm_data->substream = substream;
 
+	snd_pcm_hw_constraint_step(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, PAGE_SIZE);
+	snd_pcm_hw_constraint_step(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 256);
 	snd_soc_set_runtime_hwparams(substream, &hsw_pcm_hardware);
 
 	pcm_data->stream = sst_hsw_stream_new(hsw, rtd->cpu_dai->id,
@@ -973,6 +985,7 @@ static int hsw_pcm_new(struct snd_soc_pcm_runtime *rtd)
 #define HSW_FORMATS \
 	(SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE)
 
+// TODO: this will come from topology
 static struct snd_soc_dai_driver hsw_dais[] = {
 	{
 		.name  = "System Pin",
@@ -992,6 +1005,7 @@ static struct snd_soc_dai_driver hsw_dais[] = {
 			.formats = SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE,
 		},
 	},
+#if 0
 	{
 		/* PCM */
 		.name  = "Offload0 Pin",
@@ -1027,22 +1041,27 @@ static struct snd_soc_dai_driver hsw_dais[] = {
 			.formats = SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE,
 		},
 	},
+#endif
 };
 
+// TODO: this will come from topology
 static const struct snd_soc_dapm_widget widgets[] = {
 
 	/* Backend DAIs  */
-	SND_SOC_DAPM_AIF_IN("SSP0 CODEC IN", NULL, 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("SSP0 CODEC OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_IN("SSP1 BT IN", NULL, 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("SSP1 BT OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_IN("SSP2 CODEC IN", NULL, 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("SSP2 CODEC OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
+//	SND_SOC_DAPM_AIF_IN("SSP1 BT IN", NULL, 0, SND_SOC_NOPM, 0, 0),
+//	SND_SOC_DAPM_AIF_OUT("SSP1 BT OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
 
-	/* Global Playback Mixer */
-	SND_SOC_DAPM_MIXER("Playback VMixer", SND_SOC_NOPM, 0, 0, NULL, 0),
+	/* Volumes */
+	SND_SOC_DAPM_PGA("Playback Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA("Capture Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
 };
 
+// TODO: this will come from topology
 static const struct snd_soc_dapm_route graph[] = {
 
+#if 0
 	/* Playback Mixer */
 	{"Playback VMixer", NULL, "System Playback"},
 	{"Playback VMixer", NULL, "Offload0 Playback"},
@@ -1051,6 +1070,13 @@ static const struct snd_soc_dapm_route graph[] = {
 	{"SSP0 CODEC OUT", NULL, "Playback VMixer"},
 
 	{"Analog Capture", NULL, "SSP0 CODEC IN"},
+#else
+	{"Playback Volume", NULL, "System Playback"},
+	{"SSP2 CODEC OUT", NULL, "Playback Volume"},
+
+	{"Capture Volume", NULL, "SSP2 CODEC IN"},
+	{"Analog Capture", NULL, "Capture Volume"},
+#endif
 };
 
 static int hsw_pcm_probe(struct snd_soc_platform *platform)
@@ -1228,7 +1254,7 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-
+return 0;
 	if (pdata->pm_state >= HSW_PM_STATE_RTD3)
 		return 0;
 
@@ -1250,7 +1276,7 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-
+return 0;
 	if (pdata->pm_state != HSW_PM_STATE_RTD3)
 		return 0;
 
@@ -1303,7 +1329,7 @@ static void hsw_pcm_complete(struct device *dev)
 	struct sst_hsw *hsw = pdata->hsw;
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-
+return;
 	if (pdata->pm_state != HSW_PM_STATE_D3)
 		return;
 
@@ -1348,7 +1374,7 @@ static int hsw_pcm_prepare(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-
+return 0;
 	if (pdata->pm_state == HSW_PM_STATE_D3)
 		return 0;
 	else if (pdata->pm_state == HSW_PM_STATE_D0) {
