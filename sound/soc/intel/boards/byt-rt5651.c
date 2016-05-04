@@ -36,8 +36,8 @@ static const struct snd_soc_dapm_widget byt_rt5651_widgets[] = {
 };
 
 static const struct snd_soc_dapm_route byt_rt5651_audio_map[] = {
-	{"Headset Mic", NULL, "micbias1"},
-	{"IN2P", NULL, "Headset Mic"},
+	{"micbias1", NULL, "Headset Mic"},
+	{"IN3P", NULL, "micbias1"},
 	{"Headphone", NULL, "HPOL"},
 	{"Headphone", NULL, "HPOR"},
 	{"Speaker", NULL, "LOUTL"},
