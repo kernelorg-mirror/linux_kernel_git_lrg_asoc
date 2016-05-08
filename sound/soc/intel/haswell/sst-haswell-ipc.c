@@ -459,7 +459,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	loff_t pos = *ppos;
 	size_t ret;
 
-	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
+	//dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
 
 	size = dfse->size;
 
@@ -487,7 +487,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	count -= ret;
 	*ppos = pos + count;
 
-	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
+	//dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
 	return count;
 }
@@ -498,7 +498,8 @@ static const struct file_operations sst_dfs_fops = {
 	.llseek = default_llseek,
 };
 
-static int hsw_debugfs_entry_create(struct sst_dsp *sst, void __iomem *base, size_t size, char *name)
+static int hsw_debugfs_entry_create(struct sst_dsp *sst, void __iomem *base,
+	size_t size, const char *name)
 {
 	struct sst_dfsentry *dfse;
 
@@ -525,30 +526,37 @@ static int hsw_debugfs_entry_create(struct sst_dsp *sst, void __iomem *base, siz
 	return 0;
 }
 
+struct sst_debugfs_map {
+	const char *name;
+	u32 offset;
+	u32 size;
+};
+
+static const struct sst_debugfs_map debugfs_byt[] = {
+	{"dmac0", 0x98000, 0x400},
+	{"dmac1", 0x9c000, 0x400},
+	{"ssp0", 0xa0000, 0x100},
+	{"ssp1", 0xa1000, 0x100},
+	{"ssp2", 0xa2000, 0x100},
+	{"dram", 0x100000, 0x40000},
+	{"shim", 0x140000, 0x100},
+	{"mbox", 0x144000, 0x1000},
+};
+
+
 static int hsw_debugfs_init(struct sst_dsp *sst)
 {
-	int ret = 0;
+	int err = 0, i;
 
-	ret = hsw_debugfs_entry_create(sst, sst->mailbox.in_base, 4096, "mbox");
-	if (ret < 0)
-		return ret;
+	for (i = 0; i < ARRAY_SIZE(debugfs_byt); i++) {
+		err = hsw_debugfs_entry_create(sst,
+			(void __iomem *)((char *)sst->addr.lpe + debugfs_byt[i].offset),
+			debugfs_byt[i].size, debugfs_byt[i].name);
+		if (err < 0)
+			dev_err(sst->dev, "cannot create debugfs for %s\n", debugfs_byt[i].name);
+	}
 
-	ret = hsw_debugfs_entry_create(sst, sst->addr.shim, 256, "shim");
-	if (ret < 0)
-		return ret;
-
-	ret = hsw_debugfs_entry_create(sst,
-		(void __iomem *)((char *)sst->addr.lpe + 0xa2000), 0x90,
-		"ssp2");
-	if (ret < 0)
-		return ret;
-
-	ret = hsw_debugfs_entry_create(sst,
-		(void __iomem *)((char *)sst->addr.lpe + 0x9c000), 0x400,
-		"dmac1");
-
-	return ret;
-
+	return err;
 }
 
 
