@@ -533,12 +533,13 @@ struct sst_debugfs_map {
 };
 
 static const struct sst_debugfs_map debugfs_byt[] = {
-	{"dmac0", 0x98000, 0x400},
-	{"dmac1", 0x9c000, 0x400},
+	{"dmac0", 0x98000, 0x420},
+	{"dmac1", 0x9c000, 0x420},
 	{"ssp0", 0xa0000, 0x100},
 	{"ssp1", 0xa1000, 0x100},
 	{"ssp2", 0xa2000, 0x100},
-	{"dram", 0x100000, 0x40000},
+	{"iram", 0xc0000, 80 * 1024},
+	{"dram", 0x100000, 160 * 1024},
 	{"shim", 0x140000, 0x100},
 	{"mbox", 0x144000, 0x1000},
 };
