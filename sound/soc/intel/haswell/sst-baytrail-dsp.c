@@ -264,7 +264,6 @@ static void sst_byt_reset(struct sst_dsp *sst);
 
 static void byt_set_dsp_D3(struct sst_dsp *sst)
 {
-#if 0
 	u32 val;
 
 	/* Set D3 state, delay 50 us */
@@ -272,12 +271,11 @@ static void byt_set_dsp_D3(struct sst_dsp *sst)
 	val |= SST_PMCS_PS_MASK;
 	writel(val, sst->addr.pci_cfg + SST_PMCS);
 	udelay(50);
-#endif
 }
 
 static int byt_set_dsp_D0(struct sst_dsp *sst)
 {
-#if 0
+
 	int tries = 10;
 	u32 reg;
 
@@ -298,13 +296,12 @@ static int byt_set_dsp_D0(struct sst_dsp *sst)
 	return -ENODEV;
 
 finish:
-#endif
 	/* Stall and reset core, set CSR */
 	sst_byt_reset(sst);
 
 	/* Enable Interrupt from both sides */
-	//sst_dsp_shim_update_bits(sst, SST_IMRX, (SST_IMRX_BUSY | SST_IMRX_DONE),
-				// 0x0);
+	sst_dsp_shim_update_bits(sst, SST_IMRX, (SST_IMRX_BUSY | SST_IMRX_DONE),
+				 0x0);
 	//sst_dsp_shim_update_bits(sst, SST_IMRD, (SST_IMRD_DONE | SST_IMRD_BUSY |
 				//SST_IMRD_SSP0 | SST_IMRD_DMAC), 0x0);
 
