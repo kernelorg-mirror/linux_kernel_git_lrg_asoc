@@ -42,6 +42,10 @@ static const struct snd_soc_dapm_route byt_rt5651_audio_map[] = {
 	{"Headphone", NULL, "HPOR"},
 	{"Speaker", NULL, "LOUTL"},
 	{"Speaker", NULL, "LOUTR"},
+
+	/* CODEC BE connections */
+	{"SSP2 CODEC IN", NULL, "AIF1 Capture"},
+	{"AIF1 Playback", NULL, "SSP2 CODEC OUT"},
 };
 
 static const struct snd_soc_dapm_route byt_rt5651_intmic_dmic1_map[] = {
