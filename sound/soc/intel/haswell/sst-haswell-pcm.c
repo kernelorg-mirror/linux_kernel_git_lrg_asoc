@@ -33,7 +33,7 @@
 #include "../common/sst-dsp-priv.h"
 #include "../common/sst-dsp.h"
 
-#define HSW_PCM_COUNT		1
+#define HSW_PCM_COUNT		2
 #define HSW_VOLUME_MAX		(1 << 16)	/* 0dB */
 
 #define SST_OLD_POSITION(d, r, o) ((d) +		\
@@ -417,6 +417,18 @@ static const struct snd_kcontrol_new hsw_volume_controls[] = {
 	SOC_DOUBLE_EXT_TLV("Master Playback Volume", 0, 0, 8,
 		ARRAY_SIZE(volume_map) - 1, 0,
 		hsw_volume_get, hsw_volume_put, hsw_vol_tlv),
+	/* PCM0 volume */
+	SOC_DOUBLE_EXT_TLV("PCM0 Playback Volume", 0, 0, 8,
+		ARRAY_SIZE(volume_map) - 1, 0,
+		hsw_stream_volume_get, hsw_stream_volume_put, hsw_vol_tlv),
+	/* PCM1 volume */
+	SOC_DOUBLE_EXT_TLV("PCM1 Playback Volume", 1, 0, 8,
+		ARRAY_SIZE(volume_map) - 1, 0,
+		hsw_stream_volume_get, hsw_stream_volume_put, hsw_vol_tlv),
+	/* Mic Capture volume */
+	SOC_DOUBLE_EXT_TLV("Mic Capture Volume", 4, 0, 8,
+		ARRAY_SIZE(volume_map) - 1, 0,
+		hsw_stream_volume_get, hsw_stream_volume_put, hsw_vol_tlv),
 #if 0
 	/* Offload 0 volume */
 	SOC_DOUBLE_EXT_TLV("Media0 Playback Volume", 1, 0, 8,
@@ -988,7 +1000,7 @@ static int hsw_pcm_new(struct snd_soc_pcm_runtime *rtd)
 // TODO: this will come from topology
 static struct snd_soc_dai_driver hsw_dais[] = {
 	{
-		.name  = "System Pin",
+		.name  = "PCM0 Pin",
 		.id = HSW_PCM_DAI_ID_SYSTEM,
 		.playback = {
 			.stream_name = "System Playback",
@@ -1001,6 +1013,18 @@ static struct snd_soc_dai_driver hsw_dais[] = {
 			.stream_name = "Analog Capture",
 			.channels_min = 2,
 			.channels_max = 4,
+			.rates = SNDRV_PCM_RATE_48000,
+			.formats = SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE,
+		},
+	},
+	{
+		/* PCM */
+		.name  = "PCM1 Pin",
+		.id = HSW_PCM_DAI_ID_OFFLOAD0,
+		.playback = {
+			.stream_name = "PCM1 Playback",
+			.channels_min = 2,
+			.channels_max = 2,
 			.rates = SNDRV_PCM_RATE_48000,
 			.formats = SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE,
 		},
@@ -1053,23 +1077,30 @@ static const struct snd_soc_dapm_widget widgets[] = {
 //	SND_SOC_DAPM_AIF_IN("SSP1 BT IN", NULL, 0, SND_SOC_NOPM, 0, 0),
 //	SND_SOC_DAPM_AIF_OUT("SSP1 BT OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
 
+	/* mixers */
+	SND_SOC_DAPM_MIXER("Playback Mixer", SND_SOC_NOPM, 0, 0, NULL, 0),
+
 	/* Volumes */
-	SND_SOC_DAPM_PGA("Playback Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA("Playback Mixer Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("Capture Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA("PCM0 Playback Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA("PCM1 Playback Volume", SND_SOC_NOPM, 0, 0, NULL, 0),
 };
 
 // TODO: this will come from topology
 static const struct snd_soc_dapm_route graph[] = {
 
-#if 0
+#if 1
 	/* Playback Mixer */
-	{"Playback VMixer", NULL, "System Playback"},
-	{"Playback VMixer", NULL, "Offload0 Playback"},
-	{"Playback VMixer", NULL, "Offload1 Playback"},
+	{"PCM0 Playback Volume", NULL, "System Playback"},
+	{"PCM1 Playback Volume", NULL, "PCM1 Playback"},
+	{"Playback Mixer", NULL, "PCM0 Playback Volume"},
+	{"Playback Mixer", NULL, "PCM1 Playback Volume"},
+	{"Playback Mixer Volume", NULL, "Playback Mixer"},
+	{"SSP2 CODEC OUT", NULL, "Playback Mixer Volume"},
 
-	{"SSP0 CODEC OUT", NULL, "Playback VMixer"},
-
-	{"Analog Capture", NULL, "SSP0 CODEC IN"},
+	{"Capture Volume", NULL, "SSP2 CODEC IN"},
+	{"Analog Capture", NULL, "Capture Volume"},
 #else
 	{"Playback Volume", NULL, "System Playback"},
 	{"SSP2 CODEC OUT", NULL, "Playback Volume"},
@@ -1257,7 +1288,7 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 
 	if (pdata->pm_state >= HSW_PM_STATE_RTD3)
 		return 0;
-
+#if 0
 	/* fw modules will be unloaded on RTD3, set flag to track */
 	if (sst_hsw_is_module_active(hsw, SST_HSW_MODULE_WAVES)) {
 		ret = sst_hsw_module_disable(hsw, SST_HSW_MODULE_WAVES, 0);
@@ -1265,6 +1296,7 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 			return ret;
 		sst_hsw_set_module_enabled_rtd3(hsw, SST_HSW_MODULE_WAVES);
 	}
+#endif
 	hsw_pcm_suspend(dev);
 	pdata->pm_state = HSW_PM_STATE_RTD3;
 
