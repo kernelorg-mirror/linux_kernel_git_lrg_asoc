@@ -217,8 +217,8 @@ static struct sst_acpi_desc sst_acpi_broadwell_desc = {
 
 #if !IS_ENABLED(CONFIG_SND_SST_IPC_ACPI)
 static struct sst_acpi_mach baytrail_machines[] = {
-	{ "10EC5640", "byt-rt5640", "intel/reef.ri" },
-	{ "10EC5651", "byt-rt5651", "intel/reef.ri" },
+	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri" },
+	{ "10EC5651", "byt-rt5651", "intel/reef-byt.ri" },
 	{ "193C9890", "byt-max98090", "intel/fw_sst_0f28.bin-48kHz_i2s_master" },
 	{}
 };
