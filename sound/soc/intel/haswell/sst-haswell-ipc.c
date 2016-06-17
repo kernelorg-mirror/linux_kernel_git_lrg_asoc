@@ -1626,7 +1626,7 @@ int sst_hsw_device_set_loopback(struct sst_hsw *hsw, bool lbm)
 {
 	int ret;
 
-	trace_ipc_request("set loopback", hsw->dev);
+	trace_ipc_request("set loopback", lbm);
 
 	ret = sst_ipc_tx_message_wait(&hsw->ipc,
 		IPC_GLB_TYPE((lbm ? IPC_GLB_ENABLE_LOOPBACK : IPC_GLB_DISABLE_LOOPBACK)),
@@ -1842,7 +1842,7 @@ int sst_hsw_dsp_load(struct sst_hsw *hsw)
 static int sst_hsw_dsp_restore(struct sst_hsw *hsw)
 {
 	struct sst_dsp *dsp = hsw->dsp;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(hsw->dev, "restoring audio DSP....");
 #if 0
