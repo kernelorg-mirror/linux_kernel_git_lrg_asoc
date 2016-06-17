@@ -1285,7 +1285,7 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-
+return 0;
 	if (pdata->pm_state >= HSW_PM_STATE_RTD3)
 		return 0;
 #if 0
@@ -1308,7 +1308,7 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-
+return 0;
 	if (pdata->pm_state != HSW_PM_STATE_RTD3)
 		return 0;
 
@@ -1361,7 +1361,7 @@ static void hsw_pcm_complete(struct device *dev)
 	struct sst_hsw *hsw = pdata->hsw;
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-
+return;
 	if (pdata->pm_state != HSW_PM_STATE_D3)
 		return;
 
@@ -1406,7 +1406,7 @@ static int hsw_pcm_prepare(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-
+return 0;
 	if (pdata->pm_state == HSW_PM_STATE_D3)
 		return 0;
 	else if (pdata->pm_state == HSW_PM_STATE_D0) {
