@@ -1310,10 +1310,10 @@ static int hsw_pcm_runtime_suspend(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-return 0;
+
 	if (pdata->pm_state >= HSW_PM_STATE_RTD3)
 		return 0;
-#if 0
+
 	/* fw modules will be unloaded on RTD3, set flag to track */
 	if (sst_hsw_is_module_active(hsw, SST_HSW_MODULE_WAVES)) {
 		ret = sst_hsw_module_disable(hsw, SST_HSW_MODULE_WAVES, 0);
@@ -1321,7 +1321,7 @@ return 0;
 			return ret;
 		sst_hsw_set_module_enabled_rtd3(hsw, SST_HSW_MODULE_WAVES);
 	}
-#endif
+
 	hsw_pcm_suspend(dev);
 	pdata->pm_state = HSW_PM_STATE_RTD3;
 
@@ -1333,7 +1333,7 @@ static int hsw_pcm_runtime_resume(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct sst_hsw *hsw = pdata->hsw;
 	int ret;
-return 0;
+
 	if (pdata->pm_state != HSW_PM_STATE_RTD3)
 		return 0;
 
@@ -1386,7 +1386,7 @@ static void hsw_pcm_complete(struct device *dev)
 	struct sst_hsw *hsw = pdata->hsw;
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-return;
+
 	if (pdata->pm_state != HSW_PM_STATE_D3)
 		return;
 
@@ -1431,7 +1431,7 @@ static int hsw_pcm_prepare(struct device *dev)
 	struct hsw_priv_data *pdata = dev_get_drvdata(dev);
 	struct hsw_pcm_data *pcm_data;
 	int i, err;
-return 0;
+
 	if (pdata->pm_state == HSW_PM_STATE_D3)
 		return 0;
 	else if (pdata->pm_state == HSW_PM_STATE_D0) {

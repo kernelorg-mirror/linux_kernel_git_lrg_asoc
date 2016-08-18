@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define DEBUG
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -465,6 +465,7 @@ static const struct sst_adsp_memregion wpt_region[] = {
 
 static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 {
+printk(KERN_ERR "!! alloc IRAM 0x%x 0x%x\n", pdata->lpe_base, pdata->lpe_size);
 	/* ADSP DRAM & IRAM */
 	sst->addr.lpe_base = pdata->lpe_base;
 	sst->addr.lpe = ioremap(pdata->lpe_base, pdata->lpe_size);

@@ -38,6 +38,8 @@
 #include "../common/sst-dsp-priv.h"
 #include "../common/sst-ipc.h"
 
+#define BDW	1
+
 /* Global Message - Generic */
 #define IPC_GLB_TYPE_SHIFT	24
 #define IPC_GLB_TYPE_MASK	(0x1f << IPC_GLB_TYPE_SHIFT)
@@ -547,6 +549,18 @@ static const struct sst_debugfs_map debugfs_byt[] = {
 	{"mbox", 0x144000, 0x1000},
 };
 
+static const struct sst_debugfs_map debugfs_bdw[] = {
+	{"dmac0", 0x98000, 0x420},
+	{"dmac1", 0x9c000, 0x420},
+	{"ssp0", 0xa0000, 0x100},
+	{"ssp1", 0xa1000, 0x100},
+	{"ssp2", 0xa2000, 0x100},
+	{"iram", 0xc0000, 80 * 1024},
+	{"dram", 0x100000, 160 * 1024},
+	{"shim", 0x140000, 0x100},
+	{"mbox", 0x144000, 0x1000},
+};
+
 
 static int hsw_debugfs_init(struct sst_dsp *sst)
 {
@@ -644,16 +658,17 @@ static void hsw_notification_work(struct work_struct *work)
 	}
 
 	/* tell DSP that notification has been handled */
-	if (1) {
-		/* Baytrail */
-		sst_dsp_shim_update_bits64(hsw->dsp, SST_IPCD,
-			SST_BYT_IPCD_BUSY | SST_BYT_IPCD_DONE,
-				SST_BYT_IPCD_DONE);
-	} else {
-		/* Haswell / Broadwell */
-		sst_dsp_shim_update_bits(hsw->dsp, SST_IPCD,
-			SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
-	}
+#if BDW
+	/* Haswell / Broadwell */
+	sst_dsp_shim_update_bits(hsw->dsp, SST_IPCD,
+		SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
+		
+#else
+	/* Baytrail */
+	sst_dsp_shim_update_bits64(hsw->dsp, SST_IPCD,
+		SST_BYT_IPCD_BUSY | SST_BYT_IPCD_DONE,
+		SST_BYT_IPCD_DONE);
+#endif
 
 	/* unmask busy interrupt */
 	sst_dsp_shim_update_bits(hsw->dsp, SST_IMRX, SST_IMRX_BUSY, 0);
@@ -1700,7 +1715,7 @@ mod_id = 0;
 			mod_id);
 		return NULL;
 	}
-return runtime;
+//return runtime;
 	err = sst_module_runtime_alloc_blocks(runtime, offset);
 	if (err < 0) {
 		dev_err(dsp->dev, "error: failed to alloc blocks for module %d runtime\n",
@@ -1816,7 +1831,7 @@ int sst_hsw_dsp_load(struct sst_hsw *hsw)
 		dev_err(hsw->dev, "error: failed to wake audio DSP\n");
 		return -ENODEV;
 	}
-#if 0
+#if BDW
 	ret = sst_dsp_dma_get_channel(dsp, 0);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
@@ -1834,8 +1849,9 @@ int sst_hsw_dsp_load(struct sst_hsw *hsw)
 	ret = sst_block_alloc_scratch(hsw->dsp);
 	if (ret < 0)
 		return -EINVAL;
-
-//	sst_dsp_dma_put_channel(dsp);
+#if BDW
+	sst_dsp_dma_put_channel(dsp);
+#endif
 	return 0;
 }
 
@@ -1845,7 +1861,7 @@ static int sst_hsw_dsp_restore(struct sst_hsw *hsw)
 	int ret = 0;
 
 	dev_dbg(hsw->dev, "restoring audio DSP....");
-#if 0
+#if BDW
 	ret = sst_dsp_dma_get_channel(dsp, 0);
 	if (ret < 0) {
 		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
@@ -1859,7 +1875,7 @@ static int sst_hsw_dsp_restore(struct sst_hsw *hsw)
 		return -ENOMEM;
 	}
 
-//	sst_dsp_dma_put_channel(dsp);
+	sst_dsp_dma_put_channel(dsp);
 #endif
 	/* wait for DSP boot completion */
 	sst_dsp_boot(dsp);
@@ -1878,11 +1894,11 @@ int sst_hsw_dsp_runtime_suspend(struct sst_hsw *hsw)
 		return ret;
 
 	sst_dsp_stall(hsw->dsp);
-
-	//ret = sst_hsw_dx_state_dump(hsw);
-	//if (ret < 0)
-	//	return ret;
-
+#if BDW
+	ret = sst_hsw_dx_state_dump(hsw);
+	if (ret < 0)
+		return ret;
+#endif
 	sst_ipc_drop_all(&hsw->ipc);
 
 	return 0;
@@ -2310,6 +2326,7 @@ static void hsw_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
 {
 	struct sst_dsp *sst = ipc->dsp;
 	u32 ipcd, ipcx ,isrd, imrx, isrx, imrd;
+	int i;
 
 	ipcx = sst_dsp_shim_read_unlocked(sst, SST_IPCX);
 	ipcd = sst_dsp_shim_read_unlocked(sst, SST_IPCD);
@@ -2323,6 +2340,32 @@ static void hsw_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
 		" imrx 0x%8x\n imrd 0x%8x\n"
 		" isrx 0x%8x\n isrd 0x%8x\n",
 		text, ipcx, ipcd, imrx, imrd, isrx, isrd);
+
+	for (i = 0; i < 0xff; i+=8 ) {
+		dev_err(ipc->dev, "shim 0x%2.2x value 0x%16.16llx\n",i, 
+			sst_dsp_shim_read64_unlocked(sst, i));
+	}
+
+	for (i = 0xa0000; i < 0xa0100; i+=4) {
+		dev_err(sst->dev, "iram: 0x%x value 0x%8.8x\n", i - 0xa0000,
+			readl(sst->addr.lpe + i));
+	}
+
+	for (i = 0x0; i < 0x100; i+=4) {
+		dev_err(sst->dev, "dram: 0x%x value 0x%8.8x\n", i,
+			readl(sst->addr.lpe + i));
+	}
+
+	for (i = 0x00; i < 0xff; i+=4) {
+		dev_err(sst->dev, "pci: 0x%x value 0x%8.8x\n", i,
+			readl(sst->addr.pci_cfg + i));
+	}
+
+	//TODO: need correct mailbox offset
+	//for (i = 10; i < 30; i++) {
+	//	dev_err(sst->dev, "mbox: %d value 0x%8.8x\n", i,
+	//		readl(sst->addr.lpe + i * 4 + 0x144000 + 0x900));
+	//}
 }
 
 static void byt_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
@@ -2348,7 +2391,7 @@ static void byt_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
 		dev_err(ipc->dev, "shim 0x%2.2x value 0x%16.16llx\n",i, 
 			sst_dsp_shim_read64_unlocked(sst, i));
 	}
-
+	
 	for (i = 10; i < 30; i++) {
 		dev_err(sst->dev, "mbox: %d value 0x%8.8x\n", i,
 			readl(sst->addr.lpe + i * 4 + 0x144000 + 0x900));

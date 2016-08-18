@@ -180,7 +180,7 @@ static int sst_acpi_remove(struct platform_device *pdev)
 }
 
 static struct sst_acpi_mach haswell_machines[] = {
-	{ "INT33CA", "haswell-audio", "intel/IntcSST1.bin", NULL, NULL, NULL },
+	{ "INT33CA", "haswell-audio", "intel/reef-hsw.ri", NULL, NULL, NULL },
 	{}
 };
 
@@ -198,7 +198,8 @@ static struct sst_acpi_desc sst_acpi_haswell_desc = {
 };
 
 static struct sst_acpi_mach broadwell_machines[] = {
-	{ "INT343A", "broadwell-audio", "intel/IntcSST2.bin", NULL, NULL, NULL },
+	{ "INT33CA", "broadwell-audio", "intel/reef-bdw.ri", NULL, NULL, NULL },
+	{ "INT343A", "broadwell-audio", "intel/reef-bdw.ri", NULL, NULL, NULL },
 	{}
 };
 
