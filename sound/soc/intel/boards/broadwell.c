@@ -86,7 +86,7 @@ static int broadwell_rt286_codec_init(struct snd_soc_pcm_runtime *rtd)
 	if (ret)
 		return ret;
 
-	rt286_mic_detect(codec, &broadwell_headset);
+	//rt286_mic_detect(codec, &broadwell_headset);
 	return 0;
 }
 
