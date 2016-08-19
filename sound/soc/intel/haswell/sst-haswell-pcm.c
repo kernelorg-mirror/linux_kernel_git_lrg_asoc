@@ -1097,8 +1097,8 @@ static struct snd_soc_dai_driver hsw_dais[] = {
 static const struct snd_soc_dapm_widget widgets[] = {
 
 	/* Backend DAIs  */
-	SND_SOC_DAPM_AIF_IN("SSP2 CODEC IN", NULL, 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT("SSP2 CODEC OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_IN("SSP CODEC IN", NULL, 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("SSP CODEC OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
 //	SND_SOC_DAPM_AIF_IN("SSP1 BT IN", NULL, 0, SND_SOC_NOPM, 0, 0),
 //	SND_SOC_DAPM_AIF_OUT("SSP1 BT OUT", NULL, 0, SND_SOC_NOPM, 0, 0),
 
@@ -1122,9 +1122,9 @@ static const struct snd_soc_dapm_route graph[] = {
 	{"Playback Mixer", NULL, "PCM0 Playback Volume"},
 	{"Playback Mixer", NULL, "PCM1 Playback Volume"},
 	{"Playback Mixer Volume", NULL, "Playback Mixer"},
-	{"SSP2 CODEC OUT", NULL, "Playback Mixer Volume"},
+	{"SSP CODEC OUT", NULL, "Playback Mixer Volume"},
 
-	{"Capture Volume", NULL, "SSP2 CODEC IN"},
+	{"Capture Volume", NULL, "SSP CODEC IN"},
 	{"Analog Capture", NULL, "Capture Volume"},
 #else
 	{"Playback Volume", NULL, "System Playback"},

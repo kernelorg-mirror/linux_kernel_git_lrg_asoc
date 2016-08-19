@@ -2362,10 +2362,10 @@ static void hsw_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
 	}
 
 	//TODO: need correct mailbox offset
-	//for (i = 10; i < 30; i++) {
-	//	dev_err(sst->dev, "mbox: %d value 0x%8.8x\n", i,
-	//		readl(sst->addr.lpe + i * 4 + 0x144000 + 0x900));
-	//}
+	for (i = 0; i < 30; i++) {
+		dev_err(sst->dev, "mbox: 0x%x value 0x%8.8x\n", i,
+			readl(sst->addr.lpe + i * 4 + 0x9e000));
+	}
 }
 
 static void byt_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
@@ -2544,7 +2544,7 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
 	/* get the globalmixer */
 	ret = sst_hsw_mixer_get_info(hsw);
 	if (ret < 0) {
-		dev_err(hsw->dev, "error: failed to get stream info\n");
+		dev_err(hsw->dev, "error: failed to get mixer info\n");
 		//goto boot_err;
 	}
 

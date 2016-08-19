@@ -72,8 +72,8 @@ static const struct snd_soc_dapm_route broadwell_rt286_map[] = {
 	{"DMIC2 Pin", NULL, "DMIC2"},
 
 	/* CODEC BE connections */
-	{"SSP0 CODEC IN", NULL, "AIF1 Capture"},
-	{"AIF1 Playback", NULL, "SSP0 CODEC OUT"},
+	{"SSP CODEC IN", NULL, "AIF1 Capture"},
+	{"AIF1 Playback", NULL, "SSP CODEC OUT"},
 };
 
 static int broadwell_rt286_codec_init(struct snd_soc_pcm_runtime *rtd)
@@ -152,9 +152,11 @@ static int broadwell_rtd_init(struct snd_soc_pcm_runtime *rtd)
 static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 	/* Front End DAI links */
 	{
-		.name = "System PCM",
+//		.name = "System PCM",
+		.name = "PCM0",
 		.stream_name = "System Playback/Capture",
-		.cpu_dai_name = "System Pin",
+//		.cpu_dai_name = "System Pin",
+		.cpu_dai_name = "PCM0 Pin",
 		.platform_name = "haswell-pcm-audio",
 		.dynamic = 1,
 		.codec_name = "snd-soc-dummy",
@@ -164,6 +166,19 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 	},
+
+	{
+		.name = "PCM1",
+		.stream_name = "PCM1 Playback",
+		.cpu_dai_name = "PCM1 Pin",
+		.platform_name = "haswell-pcm-audio",
+		.dynamic = 1,
+		.codec_name = "snd-soc-dummy",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
+		.dpcm_playback = 1,
+	},
+#if 0
 	{
 		.name = "Offload0",
 		.stream_name = "Offload0 Playback",
@@ -197,6 +212,7 @@ static struct snd_soc_dai_link broadwell_rt286_dais[] = {
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST, SND_SOC_DPCM_TRIGGER_POST},
 		.dpcm_capture = 1,
 	},
+#endif
 	/* Back End DAI links */
 	{
 		/* SSP0 - Codec */
