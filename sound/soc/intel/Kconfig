@@ -108,8 +108,10 @@ config SND_SOC_INTEL_BYT_RT5640_MACH
 	depends on DW_DMAC_CORE && (SND_SST_IPC_ACPI = n)
 	select SND_SOC_INTEL_SST
 	select SND_SOC_INTEL_SST_FIRMWARE
+	select SND_SOC_INTEL_HASWELL
 	select SND_SOC_INTEL_BAYTRAIL
 	select SND_SOC_INTEL_BAYTRAIL_DSP
+	select SND_SOC_INTEL_HASWELL_DSP
 	select SND_SOC_RT5640
 	help
 	  This adds audio driver for Intel Baytrail platform based boards
@@ -120,7 +122,11 @@ config SND_SOC_INTEL_BYT_RT5651_MACH
 	tristate "ASoC Audio driver for Intel Baytrail with RT5651 codec"
 	depends on X86_INTEL_LPSS && I2C
 	select SND_SOC_INTEL_SST
+	select SND_SOC_INTEL_SST_FIRMWARE
 	select SND_SOC_INTEL_HASWELL
+	select SND_SOC_INTEL_BAYTRAIL
+	select SND_SOC_INTEL_BAYTRAIL_DSP
+	select SND_SOC_INTEL_HASWELL_DSP
 	select SND_SOC_RT5651
 	help
 	  This adds audio driver for Intel Baytrail platform based boards
@@ -147,6 +153,9 @@ config SND_SOC_INTEL_BROADWELL_MACH
 	select SND_SOC_INTEL_SST
 	select SND_SOC_INTEL_SST_FIRMWARE
 	select SND_SOC_INTEL_HASWELL
+	select SND_SOC_INTEL_BAYTRAIL
+	select SND_SOC_INTEL_BAYTRAIL_DSP
+	select SND_SOC_INTEL_HASWELL_DSP
 	select SND_SOC_RT286
 	help
 	  This adds support for the Wilcatpoint Audio DSP on Intel(R) Broadwell
