@@ -26,7 +26,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <linux/kthread.h>
+#include <linux/workqueue.h>
 #include <sound/asound.h>
 
 #include "sst-dsp.h"
@@ -111,7 +111,7 @@ static int ipc_tx_message(struct sst_generic_ipc *ipc, u64 header,
 	list_add_tail(&msg->list, &ipc->tx_list);
 	spin_unlock_irqrestore(&ipc->dsp->spinlock, flags);
 
-	kthread_queue_work(&ipc->kworker, &ipc->kwork);
+	schedule_work(&ipc->work);
 
 	if (wait)
 		return tx_wait_done(ipc, msg, rx_data);
@@ -156,10 +156,10 @@ free_mem:
 	return -ENOMEM;
 }
 
-static void ipc_tx_msgs(struct kthread_work *work)
+static void ipc_tx_msgs(struct work_struct *work)
 {
 	struct sst_generic_ipc *ipc =
-		container_of(work, struct sst_generic_ipc, kwork);
+		container_of(work, struct sst_generic_ipc, work);
 	struct ipc_message *msg;
 	unsigned long flags;
 
@@ -280,19 +280,7 @@ int sst_ipc_init(struct sst_generic_ipc *ipc)
 	if (ret < 0)
 		return -ENOMEM;
 
-	/* start the IPC message thread */
-	kthread_init_worker(&ipc->kworker);
-	ipc->tx_thread = kthread_run(kthread_worker_fn,
-					&ipc->kworker, "%s",
-					dev_name(ipc->dev));
-	if (IS_ERR(ipc->tx_thread)) {
-		dev_err(ipc->dev, "error: failed to create message TX task\n");
-		ret = PTR_ERR(ipc->tx_thread);
-		kfree(ipc->msg);
-		return ret;
-	}
-
-	kthread_init_work(&ipc->kwork, ipc_tx_msgs);
+	INIT_WORK(&ipc->work, ipc_tx_msgs);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sst_ipc_init);
@@ -301,8 +289,7 @@ void sst_ipc_fini(struct sst_generic_ipc *ipc)
 {
 	int i;
 
-	if (ipc->tx_thread)
-		kthread_stop(ipc->tx_thread);
+	flush_work(&ipc->work);
 
 	if (ipc->msg) {
 		for (i = 0; i < IPC_EMPTY_LIST_SIZE; i++) {
