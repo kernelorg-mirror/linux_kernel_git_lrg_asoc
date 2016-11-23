@@ -106,7 +106,7 @@ static int sst_acpi_probe(struct platform_device *pdev)
 	if (mach == NULL) {
 		dev_err(dev, "No matching ASoC machine driver found - using blind\n");
 		reef_blind.drv_name = "reef-blind";
-		reef_blind.fw_filename = "intel/reef-byt.ri";
+		reef_blind.fw_filename = "intel/reef-bdw.ri";
 		mach = &reef_blind;
 	}
 
@@ -221,7 +221,8 @@ static struct sst_acpi_desc sst_acpi_broadwell_desc = {
 	.irqindex_host_ipc = 0,
 	.sst_id = SST_DEV_ID_WILDCAT_POINT,
 	.dma_engine = SST_DMA_TYPE_DW,
-	.resindex_dma_base = SST_WPT_DSP_DMA_ADDR_OFFSET,
+	//.resindex_dma_base = SST_WPT_DSP_DMA_ADDR_OFFSET,
+	.resindex_dma_base = -1,
 	.dma_size = SST_LPT_DSP_DMA_SIZE,
 	.have_rtd3 = true,
 };
