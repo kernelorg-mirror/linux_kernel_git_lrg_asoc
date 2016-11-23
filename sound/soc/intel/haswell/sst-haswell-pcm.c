@@ -435,6 +435,7 @@ static const DECLARE_TLV_DB_SCALE(hsw_vol_tlv, -4800, 300, 1);
 
 /* System Pin has no volume control */
 static const struct snd_kcontrol_new hsw_volume_controls[] = {
+#if 0
 	/* Global DSP volume */
 	SOC_DOUBLE_EXT_TLV("Master Playback Volume", 0, 0, 8,
 		ARRAY_SIZE(volume_map) - 1, 0,
@@ -451,6 +452,8 @@ static const struct snd_kcontrol_new hsw_volume_controls[] = {
 	SOC_DOUBLE_EXT_TLV("Mic Capture Volume", 4, 0, 8,
 		ARRAY_SIZE(volume_map) - 1, 0,
 		hsw_stream_volume_get, hsw_stream_volume_put, hsw_vol_tlv),
+#endif
+
 #if 0
 	/* Offload 0 volume */
 	SOC_DOUBLE_EXT_TLV("Media0 Playback Volume", 1, 0, 8,
@@ -471,9 +474,11 @@ static const struct snd_kcontrol_new hsw_volume_controls[] = {
 	SND_SOC_BYTES_EXT("Waves Set Param", WAVES_PARAM_COUNT,
 		hsw_waves_param_get, hsw_waves_param_put),
 #endif
+#if 0
 	/* enable/disable module waves */
 	SOC_SINGLE_BOOL_EXT("Loopback Switch", 0,
 		hsw_loopback_switch_get, hsw_loopback_switch_put),
+#endif
 };
 
 /* Create DMA buffer page table for DSP */
@@ -702,11 +707,11 @@ static int hsw_pcm_hw_params(struct snd_pcm_substream *substream,
 				1, pcm_data->volume[1]);
 		pcm_data->allocated = true;
 	}
-
-//	ret = sst_hsw_stream_pause(hsw, pcm_data->stream, 1);
-	//if (ret < 0)
-	//	dev_err(rtd->dev, "error: failed to pause %d\n", ret);
 #endif
+	ret = sst_hsw_stream_pause(hsw, pcm_data->stream, 1);
+	if (ret < 0)
+		dev_err(rtd->dev, "error: failed to pause %d\n", ret);
+
 	return 0;
 }
 
