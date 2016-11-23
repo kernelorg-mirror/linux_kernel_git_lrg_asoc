@@ -1210,10 +1210,10 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 		 * set the trigger type must match. Also all must
 		 * agree on ONESHOT.
 		 */
-		if (!((old->flags & new->flags) & IRQF_SHARED) ||
-		    ((old->flags ^ new->flags) & IRQF_TRIGGER_MASK) ||
-		    ((old->flags ^ new->flags) & IRQF_ONESHOT))
-			goto mismatch;
+	//	if (!((old->flags & new->flags) & IRQF_SHARED) ||
+	//	    ((old->flags ^ new->flags) & IRQF_TRIGGER_MASK) ||
+	//	    ((old->flags ^ new->flags) & IRQF_ONESHOT))
+	//		goto mismatch;
 
 		/* All handlers must agree on per-cpuness */
 		if ((old->flags & IRQF_PERCPU) !=
