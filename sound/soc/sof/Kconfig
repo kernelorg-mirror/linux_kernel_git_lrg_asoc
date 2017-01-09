@@ -1,0 +1,9 @@
+config SND_SOC_SOF
+	tristate "Sound Open Firmware Support"
+	default m
+	help
+          This adds support for SOF
+          Say Y if you have such a device.
+          If unsure select "N".
+
+
