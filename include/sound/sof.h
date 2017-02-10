@@ -72,6 +72,9 @@ struct snd_sof_pdata_elem {
 	};
 };
 
+/*
+ * SOF Platform data.
+ */
 struct snd_sof_pdata {
 	u32 id;		/* PCI/ACPI ID */
 	int irq;
