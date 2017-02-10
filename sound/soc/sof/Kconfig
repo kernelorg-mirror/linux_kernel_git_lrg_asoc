@@ -1,0 +1,17 @@
+config SND_SOC_SOF
+	tristate "Sound Open Firmware Support"
+	default m
+	help
+          This adds support for SOF
+          Say Y if you have such a device.
+          If unsure select "N".
+
+config SND_SOC_SOF_INTEL
+	tristate "SOF support for Intel audio DSPs"
+	depends on SND_SOC_SOF
+	select SND_SOC_INTEL_SST_ACPI
+	select SND_SOC_INTEL_SST_PCI
+	help
+          This adds support for Sound Open Firmware for Intel(R) platforms.
+          Say Y if you have such a device.
+          If unsure select "N".
