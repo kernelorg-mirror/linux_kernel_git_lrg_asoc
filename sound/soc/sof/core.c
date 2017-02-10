@@ -218,17 +218,6 @@ EXPORT_SYMBOL_GPL(sst_hsw_dsp_free);
 
 #endif
 
-int snd_soc_sof_pci_probe(struct pci_dev *pci,
-		     const struct pci_device_id *pci_id)
-{
-	return 0;
-}
-EXPORT_SYMBOL(snd_soc_sof_pci_probe);
-
-void snd_soc_sof_pci_remove(struct pci_dev *pci)
-{
-}
-EXPORT_SYMBOL(snd_soc_sof_pci_remove);
 
 void snd_soc_sof_pci_shutdown(struct pci_dev *pci)
 {

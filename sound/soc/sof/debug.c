@@ -148,7 +148,7 @@ static int sof_debugfs_create_item(struct snd_sof_dev *sdev,
 int snd_sof_dbg_init(struct snd_sof_dev *sdev)
 {
 	const struct snd_sof_dsp_ops *ops = sdev->ops;
-	struct snd_sof_debugfs_map *map;
+	const struct snd_sof_debugfs_map *map;
 	int err = 0, i;
 
 	for (i = 0; i < ops->debug_map_count; i++) {
