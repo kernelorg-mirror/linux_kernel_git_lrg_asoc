@@ -64,40 +64,64 @@
 #include <linux/pci.h>
 #include <uapi/sound/sof-ipc.h>
 
-/* element of platform data - can be any type/value */
-struct snd_sof_pdata_elem {
-	union {
-		unsigned long value;
-		void *data;
-	};
-};
+struct snd_sof_dsp_ops;
 
 /*
  * SOF Platform data.
  */
 struct snd_sof_pdata {
 	u32 id;		/* PCI/ACPI ID */
-	int irq;
 	const struct firmware *fw;
 	const char *drv_name;
 	const char *name;
-	unsigned long pci_base;
-	size_t pci_size;
-	struct platform_device *pdev_mach;
+	struct device *dev;
 
-	/* variable array of elements */
-	int num_elems;
-	struct snd_sof_pdata_elem elem[];
+	/* descriptor */
+	const struct sof_dev_desc *desc;
+
+	/* machine */
+	struct platform_device *pdev_mach;
+	const struct snd_sof_machine *machine;
 };
 
-int snd_soc_sof_pci_probe(struct pci_dev *pci,
-		     const struct pci_device_id *pci_id);
-void snd_soc_sof_pci_remove(struct pci_dev *pci);
-void snd_soc_sof_pci_shutdown(struct pci_dev *pci);
 
-int snd_soc_sof_runtime_suspend(struct device *dev);
-int snd_soc_sof_runtime_resume(struct device *dev);
-int snd_soc_sof_resume(struct device *dev);
-int snd_soc_sof_suspend(struct device *dev);
+/* 
+ * Descriptor for ASoC machine driver.
+ * This data is used to determine the correct machine driver to use depending
+ * on DSP ID and codec ID. TODO: also include DMI name for matching
+ */
+struct snd_sof_machine {
+	/* ACPI ID for the codec */
+	const u8 codec_id[ACPI_ID_LEN];
+	/* machine driver name */
+	const char *drv_name;
+	/* firmware file name */
+	const char *fw_filename;
+	/* default topology */
+	const char *tplg_filename;
+	/* machine specific ops */
+	const struct snd_sof_dsp_ops *ops;
+};
+
+/* 
+ * Descriptor used for setting up SOF platform data. This is used when
+ * ACPI/PCI data is missing or mapped differently.
+ */
+struct sof_dev_desc {
+	/* list of machines using this configuration */
+	const struct snd_sof_machine *machines;
+
+	/* Platform resource indexes in BAR / ACPI resources. */ 
+	/* Must set to -1 if not used - add new items to end */
+	int resindex_lpe_base;
+	int resindex_pcicfg_base;
+	int resindex_fw_base;
+	int irqindex_host_ipc;
+	int resindex_dma_base;
+
+	/* DMA only valid when resindex_dma_base != -1*/
+	int dma_engine;
+	int dma_size;
+};
 
 #endif

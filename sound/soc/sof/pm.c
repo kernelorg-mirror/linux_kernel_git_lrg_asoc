@@ -51,6 +51,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #include <linux/module.h>
@@ -60,7 +62,7 @@
 #include <asm/pgtable.h>
 #include <sound/core.h>
 #include <sound/soc.h>
-#include "sof.h"
+#include "sof-priv.h"
 
 int snd_soc_sof_runtime_suspend(struct device *dev)
 {

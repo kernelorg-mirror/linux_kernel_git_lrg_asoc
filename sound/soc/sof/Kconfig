@@ -1,3 +1,12 @@
+config SND_SOC_SOF_PCI
+	tristate
+
+config SND_SOC_SOF_ACPI
+	tristate
+
+config SND_SOC_SOF_PLATFORM
+	tristate
+
 config SND_SOC_SOF
 	tristate "Sound Open Firmware Support"
 	default m
@@ -9,9 +18,37 @@ config SND_SOC_SOF
 config SND_SOC_SOF_INTEL
 	tristate "SOF support for Intel audio DSPs"
 	depends on SND_SOC_SOF
-	select SND_SOC_INTEL_SST_ACPI
-	select SND_SOC_INTEL_SST_PCI
 	help
           This adds support for Sound Open Firmware for Intel(R) platforms.
+          Say Y if you have such a device.
+          If unsure select "N".
+
+config SND_SOC_SOF_BAYTRAIL
+	tristate "SOF support for Baytrail, Braswell and Cherrytrail"
+	depends on SND_SOC_SOF_INTEL
+	select SND_SOC_SOF_ACPI
+	help
+          This adds support for Sound Open Firmware for Intel(R) platforms
+          using the Baytrail, Braswell or Cherrytrail processors.
+          Say Y if you have such a device.
+          If unsure select "N".
+
+config SND_SOC_SOF_HASWELL
+	tristate "SOF support for Haswell and Broadwell"
+	depends on SND_SOC_SOF_INTEL
+	select SND_SOC_SOF_ACPI
+	help
+          This adds support for Sound Open Firmware for Intel(R) platforms
+          using the Haswell or Broadwell processors.
+          Say Y if you have such a device.
+          If unsure select "N".
+
+config SND_SOC_SOF_APOLLOLAKE
+	tristate "SOF support for Appololake"
+	depends on SND_SOC_SOF_INTEL
+	select SND_SOC_SOF_PCI
+	help
+          This adds support for Sound Open Firmware for Intel(R) platforms
+          using the Appololake processors.
           Say Y if you have such a device.
           If unsure select "N".

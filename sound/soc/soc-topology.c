@@ -346,10 +346,11 @@ static int soc_tplg_widget_load(struct soc_tplg *tplg,
 
 /* pass DAI configurations to component driver for extra intialization */
 static int soc_tplg_dai_load(struct soc_tplg *tplg,
-	struct snd_soc_dai_driver *dai_drv)
+	struct snd_soc_dai_driver *dai_drv,
+	struct snd_soc_tplg_pcm *pcm)
 {
 	if (tplg->comp && tplg->ops && tplg->ops->dai_load)
-		return tplg->ops->dai_load(tplg->comp, dai_drv);
+		return tplg->ops->dai_load(tplg->comp, dai_drv, pcm);
 
 	return 0;
 }
@@ -1689,7 +1690,7 @@ static int soc_tplg_dai_create(struct soc_tplg *tplg,
 	}
 
 	/* pass control to component driver for optional further init */
-	ret = soc_tplg_dai_load(tplg, dai_drv);
+	ret = soc_tplg_dai_load(tplg, dai_drv, pcm);
 	if (ret < 0) {
 		dev_err(tplg->comp->dev, "ASoC: DAI loading failed\n");
 		kfree(dai_drv);
@@ -2172,7 +2173,7 @@ static int soc_tplg_dai_config(struct soc_tplg *tplg,
 		set_dai_flags(dai_drv, d->flag_mask, d->flags);
 
 	/* pass control to component driver for optional further init */
-	ret = soc_tplg_dai_load(tplg, dai_drv);
+	ret = soc_tplg_dai_load(tplg, dai_drv, NULL);
 	if (ret < 0) {
 		dev_err(tplg->comp->dev, "ASoC: DAI loading failed\n");
 		return ret;

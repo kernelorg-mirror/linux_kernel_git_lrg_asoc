@@ -51,6 +51,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #include <linux/delay.h>
@@ -63,7 +65,7 @@
 #include <linux/debugfs.h>
 #include <asm/uaccess.h>
 #include <uapi/sound/sof-ipc.h>
-#include "sof.h"
+#include "sof-priv.h"
 
 
 static int sof_dfsentry_open(struct inode *inode, struct file *file)
@@ -156,7 +158,7 @@ int snd_sof_dbg_init(struct snd_sof_dev *sdev)
 		map = &ops->debug_map[i];
 
 		err = sof_debugfs_create_item(sdev,
-			sdev->dsp_base + map->offset, map->size, map->name);
+			sdev->bar[map->bar] + map->offset, map->size, map->name);
 		if (err < 0)
 			dev_err(sdev->dev, "cannot create debugfs for %s\n",
 				map->name);

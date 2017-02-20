@@ -61,163 +61,174 @@
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <uapi/sound/sof-ipc.h>
-#include "sof.h"
+#include "sof-priv.h"
+
+/* init */
+static inline int snd_soc_sof_probe(struct snd_sof_dev *sdev)
+{
+	if (sdev->ops->probe)
+		return sdev->ops->probe(sdev);
+	else
+		return 0;
+}
 
 /* control */
-static inline int snd_sof_dsp_run(struct snd_sof_dev *sof_dev)
+static inline int snd_sof_dsp_run(struct snd_sof_dev *sdev)
 {
-	if (sof_dev->ops->run)
-		return sof_dev->ops->run(sof_dev);
+	if (sdev->ops->run)
+		return sdev->ops->run(sdev);
 	else
 		return 0;
 }
 
-static inline int snd_sof_dsp_stall(struct snd_sof_dev *sof_dev)
+static inline int snd_sof_dsp_stall(struct snd_sof_dev *sdev)
 {
-	if (sof_dev->ops->stall)
-		return sof_dev->ops->stall(sof_dev);
+	if (sdev->ops->stall)
+		return sdev->ops->stall(sdev);
 	else
 		return 0;
 }
 
-static inline int snd_sof_dsp_reset(struct snd_sof_dev *sof_dev)
+static inline int snd_sof_dsp_reset(struct snd_sof_dev *sdev)
 {
-	if (sof_dev->ops->reset)
-		return sof_dev->ops->reset(sof_dev);
+	if (sdev->ops->reset)
+		return sdev->ops->reset(sdev);
 	else
 		return 0;
 }
 
 /* power management */
-static inline int snd_sof_dsp_resume(struct snd_sof_dev *sof_dev)
+static inline int snd_sof_dsp_resume(struct snd_sof_dev *sdev)
 {
-	if (sof_dev->ops->resume)
-		return sof_dev->ops->resume(sof_dev);
+	if (sdev->ops->resume)
+		return sdev->ops->resume(sdev);
 	else
 		return 0;
 }
 
-static inline int snd_sof_dsp_suspend(struct snd_sof_dev *sof_dev, int state)
+static inline int snd_sof_dsp_suspend(struct snd_sof_dev *sdev, int state)
 {
-	if (sof_dev->ops->suspend)
-		return sof_dev->ops->suspend(sof_dev, state);
+	if (sdev->ops->suspend)
+		return sdev->ops->suspend(sdev, state);
 	else
 		return 0;
 }
 
-static inline int snd_sof_dsp_set_clk(struct snd_sof_dev *sof_dev, u32 freq)
+static inline int snd_sof_dsp_set_clk(struct snd_sof_dev *sdev, u32 freq)
 {
-	if (sof_dev->ops->set_clk)
-		return sof_dev->ops->set_clk(sof_dev, freq);
+	if (sdev->ops->set_clk)
+		return sdev->ops->set_clk(sdev, freq);
 	else
 		return 0;
 }
 
 /* register IO */
-static inline void snd_sof_dsp_write(struct snd_sof_dev *sof_dev, u32 offset,
-	u32 value)
+static inline void snd_sof_dsp_write(struct snd_sof_dev *sdev, u32 bar,
+	u32 offset, u32 value)
 {
-	if (sof_dev->ops->write)
-		sof_dev->ops->write(sof_dev, sof_dev->reg_base + offset, value);
+	if (sdev->ops->write)
+		sdev->ops->write(sdev, sdev->bar[bar] + offset, value);
 }
 
-static inline void snd_sof_dsp_write64(struct snd_sof_dev *sof_dev,
+static inline void snd_sof_dsp_write64(struct snd_sof_dev *sdev, u32 bar,
 	u32 offset, u64 value)
 {
-	if (sof_dev->ops->write64)
-		sof_dev->ops->write64(sof_dev, sof_dev->reg_base + offset, value);
+	if (sdev->ops->write64)
+		sdev->ops->write64(sdev, 
+			sdev->bar[bar] + offset, value);
 }
 
-static inline u32 snd_sof_dsp_read(struct snd_sof_dev *sof_dev, u32 offset)
+static inline u32 snd_sof_dsp_read(struct snd_sof_dev *sdev, u32 bar,
+	u32 offset)
 {
-	if (sof_dev->ops->read)
-		return sof_dev->ops->read(sof_dev, sof_dev->reg_base + offset);
+	if (sdev->ops->read)
+		return sdev->ops->read(sdev, sdev->bar[bar] + offset);
 	else
 		return 0;
 }
 
-static inline u64 snd_sof_dsp_read64(struct snd_sof_dev *sof_dev,
+static inline u64 snd_sof_dsp_read64(struct snd_sof_dev *sdev, u32 bar,
 	u32 offset)
 {
-	if (sof_dev->ops->read64)
-		return sof_dev->ops->read64(sof_dev, sof_dev->reg_base + offset);
+	if (sdev->ops->read64)
+		return sdev->ops->read64(sdev, sdev->bar[bar] + offset);
 	else
 		return 0;
 }
 
 /* block IO */
-static inline void snd_sof_dsp_block_read(struct snd_sof_dev *sof_dev,
-		void *dest, void __iomem *src, size_t bytes)
+static inline void snd_sof_dsp_block_read(struct snd_sof_dev *sdev,
+	void *dest, void __iomem *src, size_t bytes)
 {
-	if (sof_dev->ops->block_read)
-		sof_dev->ops->block_read(sof_dev, dest, src, bytes);
+	if (sdev->ops->block_read)
+		sdev->ops->block_read(sdev, dest, src, bytes);
 }
 
-static inline void snd_sof_dsp_block_write(struct snd_sof_dev *sof_dev,
-		void __iomem *dest, void *src, size_t bytes)
+static inline void snd_sof_dsp_block_write(struct snd_sof_dev *sdev,
+	void __iomem *dest, void *src, size_t bytes)
 {
-	if (sof_dev->ops->block_write)
-		sof_dev->ops->block_write(sof_dev, dest, src, bytes);
+	if (sdev->ops->block_write)
+		sdev->ops->block_write(sdev, dest, src, bytes);
 }
 
 /* mailbox */
-static inline void snd_sof_dsp_mailbox_read(struct snd_sof_dev *sof_dev,
+static inline void snd_sof_dsp_mailbox_read(struct snd_sof_dev *sdev,
 	void __iomem *addr, void *message, size_t bytes)
 {
-	if (sof_dev->ops->mailbox_read)
-		sof_dev->ops->mailbox_read(sof_dev, addr, message, bytes);
+	if (sdev->ops->mailbox_read)
+		sdev->ops->mailbox_read(sdev, addr, message, bytes);
 }
 
-static inline void snd_sof_dsp_mailbox_write(struct snd_sof_dev *sof_dev,
+static inline void snd_sof_dsp_mailbox_write(struct snd_sof_dev *sdev,
 	void __iomem *addr, void *message, size_t bytes)
 {
-	if (sof_dev->ops->mailbox_write)
-		sof_dev->ops->mailbox_write(sof_dev, addr, message, bytes);
+	if (sdev->ops->mailbox_write)
+		sdev->ops->mailbox_write(sdev, addr, message, bytes);
 }
 
 /* ipc */
-static inline int snd_sof_dsp_tx_msg(struct snd_sof_dev *sof_dev,
+static inline int snd_sof_dsp_tx_msg(struct snd_sof_dev *sdev,
 	struct snd_sof_ipc_msg *msg)
 {
-	if (sof_dev->ops->tx_msg)
-		return sof_dev->ops->tx_msg(sof_dev, msg);
+	if (sdev->ops->tx_msg)
+		return sdev->ops->tx_msg(sdev, msg);
 	else
 		return 0;
 }
 
-static inline int snd_sof_dsp_rx_msg(struct snd_sof_dev *sof_dev,
+static inline int snd_sof_dsp_rx_msg(struct snd_sof_dev *sdev,
 	struct snd_sof_ipc_msg *msg)
 {
-	if (sof_dev->ops->rx_msg)
-		return sof_dev->ops->rx_msg(sof_dev, msg);
+	if (sdev->ops->rx_msg)
+		return sdev->ops->rx_msg(sdev, msg);
 	else
 		return 0;
 }
 
-int snd_sof_dsp_update_bits_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
+int snd_sof_dsp_update_bits_unlocked(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u32 mask, u32 value);
 
-int snd_sof_dsp_update_bits64_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u64 mask, u64 value);
-
-/* This is for registers bits with attribute RWC */
-void snd_sof_dsp_update_bits_forced_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
-
-int snd_sof_dsp_update_bits(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
-
-int snd_sof_dsp_update_bits64(struct snd_sof_dev *sdev, u32 offset,
-				u64 mask, u64 value);
+int snd_sof_dsp_update_bits64_unlocked(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u64 mask, u64 value);
 
 /* This is for registers bits with attribute RWC */
-void snd_sof_dsp_update_bits_forced(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
+void snd_sof_dsp_update_bits_forced_unlocked(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u32 mask, u32 value);
+
+int snd_sof_dsp_update_bits(struct snd_sof_dev *sdev, u32 bar, u32 offset,
+		u32 mask, u32 value);
+
+int snd_sof_dsp_update_bits64(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u64 mask, u64 value);
+
+/* This is for registers bits with attribute RWC */
+void snd_sof_dsp_update_bits_forced(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u32 mask, u32 value);
 
 int snd_sof_pci_update_bits_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
+		u32 mask, u32 value);
 
 int snd_sof_pci_update_bits(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value);
+		u32 mask, u32 value);
 
 #endif

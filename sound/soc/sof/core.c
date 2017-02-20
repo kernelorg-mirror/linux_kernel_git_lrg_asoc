@@ -51,6 +51,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #include <linux/module.h>
@@ -60,6 +62,9 @@
 #include <asm/pgtable.h>
 #include <sound/core.h>
 #include <sound/soc.h>
+#include <sound/sof.h>
+#include "sof-priv.h"
+#include "ops.h"
 
 #if 0
 int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
@@ -226,21 +231,73 @@ EXPORT_SYMBOL(snd_soc_sof_pci_shutdown);
 
 static int sof_probe(struct platform_device *pdev)
 {
+	struct snd_sof_pdata *plat_data = dev_get_platdata(&pdev->dev);
+	struct snd_sof_dev *sdev;
+	int ret;
 
-#if 0
-	ret = sst_hsw_dsp_init(&pdev->dev, sst_pdata);
-	if (ret < 0)
-		return -ENODEV;
+	sdev = devm_kzalloc(&pdev->dev, sizeof(*sdev), GFP_KERNEL);
+	if (sdev == NULL)
+		return -ENOMEM;
 
-	ret = snd_soc_register_platform(&pdev->dev, &hsw_soc_platform);
-	if (ret < 0)
-		goto err_plat;
+	sdev->dev = &pdev->dev;
+	sdev->parent = plat_data->dev;
+	sdev->ops = plat_data->machine->ops;
+	sdev->pdata = plat_data;
+	INIT_LIST_HEAD(&sdev->pcm_list);
+	INIT_LIST_HEAD(&sdev->kcontrol_list);
+	dev_set_drvdata(&pdev->dev, sdev);
 
-	ret = snd_soc_register_component(&pdev->dev, &hsw_dai_component,
-		hsw_dais, ARRAY_SIZE(hsw_dais));
-	if (ret < 0)
-		goto err_comp;
-#endif
+	/* probe the DSP hardware */
+	ret = snd_soc_sof_probe(sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to probe DSP %d\n", ret);
+		return ret;
+	}
+
+	/* register any debug/trace capabilities */
+	ret = snd_soc_sof_init_debug(sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to init DSP trace/debug %d\n", ret);
+		return ret;
+	}
+
+	/* init the IPC */
+	sdev->ipc = snd_sof_ipc_init(sdev);
+	if (sdev->ipc < 0) {
+		dev_err(sdev->dev, "failed to init DSP IPC %d\n", ret);
+		return ret;
+	}
+
+	/* load the firmware */
+	ret = snd_soc_sof_load_firmware(sdev, plat_data->fw);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to load DSP firmware %d\n", ret);
+		return ret;
+	}
+
+	/* boot the firmware */
+	ret = snd_soc_sof_run_firmware(sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to boot DSP firmware %d\n", ret);
+		return ret;
+	}
+
+	/* load the topology */
+	ret = snd_soc_sof_load_topology(sdev, plat_data->machine->tplg_filename);
+	if (ret < 0) {
+		dev_err(sdev->dev, "failed to load DSP topology %d\n", ret);
+		return ret;
+	}
+
+	/* now register audio DSP platform driver */
+	ret = snd_soc_register_platform(&pdev->dev, &sof_soc_platform);
+	if (ret < 0) {
+		dev_err(sdev->dev,
+			"failed to register DSP platform driver %d\n", ret);
+		return ret;
+	}
+
+
 	return 0;
 }
 

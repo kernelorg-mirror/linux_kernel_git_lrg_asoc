@@ -59,8 +59,8 @@
 #include <linux/device.h>
 #include <linux/pci.h>
 #include <uapi/sound/sof-ipc.h>
-#include "io.h"
-#include "sof.h"
+#include "ops.h"
+#include "sof-priv.h"
 
 int snd_sof_pci_update_bits_unlocked(struct snd_sof_dev *sdev, u32 offset,
 				u32 mask, u32 value)
@@ -89,100 +89,101 @@ int snd_sof_pci_update_bits(struct snd_sof_dev *sdev, u32 offset,
 	bool change;
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
-	change = snd_sof_dsp_update_bits_unlocked(sdev, offset, mask, value);
+	change = snd_sof_pci_update_bits_unlocked(sdev, offset, mask, value);
 	spin_unlock_irqrestore(&sdev->spinlock, flags);
 	return change;
 }
 EXPORT_SYMBOL(snd_sof_pci_update_bits);
 
-int snd_sof_dsp_update_bits_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value)
+int snd_sof_dsp_update_bits_unlocked(struct snd_sof_dev *sdev, u32 bar,
+		u32 offset, u32 mask, u32 value)
 {
 	bool change;
 	unsigned int old, new;
 	u32 ret;
 
-	ret = snd_sof_dsp_read(sdev, offset);
+	ret = snd_sof_dsp_read(sdev, bar, offset);
 
 	old = ret;
 	new = (old & (~mask)) | (value & mask);
 
 	change = (old != new);
 	if (change)
-		snd_sof_dsp_write(sdev, offset, new);
+		snd_sof_dsp_write(sdev, bar, offset, new);
 
 	return change;
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits_unlocked);
 
-int snd_sof_dsp_update_bits64_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u64 mask, u64 value)
+int snd_sof_dsp_update_bits64_unlocked(struct snd_sof_dev *sdev, u32 bar,
+	u32 offset, u64 mask, u64 value)
 {
 	bool change;
 	u64 old, new;
 
-	old = snd_sof_dsp_read64(sdev, offset);
+	old = snd_sof_dsp_read64(sdev, bar, offset);
 
 	new = (old & (~mask)) | (value & mask);
 
 	change = (old != new);
 	if (change)
-		snd_sof_dsp_write64(sdev, offset, new);
+		snd_sof_dsp_write64(sdev, bar, offset, new);
 
 	return change;
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits64_unlocked);
 
 /* This is for registers bits with attribute RWC */
-void snd_sof_dsp_update_bits_forced_unlocked(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value)
+void snd_sof_dsp_update_bits_forced_unlocked(struct snd_sof_dev *sdev, u32 bar,
+	u32 offset, u32 mask, u32 value)
 {
 	unsigned int old, new;
 	u32 ret;
 
-	ret = snd_sof_dsp_read(sdev, offset);
+	ret = snd_sof_dsp_read(sdev, bar, offset);
 
 	old = ret;
 	new = (old & (~mask)) | (value & mask);
 
-	snd_sof_dsp_write(sdev, offset, new);
+	snd_sof_dsp_write(sdev, bar, offset, new);
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits_forced_unlocked);
 
-int snd_sof_dsp_update_bits(struct snd_sof_dev *sdev, u32 offset,
+int snd_sof_dsp_update_bits(struct snd_sof_dev *sdev, u32 bar, u32 offset,
 				u32 mask, u32 value)
 {
 	unsigned long flags;
 	bool change;
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
-	change = snd_sof_dsp_update_bits_unlocked(sdev, offset, mask, value);
+	change = snd_sof_dsp_update_bits_unlocked(sdev, bar, offset, mask, value);
 	spin_unlock_irqrestore(&sdev->spinlock, flags);
 	return change;
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits);
 
-int snd_sof_dsp_update_bits64(struct snd_sof_dev *sdev, u32 offset,
+int snd_sof_dsp_update_bits64(struct snd_sof_dev *sdev, u32 bar, u32 offset,
 				u64 mask, u64 value)
 {
 	unsigned long flags;
 	bool change;
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
-	change = snd_sof_dsp_update_bits64_unlocked(sdev, offset, mask, value);
+	change = snd_sof_dsp_update_bits64_unlocked(sdev, bar, offset, mask, value);
 	spin_unlock_irqrestore(&sdev->spinlock, flags);
 	return change;
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits64);
 
 /* This is for registers bits with attribute RWC */
-void snd_sof_dsp_update_bits_forced(struct snd_sof_dev *sdev, u32 offset,
-				u32 mask, u32 value)
+void snd_sof_dsp_update_bits_forced(struct snd_sof_dev *sdev, u32 bar, 
+	u32 offset, u32 mask, u32 value)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
-	snd_sof_dsp_update_bits_forced_unlocked(sdev, offset, mask, value);
+	snd_sof_dsp_update_bits_forced_unlocked(sdev, bar, offset, mask, value);
 	spin_unlock_irqrestore(&sdev->spinlock, flags);
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits_forced);
+

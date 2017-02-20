@@ -53,25 +53,43 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __SOUND_SOC_SOF_H
-#define __SOUND_SOC_SOF_H
+#ifndef __SOUND_SOC_SOF_PRIV_H
+#define __SOUND_SOC_SOF_PRIV_H
 
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
+#include <linux/pci.h>
+#include <linux/firmware.h>
+#include <sound/pcm.h>
 #include <uapi/sound/sof-ipc.h>
+#include <uapi/sound/sof-fw.h>
+#include <uapi/sound/asoc.h>
 
 /* debug flags */
 #define SOF_DBG_REGS	(1 << 1)
 #define SOF_DBG_MBOX	(1 << 2)
 
+/* max BARs mmaped devices can use */
+#define SND_SOC_SOF_BARS	8
+
+/* time in ms for runtime suspend delay */
+#define SND_SOF_SUSPEND_DELAY	2000
+
 struct snd_sof_dev;
 struct snd_sof_ipc_msg;
 struct snd_sof_ipc;
 struct snd_sof_debugfs_map;
+struct snd_soc_tplg_ops;
+struct snd_sof_ipc_msg;
+struct snd_soc_component;
 
 struct snd_sof_dsp_ops {
+
+	/* probe and remove */
+	int (*remove)(struct snd_sof_dev *sof_dev);
+	int (*probe)(struct snd_sof_dev *sof_dev);
 
 	/* DSP core boot / reset */
 	int (*run)(struct snd_sof_dev *sof_dev);
@@ -118,6 +136,10 @@ struct snd_sof_dsp_ops {
 	int debug_map_count;
 	void (*dbg_dump)(struct snd_sof_dev *sof_dev, u32 flags);
 
+	/* FW loading */
+	int (*load_module)(struct snd_sof_dev *sof_dev,
+		struct snd_sof_mod_hdr *hdr);
+
 };
 
 struct snd_sof_dfsentry {
@@ -129,14 +151,9 @@ struct snd_sof_dfsentry {
 
 struct snd_sof_debugfs_map {
 	const char *name;
+	u32 bar;
 	u32 offset;
 	u32 size;
-};
-
-struct snd_sof_ipc_msg {
-	void *data;
-	size_t size;
-	u32 header;
 };
 
 struct snd_sof_mailbox {
@@ -144,37 +161,120 @@ struct snd_sof_mailbox {
 	size_t size;
 };
 
+struct snd_sof_pcm {
+	int comp_id;
+	struct snd_soc_tplg_pcm pcm;
+	struct snd_dma_buffer page_table[2];	/* playback and capture */
+
+	struct mutex mutex;
+	struct list_head list;	/* list in snd_sof_dev */
+};
+
+struct snd_sof_ipc_msg {
+	struct list_head list;
+
+	/* message data */
+	u32 header;
+	void *msg_data;
+	void *reply_data;
+	size_t msg_size;
+	size_t reply_size;
+
+	wait_queue_head_t waitq;
+	bool wait;
+	bool complete;
+};
+
 struct snd_sof_dev {
 	struct device *dev;
+	struct device *parent;
 	spinlock_t spinlock;
 
 	struct pci_dev *pci;
+
+	struct snd_sof_pdata *pdata;
+	const struct snd_sof_dsp_ops *ops;
 
 	struct snd_sof_ipc *ipc;
 	struct snd_sof_mailbox inbox;
 	struct snd_sof_mailbox outbox;
 
-	/* memroy bases for mmaped DSPs - set by dsp_init() */
-	void __iomem *pci_cfg;		/* PCI config space */
-	void __iomem *dsp_base;		/* DSP base address */
-	void __iomem *reg_base;		/* base address of control regs */
-	void __iomem *iram_base;	/* instruction ram - or ram base */
-	void __iomem *dram_base;	/* data ram */
-	void __iomem *mbox_base;	/* mailbox ram */
-	void __iomem *fw_mmap;		/* FW memory mapping to host */
+	/* memory bases for mmaped DSPs - set by dsp_init() */
+	void __iomem *bar[SND_SOC_SOF_BARS];		/* DSP base address */
 
 	struct dentry *debugfs_root;
 
-	const struct snd_sof_dsp_ops *ops;
+	/* firmware loader */
+	int cl_bar;
+
+	/* topology */
+	struct snd_soc_tplg_ops *tplg_ops;
+	struct list_head pcm_list;
+	struct list_head kcontrol_list;
+	struct snd_soc_component *component;
+	
+
 	void *private;			/* core does not touch this */
 };
 
+/*
+ * Device Level.
+ */
 
+void snd_soc_sof_shutdown(struct device *dev);
+int snd_soc_sof_runtime_suspend(struct device *dev);
+int snd_soc_sof_runtime_resume(struct device *dev);
+int snd_soc_sof_resume(struct device *dev);
+int snd_soc_sof_suspend(struct device *dev);
+int snd_soc_sof_suspend_late(struct device *dev);
+
+/*
+ * Firmware loading.
+ */
+int snd_soc_sof_load_firmware(struct snd_sof_dev *sdev,
+	const struct firmware *fw);
+int snd_soc_sof_run_firmware(struct snd_sof_dev *sdev);
+int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
+	struct snd_sof_mod_hdr *module);
+
+
+/*
+ * IPC APIs.
+ */
+
+struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev);
 void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id);
-
 void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id);
-
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev);
+int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
+	struct sof_ipc_pcm_params *params);
 
+/*
+ * Topology.
+ */
+int snd_soc_sof_init_topology(struct snd_sof_dev *sdev,
+	struct snd_soc_tplg_ops *ops);
+int snd_soc_sof_load_topology(struct snd_sof_dev *sdev, const char *file);
+
+/*
+ * Trace/debug
+ */
+int snd_soc_sof_init_debug(struct snd_sof_dev *sdev);
+
+/*
+ * Platform specific ops.
+ */
+
+extern struct snd_sof_dsp_ops snd_soc_sof_byt_ops;
+extern struct snd_sof_dsp_ops snd_soc_sof_cht_ops;
+extern struct snd_sof_dsp_ops snd_soc_sof_hsw_ops;
+extern struct snd_sof_dsp_ops snd_soc_sof_bdw_ops;
+extern struct snd_sof_dsp_ops snd_soc_sof_bxt_ops;
+
+/*
+ * ASoC components.
+ */
+extern struct snd_soc_platform_driver sof_soc_platform;
+extern const struct snd_soc_component_driver sof_dai_component;
 
 #endif
