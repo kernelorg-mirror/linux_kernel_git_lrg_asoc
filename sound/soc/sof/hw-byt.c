@@ -67,9 +67,10 @@
 #include <linux/firmware.h>
 #include <trace/events/hswadsp.h>
 #include <linux/device.h>
+#include <uapi/sound/sof-fw.h>
 
-#include "sof.h"
-#include "io.h"
+#include "sof-priv.h"
+#include "ops.h"
 #include "intel.h"
 
 /* DSP memories */
@@ -98,16 +99,19 @@
 
 #define BYT_MBOX_DUMP_SIZE	0x30
 
+/* BARs */
+#define BYT_DSP_BAR		0
+
 static const struct snd_sof_debugfs_map byt_debugfs[] = {
-	{"dmac0", BYT_DMAC0_OFFSET, BYT_DMAC_SIZE},
-	{"dmac1", BYT_DMAC1_OFFSET, BYT_DMAC_SIZE},
-	{"ssp0", BYT_SSP0_OFFSET, BYT_SSP_SIZE},
-	{"ssp1", BYT_SSP1_OFFSET, BYT_SSP_SIZE},
-	{"ssp2", BYT_SSP2_OFFSET, BYT_SSP_SIZE},
-	{"iram", BYT_IRAM_OFFSET, BYT_IRAM_SIZE},
-	{"dram", BYT_DRAM_OFFSET, BYT_DRAM_SIZE},
-	{"shim", BYT_SHIM_OFFSET, BYT_SHIM_SIZE},
-	{"mbox", BYT_MBOX_OFFSET, BYT_MBOX_SIZE},
+	{"dmac0", BYT_DSP_BAR, BYT_DMAC0_OFFSET, BYT_DMAC_SIZE},
+	{"dmac1", BYT_DSP_BAR,  BYT_DMAC1_OFFSET, BYT_DMAC_SIZE},
+	{"ssp0",  BYT_DSP_BAR, BYT_SSP0_OFFSET, BYT_SSP_SIZE},
+	{"ssp1", BYT_DSP_BAR, BYT_SSP1_OFFSET, BYT_SSP_SIZE},
+	{"ssp2", BYT_DSP_BAR, BYT_SSP2_OFFSET, BYT_SSP_SIZE},
+	{"iram", BYT_DSP_BAR, BYT_IRAM_OFFSET, BYT_IRAM_SIZE},
+	{"dram", BYT_DSP_BAR, BYT_DRAM_OFFSET, BYT_DRAM_SIZE},
+	{"shim", BYT_DSP_BAR, BYT_SHIM_OFFSET, BYT_SHIM_SIZE},
+	{"mbox", BYT_DSP_BAR, BYT_MBOX_OFFSET, BYT_MBOX_SIZE},
 };
 
 static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
@@ -117,14 +121,15 @@ static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
 	if (flags & SOF_DBG_REGS) {
 		for (i = 0; i < BYT_SHIM_SIZE; i+=8 ) {
 			dev_dbg(sdev->dev, "shim 0x%2.2x value 0x%16.16llx\n",
-				i, snd_sof_dsp_read64(sdev, i));
+				i, snd_sof_dsp_read64(sdev, BYT_DSP_BAR, i));
 		}
 	}
 
 	if (flags & SOF_DBG_MBOX) {
 		for (i = 0; i < BYT_MBOX_DUMP_SIZE; i++) {
 			dev_dbg(sdev->dev, "mbox: %d value 0x%8.8x\n", i,
-				readl(sdev->dsp_base + i * 4 + BYT_MBOX_OFFSET));
+				readl(sdev->bar[BYT_DSP_BAR] +
+					i * 4 + BYT_MBOX_OFFSET));
 		}
 	}
 }
@@ -209,11 +214,11 @@ static irqreturn_t byt_irq_handler(int irq, void *context)
 	spin_lock(&sdev->spinlock);
 
 	/* Interrupt arrived, check src */
-	isr = snd_sof_dsp_read64(sdev, SHIM_ISRX);
+	isr = snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_ISRX);
 	if (isr & SHIM_ISRX_DONE) {
 
 		/* Mask Done interrupt before return */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IMRX,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IMRX,
 			SHIM_IMRX_DONE, SHIM_IMRX_DONE);
 		ret = IRQ_WAKE_THREAD;
 	}
@@ -221,7 +226,7 @@ static irqreturn_t byt_irq_handler(int irq, void *context)
 	if (isr & SHIM_ISRX_BUSY) {
 
 		/* Mask Busy interrupt before return */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IMRX,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IMRX,
 			SHIM_IMRX_BUSY, SHIM_IMRX_BUSY);
 		ret = IRQ_WAKE_THREAD;
 	}
@@ -238,8 +243,8 @@ static irqreturn_t byt_irq_thread(int irq, void *context)
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
 
-	ipcx = snd_sof_dsp_read64(sdev, SHIM_IPCX);
-	ipcd = snd_sof_dsp_read64(sdev, SHIM_IPCD);
+	ipcx = snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_IPCX);
+	ipcd = snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_IPCD);
 
 	/* reply message from DSP */
 	if (ipcx & SHIM_BYT_IPCX_DONE) {
@@ -248,11 +253,11 @@ static irqreturn_t byt_irq_thread(int irq, void *context)
 		snd_sof_ipc_process_reply(sdev, ipcx);
 
 		/* clear DONE bit - tell DSP we have completed */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IPCX,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IPCX,
 			SHIM_BYT_IPCX_DONE, 0);
 
 		/* unmask Done interrupt */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IMRX,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IMRX,
 			SHIM_IMRX_DONE, 0);
 	}
 
@@ -263,12 +268,12 @@ static irqreturn_t byt_irq_thread(int irq, void *context)
 		snd_sof_ipc_process_notification(sdev, ipcd);
 
 		/* clear BUSY bit and set DONE bit - accept new messages */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IPCD,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IPCD,
 			SHIM_BYT_IPCD_BUSY | SHIM_BYT_IPCD_DONE,
 			SHIM_BYT_IPCD_DONE);
 
 		/* unmask busy interrupt */
-		snd_sof_dsp_update_bits64_unlocked(sdev, SHIM_IMRX,
+		snd_sof_dsp_update_bits64_unlocked(sdev, BYT_DSP_BAR, SHIM_IMRX,
 			SHIM_IMRX_BUSY, 0);
 	}
 
@@ -293,7 +298,7 @@ static bool byt_is_dsp_busy(struct snd_sof_dev *sdev)
 {
 	u64 ipcx;
 
-	ipcx = snd_sof_dsp_read64(sdev, SHIM_IPCX);
+	ipcx = snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_IPCX);
 	return (ipcx & (SHIM_BYT_IPCX_BUSY | SHIM_BYT_IPCX_DONE));
 }
 
@@ -303,8 +308,8 @@ static int byt_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 	u64 cmd = msg->header;
 
 	/* send the message */
-	byt_mailbox_write(sdev, sdev->outbox.base, msg->data, msg->size);
-	snd_sof_dsp_write64(sdev, SHIM_IPCX, cmd);
+	byt_mailbox_write(sdev, sdev->outbox.base, msg->msg_data, msg->msg_size);
+	snd_sof_dsp_write64(sdev, BYT_DSP_BAR, SHIM_IPCX, cmd);
 
 	return 0;
 }
@@ -318,9 +323,10 @@ static int byt_run(struct snd_sof_dev *sdev)
 	int tries = 10;
 
 	/* release stall and wait to unstall */
-	snd_sof_dsp_update_bits64(sdev, SHIM_CSR, SHIM_BYT_CSR_STALL, 0x0);
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_CSR,
+		SHIM_BYT_CSR_STALL, 0x0);
 	while (tries--) {
-		if (!(snd_sof_dsp_read64(sdev, SHIM_CSR) &
+		if (!(snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_CSR) &
 		      SHIM_BYT_CSR_PWAITMODE))
 			break;
 		msleep(100);
@@ -337,14 +343,14 @@ static int byt_run(struct snd_sof_dev *sdev)
 static int byt_reset(struct snd_sof_dev *sdev)
 {
 	/* put DSP into reset, set reset vector and stall */
-	snd_sof_dsp_update_bits64(sdev, SHIM_CSR,
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_CSR,
 		SHIM_BYT_CSR_RST | SHIM_BYT_CSR_VECTOR_SEL | SHIM_BYT_CSR_STALL,
 		SHIM_BYT_CSR_RST | SHIM_BYT_CSR_VECTOR_SEL | SHIM_BYT_CSR_STALL);
 
 	udelay(10);
 
 	/* take DSP out of reset and keep stalled for FW loading */
-	snd_sof_dsp_update_bits64(sdev, SHIM_CSR, SHIM_BYT_CSR_RST, 0);
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_CSR, SHIM_BYT_CSR_RST, 0);
 
 	return 0;
 }
@@ -383,6 +389,8 @@ struct snd_sof_dsp_ops byt_dsp_ops = {
 	.debug_map_count	= ARRAY_SIZE(byt_debugfs),
 	.dbg_dump	= byt_dump,
 
+	/* module loading */
+	.load_module	= snd_soc_sof_parse_module_memcpy,
 };
 EXPORT_SYMBOL(byt_dsp_ops);
 
@@ -420,5 +428,7 @@ struct snd_sof_dsp_ops cht_dsp_ops = {
 	.debug_map_count	= ARRAY_SIZE(byt_debugfs),
 	.dbg_dump	= byt_dump,
 
+	/* module loading */
+	.load_module	= snd_soc_sof_parse_module_memcpy,
 };
 EXPORT_SYMBOL(cht_dsp_ops);

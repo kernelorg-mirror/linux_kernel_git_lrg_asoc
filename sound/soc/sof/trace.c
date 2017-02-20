@@ -51,6 +51,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #include <linux/delay.h>
@@ -63,8 +65,9 @@
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
 #include <uapi/sound/sof-ipc.h>
-#include "sof.h"
+#include "sof-priv.h"
 
+#if 0
 struct dma_trace_buffer {
 	u32 size; /* total sg elems size */
 	int read_offset; /* the read ptr in rcurrent */
@@ -184,3 +187,11 @@ static const struct file_operations sst_dma_trace_fops = {
 	.llseek = default_llseek,
 	.release = sst_dma_trace_release,
 };
+#endif
+
+int snd_soc_sof_init_debug(struct snd_sof_dev *sof_dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(snd_soc_sof_init_debug);
+

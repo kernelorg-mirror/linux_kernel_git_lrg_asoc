@@ -51,11 +51,21 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #ifndef __INCLUDE_UAPI_SOF_IPC_H__
 #define __INCLUDE_UAPI_SOF_IPC_H__
 
+/*
+ * IPC messages have a prefixed 32 bit identifier made up as follows :-
+ *
+ * 	0xGCCCNNNN where
+ * G is global cmd type (4 bits)
+ * C is command type (12 bits)
+ * I is the ID number (16 bits) - monotonic and overflows
+ */
 
 /* Global Message - Generic */
 #define SOF_GLB_TYPE_SHIFT			28
@@ -65,7 +75,7 @@
 /* Global Message - Reply */
 #define SOF_GLB_REPLY_SHIFT			0
 #define SOF_GLB_REPLY_MASK			(0x1f << SOF_GLB_REPLY_SHIFT)
-#define SOF_GLB_REPLY_TYPE(x)		(x << SOF_GLB_REPLY_TYPE_SHIFT)
+#define SOF_GLB_REPLY_TYPE(x)			(x << SOF_GLB_REPLY_TYPE_SHIFT)
 
 /* Command Message - Generic */
 #define SOF_CMD_TYPE_SHIFT			16
@@ -74,18 +84,18 @@
 
 /* Firmware Ready Message */
 #define SOF_FW_READY				(0x1 << 29)
-#define IPC_INTL_STATUS_MASK		(0x3 << 30)
+#define IPC_INTL_STATUS_MASK			(0x3 << 30)
 
 
 /* Global Message Types */
-#define SOF_IPC_GLB_NONE				SOF_GLB_TYPE(0x0)
-#define SOF_IPC_GLB_VERSION				SOF_GLB_TYPE(0x1)
+#define SOF_IPC_GLB_NONE			SOF_GLB_TYPE(0x0)
+#define SOF_IPC_GLB_VERSION			SOF_GLB_TYPE(0x1)
 #define SOF_IPC_GLB_COMPOUND			SOF_GLB_TYPE(0x2)
 #define SOF_IPC_GLB_TPLG_MSG			SOF_GLB_TYPE(0x3)
-#define SOF_IPC_GLB_PM_MSG				SOF_GLB_TYPE(0x4)
+#define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x4)
 #define SOF_IPC_GLB_COMP_MSG			SOF_GLB_TYPE(0x5)
 #define SOF_IPC_GLB_STREAM_MSG			SOF_GLB_TYPE(0x6)
-#define SOF_IPC_GLB_DAI_MSG				SOF_GLB_TYPE(0x7)
+#define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x7)
 #define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x8)
 
 /* DSP Command Message Types */
@@ -98,12 +108,12 @@
 #define SOF_IPC_TPLG_PIPE_COMPLETE		SOF_CMD_TYPE(0x013)
 #define SOF_IPC_TPLG_BUFFER_NEW			SOF_CMD_TYPE(0x020)
 #define SOF_IPC_TPLG_BUFFER_FREE		SOF_CMD_TYPE(0x021)
-#define SOF_IPC_PM_CTX_SAVE				SOF_CMD_TYPE(0x030)
+#define SOF_IPC_PM_CTX_SAVE			SOF_CMD_TYPE(0x030)
 #define SOF_IPC_PM_CTX_RESTORE			SOF_CMD_TYPE(0x031)
-#define SOF_IPC_PM_CTX_SIZE				SOF_CMD_TYPE(0x032)
-#define SOF_IPC_PM_CLK_SET				SOF_CMD_TYPE(0x033)
-#define SOF_IPC_PM_CLK_GET				SOF_CMD_TYPE(0x034)
-#define SOF_IPC_PM_CLK_REQ				SOF_CMD_TYPE(0x035)
+#define SOF_IPC_PM_CTX_SIZE			SOF_CMD_TYPE(0x032)
+#define SOF_IPC_PM_CLK_SET			SOF_CMD_TYPE(0x033)
+#define SOF_IPC_PM_CLK_GET			SOF_CMD_TYPE(0x034)
+#define SOF_IPC_PM_CLK_REQ			SOF_CMD_TYPE(0x035)
 #define SOF_IPC_COMP_SET_VOLUME			SOF_CMD_TYPE(0x040)
 #define SOF_IPC_COMP_GET_VOLUME			SOF_CMD_TYPE(0x041)
 #define SOF_IPC_COMP_SET_MIXER			SOF_CMD_TYPE(0x042)
@@ -124,23 +134,35 @@
 #define SOF_IPC_DAI_HDA_CONFIG			SOF_CMD_TYPE(0x091)
 #define SOF_IPC_DAI_DMIC_CONFIG			SOF_CMD_TYPE(0x092)
 #define SOF_IPC_DAI_LOOPBACK			SOF_CMD_TYPE(0x093)
-#define SOF_IPC_STREAM_VORBIS_PARAMS	SOF_CMD_TYPE(0x0b0)
+#define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x0b0)
 #define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x0b1)
 
 /* Host Command Message Types */
-#define SOF_IPC_HOST_POSN				SOF_CMD_TYPE(0x000)
+#define SOF_IPC_HOST_POSN			SOF_CMD_TYPE(0x000)
+
+/* get message id */
+#define SOF_IPC_MESSAGE_ID(x)			(x & 0xffff)
+
+
+/*
+ * Command Header - Header for all IPC. Identifies IPC message.
+ */
+
+struct sof_ipc_hdr {
+	uint32_t cmd;			/* SOF_IPC_GLB_ + cmd */
+}  __attribute__((packed));
 
 /*
  * Compound commands - SOF_IPC_GLB_COMPOUND.
  *
  * Compound commands are sent to the DSP as a single IPC operation. The
  * commands are split into blocks and each block has a header. This header
- * identifies the command type and the number of command before the next
+ * identifies the command type and the number of commands before the next
  * header.
  */
 
-struct sof_ipc_pipe_hdr {
-	uint32_t cmd;			/* SOF_IPC_GLB_ + cmd */
+struct sof_ipc_compound_hdr {
+	struct sof_ipc_hdr hdr;
 	uint32_t count;			/* count of 0 means end of compound sequence */
 }  __attribute__((packed));
 
@@ -196,13 +218,14 @@ struct sst_intel_ipc_fw_ready {
 #define SOF_DAI_FMT_CBM_CFS		(3 << 12) /* codec clk master & frame slave */
 #define SOF_DAI_FMT_CBS_CFS		(4 << 12) /* codec clk & FRM slave */
 
-#define SOF_DAI_FMT_FORMAT_MASK	0x000f
-#define SOF_DAI_FMT_CLOCK_MASK	0x00f0
-#define SOF_DAI_FMT_INV_MASK	0x0f00
-#define SOF_DAI_FMT_MASTER_MASK	0xf000
+#define SOF_DAI_FMT_FORMAT_MASK		0x000f
+#define SOF_DAI_FMT_CLOCK_MASK		0x00f0
+#define SOF_DAI_FMT_INV_MASK		0x0f00
+#define SOF_DAI_FMT_MASTER_MASK		0xf000
 
 /* SSP Configuration Request - SOF_IPC_DAI_SSP_CONFIG */
 struct sof_ipc_dai_ssp_params {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t mclk;
 	uint32_t bclk;
@@ -216,6 +239,7 @@ struct sof_ipc_dai_ssp_params {
 
 /* HDA Configuration Request - SOF_IPC_DAI_HDA_CONFIG */
 struct sof_ipc_dai_hda_params {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t mclk;
 	/* TODO */
@@ -223,6 +247,7 @@ struct sof_ipc_dai_hda_params {
 
 /* DMIC Configuration Request - SOF_IPC_DAI_DMIC_CONFIG */
 struct sof_ipc_dai_dmic_params {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t mclk;
 	/* TODO */
@@ -246,31 +271,31 @@ enum sof_ipc_chmap {
 	SOF_CHMAP_SL,		/* side left */
 	SOF_CHMAP_SR,		/* side right */
 	SOF_CHMAP_RC,		/* rear centre */
-	SOF_CHMAP_FLC,	/* front left centre */
-	SOF_CHMAP_FRC,	/* front right centre */
-	SOF_CHMAP_RLC,	/* rear left centre */
-	SOF_CHMAP_RRC,	/* rear right centre */
-	SOF_CHMAP_FLW,	/* front left wide */
-	SOF_CHMAP_FRW,	/* front right wide */
-	SOF_CHMAP_FLH,	/* front left high */
-	SOF_CHMAP_FCH,	/* front centre high */
-	SOF_CHMAP_FRH,	/* front right high */
+	SOF_CHMAP_FLC,		/* front left centre */
+	SOF_CHMAP_FRC,		/* front right centre */
+	SOF_CHMAP_RLC,		/* rear left centre */
+	SOF_CHMAP_RRC,		/* rear right centre */
+	SOF_CHMAP_FLW,		/* front left wide */
+	SOF_CHMAP_FRW,		/* front right wide */
+	SOF_CHMAP_FLH,		/* front left high */
+	SOF_CHMAP_FCH,		/* front centre high */
+	SOF_CHMAP_FRH,		/* front right high */
 	SOF_CHMAP_TC,		/* top centre */
-	SOF_CHMAP_TFL,	/* top front left */
-	SOF_CHMAP_TFR,	/* top front right */
-	SOF_CHMAP_TFC,	/* top front centre */
-	SOF_CHMAP_TRL,	/* top rear left */
-	SOF_CHMAP_TRR,	/* top rear right */
-	SOF_CHMAP_TRC,	/* top rear centre */
-	SOF_CHMAP_TFLC,	/* top front left centre */
-	SOF_CHMAP_TFRC,	/* top front right centre */
-	SOF_CHMAP_TSL,	/* top side left */
-	SOF_CHMAP_TSR,	/* top side right */
-	SOF_CHMAP_LLFE,	/* left LFE */
-	SOF_CHMAP_RLFE,	/* right LFE */
+	SOF_CHMAP_TFL,		/* top front left */
+	SOF_CHMAP_TFR,		/* top front right */
+	SOF_CHMAP_TFC,		/* top front centre */
+	SOF_CHMAP_TRL,		/* top rear left */
+	SOF_CHMAP_TRR,		/* top rear right */
+	SOF_CHMAP_TRC,		/* top rear centre */
+	SOF_CHMAP_TFLC,		/* top front left centre */
+	SOF_CHMAP_TFRC,		/* top front right centre */
+	SOF_CHMAP_TSL,		/* top side left */
+	SOF_CHMAP_TSR,		/* top side right */
+	SOF_CHMAP_LLFE,		/* left LFE */
+	SOF_CHMAP_RLFE,		/* right LFE */
 	SOF_CHMAP_BC,		/* bottom centre */
-	SOF_CHMAP_BLC,	/* bottom left centre */
-	SOF_CHMAP_BRC,	/* bottom right centre */
+	SOF_CHMAP_BLC,		/* bottom left centre */
+	SOF_CHMAP_BRC,		/* bottom right centre */
 	SOF_CHMAP_LAST = SOF_CHMAP_BRC,
 };
 
@@ -322,6 +347,7 @@ struct sof_ipc_ring_buffer {
 
 /* PCM params info - SOF_IPC_STREAM_PCM_PARAMS */
 struct sof_ipc_pcm_params {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	struct sof_ipc_ring_buffer buffer;
 	enum sof_ipc_stream_direction direction;
@@ -332,12 +358,12 @@ struct sof_ipc_pcm_params {
 	uint32_t frame_size;
 	uint32_t period_bytes;	/* 0 means variable */
 	uint32_t period_count;	/* 0 means variable */
-	enum sof_ipc_chmap channel_map[];
 }  __attribute__((packed));
 
 
 /* compressed vorbis params - SOF_IPC_STREAM_VORBIS_PARAMS */
 struct sof_ipc_vorbis_params {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	struct sof_ipc_ring_buffer buffer;
 	enum sof_ipc_stream_direction direction;
@@ -349,10 +375,12 @@ struct sof_ipc_vorbis_params {
 
 /* free stream - SOF_IPC_STREAM_PCM_PARAMS */
 struct sof_ipc_stream {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 } __attribute__((packed));
 
 struct sof_ipc_stream_posn {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t host_posn;
 	uint32_t dai_posn;
@@ -369,6 +397,7 @@ struct sof_ipc_ctrl_chan {
 } __attribute__((packed));
 
 struct sof_ipc_ctrl_values {
+	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t num_values;
 	struct sof_ipc_ctrl_chan values[];
@@ -387,6 +416,7 @@ struct sof_ipc_period {
 
 /* create new component buffer - SOF_IPC_TPLG_BUFFER_NEW */
 struct sof_ipc_buffer {
+	struct sof_ipc_hdr hdr;
 	uint32_t buffer_id;
 	uint32_t size;		/* buffer size in bytes */
 	struct sof_ipc_period sink_period;
@@ -432,6 +462,7 @@ struct sof_ipc_pcm_comp {
 
 /* generic host component */
 struct sof_ipc_comp_host {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	enum sof_ipc_stream_direction direction;
@@ -443,6 +474,7 @@ struct sof_ipc_comp_host {
 
 /* generic DAI component */
 struct sof_ipc_comp_dai {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	enum sof_ipc_stream_direction direction;
@@ -455,6 +487,7 @@ struct sof_ipc_comp_dai {
 
 /* generic mixer component */
 struct sof_ipc_comp_mixer {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 }  __attribute__((packed));
@@ -469,6 +502,7 @@ enum sof_volume_ramp {
 
 /* generic volume component */
 struct sof_ipc_comp_volume {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	uint32_t channels;
@@ -480,6 +514,7 @@ struct sof_ipc_comp_volume {
 
 /* generic SRC component */
 struct sof_ipc_comp_src {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	uint32_t in_mask;	/* SOF_RATE_ supported input rates */
@@ -488,12 +523,14 @@ struct sof_ipc_comp_src {
 
 /* generic MUX component */
 struct sof_ipc_comp_mux {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 } __attribute__((packed));
 
 /* generic tone generator component */
 struct sof_ipc_comp_tone {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 } __attribute__((packed));
@@ -502,11 +539,13 @@ struct sof_ipc_comp_tone {
  * SOF_IPC_TPLG_COMP_FREE, SOF_IPC_TPLG_PIPE_FREE, SOF_IPC_TPLG_BUFFER_FREE
  */
 struct sof_ipc_free {
+	struct sof_ipc_hdr hdr;
 	uint32_t id;
 } __attribute__((packed));
 
 
 struct sof_ipc_comp_reply {
+	struct sof_ipc_hdr hdr;
 	uint32_t id;
 	uint32_t offset;
 } __attribute__((packed));
@@ -518,6 +557,7 @@ struct sof_ipc_comp_reply {
 
 /* new pipeline - SOF_IPC_TPLG_PIPE_NEW */
 struct sof_ipc_pipe_new {
+	struct sof_ipc_hdr hdr;
 	uint32_t pipeline_id;
 	uint32_t core;		/* core we run on */
 	uint32_t schedule_us;	/* schedule evey us */
@@ -527,16 +567,19 @@ struct sof_ipc_pipe_new {
 
 /* pipeline construction complete - SOF_IPC_TPLG_PIPE_COMPLETE */
 struct sof_ipc_pipe_ready {
+	struct sof_ipc_hdr hdr;
 	uint32_t pipeline_id;
 }  __attribute__((packed));
 
 
 struct sof_ipc_pipe_free {
+	struct sof_ipc_hdr hdr;
 	uint32_t pipeline_id;
 }  __attribute__((packed));
 
 /* connect two components in pipeline - SOF_IPC_TPLG_COMP_CONNECT */
 struct sof_ipc_pipe_comp_connect {
+	struct sof_ipc_hdr hdr;
 	uint32_t pipeline_id;
 	uint32_t source_id;
 	uint32_t buffer_id;
@@ -545,6 +588,7 @@ struct sof_ipc_pipe_comp_connect {
 
 /* connect two components in pipeline - SOF_IPC_TPLG_PIPE_CONNECT */
 struct sof_ipc_pipe_pipe_connect {
+	struct sof_ipc_hdr hdr;
 	uint32_t pipeline_source_id;
 	uint32_t comp_source_id;
 	uint32_t buffer_id;
@@ -567,6 +611,7 @@ struct sof_ipc_pm_ctx_elem {
 /* PM context - SOF_IPC_PM_CTX_SAVE, SOF_IPC_PM_CTX_RESTORE,
  * SOF_IPC_PM_CTX_SIZE */
 struct sof_ipc_pm_ctx {
+	struct sof_ipc_hdr hdr;
 	struct sof_ipc_ring_buffer buffer;
 	uint32_t num_elems;
 	uint32_t size;

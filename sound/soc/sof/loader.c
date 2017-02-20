@@ -51,6 +51,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
 #include <linux/delay.h>
@@ -62,107 +64,146 @@
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
-#include <uapi/sound/sof-ipc.h>
-#include "sof.h"
+#include <uapi/sound/sof-fw.h>
+#include "sof-priv.h"
+#include "ops.h"
 
-#if 0
-static int hsw_parse_module(struct snd_soc_sof *sof,
-	struct fw_module_header *module)
+/* generic module parser for mmaped DSPs */
+int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
+	struct snd_sof_mod_hdr *module)
 {
-	struct dma_block_info *block;
-	int count, ret;
-	void __iomem *ram;
+	struct snd_sof_blk_hdr *block;
+	int count;
+	void __iomem *mem;
 
-
-	dev_dbg(sof->dev, "new module sign 0x%s size 0x%x blocks 0x%x type 0x%x\n",
-		module->signature, module->mod_size,
-		module->blocks, module->type);
-	dev_dbg(sof->dev, " entrypoint 0x%x\n", module->entry_point);
-	dev_dbg(sof->dev, " persistent 0x%x scratch 0x%x\n",
-		module->info.persistent_size, module->info.scratch_size);
+	dev_dbg(sdev->dev, "new module size 0x%x blocks 0x%x type 0x%x\n",
+		module->size, module->num_blocks, module->type);
 
 	block = (void *)module + sizeof(*module);
 
-	for (count = 0; count < module->blocks; count++) {
+	for (count = 0; count < module->num_blocks; count++) {
 
-		if (block->size <= 0) {
-			dev_err(sof->dev,
+		if (block->size == 0) {
+			dev_err(sdev->dev,
 				"error: block %d size invalid\n", count);
 			return -EINVAL;
 		}
 
 		switch (block->type) {
-		case SST_HSW_IRAM:
-			ram = dsp->addr.lpe;
-			mod->offset =
-				block->ram_offset + dsp->addr.iram_offset;
-			mod->type = SST_MEM_IRAM;
-			break;
-		case SST_HSW_DRAM:
-		case SST_HSW_REGS:
-			ram = dsp->addr.lpe;
-			mod->offset = block->ram_offset + dsp->addr.dram_offset;
-			mod->type = SST_MEM_DRAM;
+		case SOF_BLK_IMAGE:
+		case SOF_BLK_CACHE:
+		case SOF_BLK_REGS:
+		case SOF_BLK_SIG:
+		case SOF_BLK_ROM:
+			continue;	/* not handled atm */
+		case SOF_BLK_TEXT:
+		case SOF_BLK_DATA:
+			mem = sdev->bar[sdev->cl_bar] + block->offset;
 			break;
 		default:
-			dev_err(sof->dev, "error: bad type 0x%x for block 0x%x\n",
+			dev_err(sdev->dev, "error: bad type 0x%x for block 0x%x\n",
 				block->type, count);
 			return -EINVAL;
 		}
 
-		mod->size = block->size;
-		mod->data = (void *)block + sizeof(*block);
-		mod->data_offset = mod->data - fw->dma_buf;
 
-		dev_dbg(sof->dev, "module block %d type 0x%x "
+		dev_dbg(sdev->dev, "block %d type 0x%x "
 			"size 0x%x ==> ram %p offset 0x%x\n",
-			count, mod->type, block->size, ram,
-			block->ram_offset);
+			count, block->type, block->size, mem,
+			block->offset);
 
-		// COPY block
 
+		snd_sof_dsp_block_write(sdev, mem, (void*) block + 1,
+			block->size);
+
+		/* next block */
 		block = (void *)block + sizeof(*block) + block->size;
 	}
-	mod->state = SST_MODULE_STATE_LOADED;
 
 	return 0;
 }
+EXPORT_SYMBOL(snd_soc_sof_parse_module_memcpy);
 
-static int hsw_parse_fw_image(struct snd_soc_sof *sof)
+static int check_header(struct snd_sof_dev *sdev, const struct firmware *fw)
 {
-	struct fw_header *header;
-	struct fw_module_header *module;
-	int ret, count;
+	struct snd_soc_sof_fw_header *header;
 
 	/* Read the header information from the data pointer */
-	header = (struct fw_header *)sst_fw->dma_buf;
+	header = (struct snd_soc_sof_fw_header *)fw->data;
 
-	/* verify FW */
-	if ((strncmp(header->signature, SST_HSW_FW_SIGN, 4) != 0) ||
-		(sst_fw->size != header->file_size + sizeof(*header))) {
-		dev_err(sof->dev, "error: invalid fw sign/filesize mismatch got 0x%x expected 0x%lx\n",
-			sst_fw->size, header->file_size + sizeof(*header));
+	/* verify FW sig */
+	if (strncmp(header->sig, SND_SOF_FW_SIG, SND_SOF_FW_SIG_SIZE) != 0) {
+		dev_err(sdev->dev, "error: invalid firmware signature\n");
 		return -EINVAL;
 	}
 
-	dev_dbg(sof->dev, "header size=0x%x modules=0x%x fmt=0x%x size=%zu\n",
-		header->file_size, header->modules,
-		header->file_format, sizeof(*header));
+	/* check size is valid */
+	if (fw->size != header->file_size + sizeof(*header)) {
+		dev_err(sdev->dev, "error: invalid filesize mismatch got 0x%lx expected 0x%lx\n",
+			fw->size, header->file_size + sizeof(*header));
+		return -EINVAL;
+	}
+
+	dev_dbg(sdev->dev, "header size=0x%x modules=0x%x abi=0x%x size=%zu\n",
+		header->file_size, header->num_modules,
+		header->abi, sizeof(*header));
+
+	return 0;
+}
+
+static int load_modules(struct snd_sof_dev *sdev, const struct firmware *fw)
+{
+	struct snd_soc_sof_fw_header *header;
+	struct snd_sof_mod_hdr *module;
+	int (*load_module)(struct snd_sof_dev *sof_dev,
+		struct snd_sof_mod_hdr *hdr);
+	int ret, count;
+
+	header = (struct snd_soc_sof_fw_header *)fw->data;
+	load_module = sdev->ops->load_module;
+	if (load_module == NULL)
+		return -EINVAL;
 
 	/* parse each module */
-	module = (void *)sst_fw->dma_buf + sizeof(*header);
-	for (count = 0; count < header->modules; count++) {
+	module = (void *)fw->data + sizeof(*header);
+	for (count = 0; count < header->num_modules; count++) {
 
 		/* module */
-		ret = hsw_parse_module(sof, module);
+		ret = load_module(sdev, module);
 		if (ret < 0) {
-			dev_err(sof->dev, "error: invalid module %d\n", count);
+			dev_err(sdev->dev, "error: invalid module %d\n", count);
 			return ret;
 		}
-		module = (void *)module + sizeof(*module) + module->mod_size;
+		module = (void *)module + sizeof(*module) + module->size;
 	}
 
 	return 0;
 }
 
-#endif
+int snd_soc_sof_load_firmware(struct snd_sof_dev *sdev,
+	const struct firmware *fw)
+{
+	int ret;
+
+	ret = check_header(sdev, fw);
+	if (ret < 0) {
+		dev_err(sdev->dev, "invalid FW header\n");
+		return ret;
+	}
+
+	ret = load_modules(sdev, fw);
+	if (ret < 0) {
+		dev_err(sdev->dev, "invalid FW modules\n");
+		return ret;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(snd_soc_sof_load_firmware);
+
+int snd_soc_sof_run_firmware(struct snd_sof_dev *sof_dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(snd_soc_sof_init_debug);
+
