@@ -204,3 +204,18 @@ static struct sst_dsp_device hsw_dev = {
 	.thread = hsw_irq_thread,
 	.ops = &haswell_ops,
 };
+
+/* haswell ops */
+struct snd_sof_dsp_ops snd_soc_sof_hsw_ops = {
+
+
+};
+EXPORT_SYMBOL(snd_soc_sof_hsw_ops);
+
+
+/* broadwell ops */
+struct snd_sof_dsp_ops snd_soc_sof_bdw_ops = {
+
+};
+EXPORT_SYMBOL(snd_soc_sof_bdw_ops);
+

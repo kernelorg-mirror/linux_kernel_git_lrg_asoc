@@ -205,5 +205,5 @@ int snd_soc_sof_run_firmware(struct snd_sof_dev *sof_dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_init_debug);
+EXPORT_SYMBOL(snd_soc_sof_run_firmware);
 

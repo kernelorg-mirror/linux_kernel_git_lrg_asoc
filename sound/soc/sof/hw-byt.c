@@ -356,7 +356,7 @@ static int byt_reset(struct snd_sof_dev *sdev)
 }
 
 /* baytrail ops */
-struct snd_sof_dsp_ops byt_dsp_ops = {
+struct snd_sof_dsp_ops snd_soc_sof_byt_ops = {
 
 	/* DSP core boot / reset */
 	.run		= byt_run,
@@ -392,10 +392,10 @@ struct snd_sof_dsp_ops byt_dsp_ops = {
 	/* module loading */
 	.load_module	= snd_soc_sof_parse_module_memcpy,
 };
-EXPORT_SYMBOL(byt_dsp_ops);
+EXPORT_SYMBOL(snd_soc_sof_byt_ops);
 
 /* cherrytrail and braswell ops */
-struct snd_sof_dsp_ops cht_dsp_ops = {
+struct snd_sof_dsp_ops snd_soc_sof_cht_ops = {
 
 	/* DSP core boot / reset */
 	.run		= byt_run,
@@ -431,4 +431,4 @@ struct snd_sof_dsp_ops cht_dsp_ops = {
 	/* module loading */
 	.load_module	= snd_soc_sof_parse_module_memcpy,
 };
-EXPORT_SYMBOL(cht_dsp_ops);
+EXPORT_SYMBOL(snd_soc_sof_cht_ops);

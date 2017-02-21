@@ -62,11 +62,12 @@
 #include <linux/firmware.h>
 #include <sound/pcm.h>
 #include <sound/sof.h>
+#include <linux/pci.h>
 #include <linux/acpi.h>
-#include "sof.h"
+#include "sof-priv.h"
 
 struct sof_pci_priv {
-	struct pci_dev *pci;
+	struct device *dev;
 	struct snd_sof_pdata *sof_pdata;
 	struct platform_device *pdev_pcm;
 };
@@ -105,7 +106,7 @@ static void sof_pci_fw_cb(const struct firmware *fw, void *context)
 {
 
 	struct sof_pci_priv *priv = context;
-	struct device *dev = &priv->pci->dev;
+	struct device *dev = priv->dev;
 	struct snd_sof_pdata *sof_pdata = priv->sof_pdata;
 	const struct snd_sof_machine *mach = sof_pdata->machine;
 
@@ -176,6 +177,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	sof_pdata->machine = mach;
 	sof_pdata->desc = (struct sof_dev_desc*) pci_id->driver_data;
 	priv->sof_pdata = sof_pdata;
+	priv->dev = &pci->dev;
 
 	/* register machine driver */
 	sof_pdata->pdev_mach =
@@ -184,7 +186,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	if (IS_ERR(sof_pdata->pdev_mach))
 		return PTR_ERR(sof_pdata->pdev_mach);
 
-	/* continue SST probing after firmware is loaded */
+	/* continue probing after firmware is loaded */
 	ret = request_firmware_nowait(THIS_MODULE, true, mach->fw_filename,
 				      dev, GFP_KERNEL, priv, sof_pci_fw_cb);
 	if (ret)
@@ -211,9 +213,9 @@ static void sof_pci_remove(struct pci_dev *pci)
 
 static const struct snd_sof_machine sof_bxt_machines[] = {
 	{ "INT343A", "bxt_alc298s_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", &snd_soc_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_soc_sof_bxt_ops },
 	{ "DLGS7219", "bxt_da7219_max98357a_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", &snd_soc_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_soc_sof_bxt_ops },
 };
 
 static const struct sof_dev_desc bxt_desc = {
