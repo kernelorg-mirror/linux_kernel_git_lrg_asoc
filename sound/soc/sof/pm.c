@@ -87,3 +87,9 @@ int snd_soc_sof_suspend(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(snd_soc_sof_suspend);
+
+int snd_soc_sof_suspend_late(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(snd_soc_sof_suspend_late);

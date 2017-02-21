@@ -374,7 +374,7 @@ static int apl_remove(struct snd_sof_dev *sdev)
 }
 
 /* broxton ops */
-struct snd_sof_dsp_ops snd_soc_sof_bxt_dsp_ops = {
+struct snd_sof_dsp_ops snd_soc_sof_bxt_ops = {
 
 	/* probe and remove */
 	.probe		= apl_probe,
@@ -412,10 +412,10 @@ struct snd_sof_dsp_ops snd_soc_sof_bxt_dsp_ops = {
 	.dbg_dump	= apl_dump,
 
 };
-EXPORT_SYMBOL(snd_soc_sof_bxt_dsp_ops);
+EXPORT_SYMBOL(snd_soc_sof_bxt_ops);
 
 /* appololake ops */
-struct snd_sof_dsp_ops snd_soc_sof_apl_dsp_ops = {
+struct snd_sof_dsp_ops snd_soc_sof_apl_ops = {
 
 	/* probe and remove */
 	.probe		= apl_probe,
@@ -453,4 +453,4 @@ struct snd_sof_dsp_ops snd_soc_sof_apl_dsp_ops = {
 	.dbg_dump	= apl_dump,
 
 };
-EXPORT_SYMBOL(snd_soc_sof_apl_dsp_ops);
+EXPORT_SYMBOL(snd_soc_sof_apl_ops);

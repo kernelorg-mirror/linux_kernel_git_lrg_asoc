@@ -224,10 +224,10 @@ EXPORT_SYMBOL_GPL(sst_hsw_dsp_free);
 #endif
 
 
-void snd_soc_sof_pci_shutdown(struct pci_dev *pci)
+void snd_soc_sof_shutdown(struct device *dev)
 {
 }
-EXPORT_SYMBOL(snd_soc_sof_pci_shutdown);
+EXPORT_SYMBOL(snd_soc_sof_shutdown);
 
 static int sof_probe(struct platform_device *pdev)
 {

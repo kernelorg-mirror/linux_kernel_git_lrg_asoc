@@ -99,6 +99,8 @@ struct snd_sof_machine {
 	const char *fw_filename;
 	/* default topology */
 	const char *tplg_filename;
+	/* ASoC platform name - used for binding machine drivers if non NULL */
+	const char *asoc_plat_name;
 	/* machine specific ops */
 	const struct snd_sof_dsp_ops *ops;
 };
