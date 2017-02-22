@@ -355,8 +355,27 @@ static int byt_reset(struct snd_sof_dev *sdev)
 	return 0;
 }
 
+/*
+ * Probe and remove.
+ */
+/* probe and remove */
+static int byt_remove(struct snd_sof_dev *sof_dev)
+{
+	return 0;
+}
+
+static int byt_probe(struct snd_sof_dev *sof_dev)
+{
+	return 0;
+}
+
+
 /* baytrail ops */
-struct snd_sof_dsp_ops snd_soc_sof_byt_ops = {
+struct snd_sof_dsp_ops snd_sof_byt_ops = {
+
+	/* device init */
+	.probe		= byt_probe,
+	.remove		= byt_remove,
 
 	/* DSP core boot / reset */
 	.run		= byt_run,
@@ -390,12 +409,16 @@ struct snd_sof_dsp_ops snd_soc_sof_byt_ops = {
 	.dbg_dump	= byt_dump,
 
 	/* module loading */
-	.load_module	= snd_soc_sof_parse_module_memcpy,
+	.load_module	= snd_sof_parse_module_memcpy,
 };
-EXPORT_SYMBOL(snd_soc_sof_byt_ops);
+EXPORT_SYMBOL(snd_sof_byt_ops);
 
 /* cherrytrail and braswell ops */
-struct snd_sof_dsp_ops snd_soc_sof_cht_ops = {
+struct snd_sof_dsp_ops snd_sof_cht_ops = {
+
+	/* device init */
+	.probe		= byt_probe,
+	.remove		= byt_remove,
 
 	/* DSP core boot / reset */
 	.run		= byt_run,
@@ -429,6 +452,6 @@ struct snd_sof_dsp_ops snd_soc_sof_cht_ops = {
 	.dbg_dump	= byt_dump,
 
 	/* module loading */
-	.load_module	= snd_soc_sof_parse_module_memcpy,
+	.load_module	= snd_sof_parse_module_memcpy,
 };
-EXPORT_SYMBOL(snd_soc_sof_cht_ops);
+EXPORT_SYMBOL(snd_sof_cht_ops);

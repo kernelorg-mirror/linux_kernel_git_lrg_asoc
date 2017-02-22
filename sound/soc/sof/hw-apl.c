@@ -187,7 +187,7 @@ static void apl_mailbox_read(struct snd_sof_dev *sdev, void *message,
 static irqreturn_t apl_irq_handler(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
-	u64 isr;
+	//u64 isr;
 	int ret = IRQ_NONE;
 
 	spin_lock(&sdev->spinlock);
@@ -200,7 +200,7 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 
 static irqreturn_t apl_irq_thread(int irq, void *context)
 {
-	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
+	//struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 
 
 	return IRQ_HANDLED;
@@ -374,7 +374,7 @@ static int apl_remove(struct snd_sof_dev *sdev)
 }
 
 /* broxton ops */
-struct snd_sof_dsp_ops snd_soc_sof_bxt_ops = {
+struct snd_sof_dsp_ops snd_sof_bxt_ops = {
 
 	/* probe and remove */
 	.probe		= apl_probe,
@@ -412,10 +412,10 @@ struct snd_sof_dsp_ops snd_soc_sof_bxt_ops = {
 	.dbg_dump	= apl_dump,
 
 };
-EXPORT_SYMBOL(snd_soc_sof_bxt_ops);
+EXPORT_SYMBOL(snd_sof_bxt_ops);
 
 /* appololake ops */
-struct snd_sof_dsp_ops snd_soc_sof_apl_ops = {
+struct snd_sof_dsp_ops snd_sof_apl_ops = {
 
 	/* probe and remove */
 	.probe		= apl_probe,
@@ -453,4 +453,4 @@ struct snd_sof_dsp_ops snd_soc_sof_apl_ops = {
 	.dbg_dump	= apl_dump,
 
 };
-EXPORT_SYMBOL(snd_soc_sof_apl_ops);
+EXPORT_SYMBOL(snd_sof_apl_ops);

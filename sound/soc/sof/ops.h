@@ -64,10 +64,18 @@
 #include "sof-priv.h"
 
 /* init */
-static inline int snd_soc_sof_probe(struct snd_sof_dev *sdev)
+static inline int snd_sof_probe(struct snd_sof_dev *sdev)
 {
 	if (sdev->ops->probe)
 		return sdev->ops->probe(sdev);
+	else
+		return 0;
+}
+
+static inline int snd_sof_remove(struct snd_sof_dev *sdev)
+{
+	if (sdev->ops->remove)
+		return sdev->ops->remove(sdev);
 	else
 		return 0;
 }

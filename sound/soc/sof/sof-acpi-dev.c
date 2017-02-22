@@ -127,9 +127,9 @@ static void sof_acpi_fw_cb(const struct firmware *fw, void *context)
 }
 
 static const struct dev_pm_ops sof_acpi_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(snd_soc_sof_suspend, snd_soc_sof_resume)
-	SET_RUNTIME_PM_OPS(snd_soc_sof_runtime_suspend, snd_soc_sof_runtime_resume, NULL)
-	.suspend_late = snd_soc_sof_suspend_late,
+	SET_SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
+	SET_RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume, NULL)
+	.suspend_late = snd_sof_suspend_late,
 };
 
 static int sof_acpi_probe(struct platform_device *pdev)
@@ -189,7 +189,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 
 static void sof_acpi_shutdown(struct platform_device *pdev)
 {
-	snd_soc_sof_shutdown(&pdev->dev);
+	snd_sof_shutdown(&pdev->dev);
 }
 
 static int sof_acpi_remove(struct platform_device *pdev)
@@ -205,11 +205,11 @@ static int sof_acpi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if IS_ENABLED(SND_SOC_SOF_HASWELL)
+#if IS_ENABLED(snd_sof_HASWELL)
 static struct snd_sof_machine haswell_machines[] = {
 	{ "INT33CA", "haswell-audio", "intel/reef-hsw.ri",
 		"intel/reef-hsw.tplg", "haswell-pcm-audio",
-		&snd_soc_sof_hsw_ops },
+		&snd_sof_hsw_ops },
 	{}
 };
 
@@ -224,10 +224,10 @@ static struct sof_dev_desc sof_acpi_haswell_desc = {
 static struct snd_sof_machine broadwell_machines[] = {
 	{ "INT343A", "broadwell-audio", "intel/reef-bdw.ri",
 		"intel/reef-bdw.tplg", "haswell-pcm-audio",
-		&snd_soc_sof_bdw_ops },
+		&snd_sof_bdw_ops },
 	{ "RT5677CE", "bdw-rt5677", "intel/reef-bdw.ri",
 		"intel/reef-bdw.tplg", "haswell-pcm-audio",
-		&snd_soc_sof_bdw_ops },
+		&snd_sof_bdw_ops },
 	{}
 };
 
@@ -240,14 +240,14 @@ static struct sof_dev_desc sof_acpi_broadwell_desc = {
 };
 #endif
 
-#if IS_ENABLED(SND_SOC_SOF_BAYTRAIL)
+#if IS_ENABLED(snd_sof_BAYTRAIL)
 static struct snd_sof_machine baytrail_machines[] = {
 	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
-		&snd_soc_sof_byt_ops },
+		&snd_sof_byt_ops },
 	{ "193C9890", "byt-max98090", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
-		&snd_soc_sof_hsw_ops },
+		&snd_sof_hsw_ops },
 	{}
 };
 
@@ -261,11 +261,11 @@ static struct sof_dev_desc sof_acpi_baytrail_desc = {
 #endif
 
 static const struct acpi_device_id sof_acpi_match[] = {
-#if IS_ENABLED(SND_SOC_SOF_HASWELL)
+#if IS_ENABLED(snd_sof_HASWELL)
 	{ "INT33C8", (unsigned long)&sof_acpi_haswell_desc },
 	{ "INT3438", (unsigned long)&sof_acpi_broadwell_desc },
 #endif
-#if IS_ENABLED(SND_SOC_SOF_BAYTRAIL)
+#if IS_ENABLED(snd_sof_BAYTRAIL)
 	{ "80860F28", (unsigned long)&sof_acpi_baytrail_desc },
 #endif
 	{ }
@@ -273,7 +273,7 @@ static const struct acpi_device_id sof_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, sof_acpi_match);
 
 /* acpi_driver definition */
-static struct platform_driver snd_soc_sof_acpi_driver = {
+static struct platform_driver snd_sof_acpi_driver = {
 	.probe = sof_acpi_probe,
 	.remove = sof_acpi_remove,
 	.shutdown = sof_acpi_shutdown,
@@ -282,4 +282,4 @@ static struct platform_driver snd_soc_sof_acpi_driver = {
 		.acpi_match_table = ACPI_PTR(sof_acpi_match),
 	},
 };
-module_platform_driver(snd_soc_sof_acpi_driver);
+module_platform_driver(snd_sof_acpi_driver);

@@ -397,10 +397,11 @@ EXPORT_SYMBOL(snd_sof_ipc_init);
 
 void snd_sof_ipc_free(struct snd_sof_dev *sdev)
 {
+	/* TODO: send IPC to prepare DSP for shutdown */
+
 	cancel_work_sync(&sdev->ipc->kwork);
 }
 EXPORT_SYMBOL(snd_sof_ipc_free);
-
 
 
 #if 0

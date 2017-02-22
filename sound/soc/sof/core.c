@@ -66,169 +66,6 @@
 #include "sof-priv.h"
 #include "ops.h"
 
-#if 0
-int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata)
-{
-	struct sst_hsw_ipc_fw_version version;
-	struct sst_hsw *hsw;
-	struct sst_generic_ipc *ipc;
-	struct sst_dsp_device *dsp_dev;
-	int ret;
-
-	dev_dbg(dev, "initialising Audio DSP IPC\n");
-
-	hsw = devm_kzalloc(dev, sizeof(*hsw), GFP_KERNEL);
-	if (hsw == NULL)
-		return -ENOMEM;
-
-	hsw->dev = dev;
-
-	ipc = &hsw->ipc;
-	ipc->dev = dev;
-
-	/* set up ops depending on hardware */
-	switch (pdata->id) {
-	case SST_DEV_ID_BYT:
-		/* Baytrail */
-		dsp_dev = &byt_dev;
-		dsp_dev->thread_context = hsw;
-		ipc->ops.tx_msg = byt_tx_msg;
-		ipc->ops.shim_dbg = byt_shim_dbg;
-		ipc->ops.tx_data_copy = hsw_tx_data_copy;
-		ipc->ops.reply_msg_match = hsw_reply_msg_match;
-		ipc->ops.is_dsp_busy = byt_is_dsp_busy;
-		ipc->ops.dsp_notify = byt_notify;
-		break;
-	case SST_DEV_ID_LYNX_POINT:
-	case SST_DEV_ID_WILDCAT_POINT:
-		/* Haswell / Broadwell */
-		dsp_dev = &hsw_dev;
-		dsp_dev->thread_context = hsw;
-		ipc->ops.tx_msg = hsw_tx_msg;
-		ipc->ops.shim_dbg = hsw_shim_dbg;
-		ipc->ops.tx_data_copy = hsw_tx_data_copy;
-		ipc->ops.reply_msg_match = hsw_reply_msg_match;
-		ipc->ops.is_dsp_busy = hsw_is_dsp_busy;
-		ipc->ops.dsp_notify = hsw_notify;
-		break;
-	default:
-		ret = -EINVAL;
-		dev_err(dev, "error: unsupported DSP ID 0x%x\n", pdata->id);
-		goto ipc_init_err;
-	}
-
-	ipc->tx_data_max_size = IPC_MAX_MAILBOX_BYTES;
-	ipc->rx_data_max_size = IPC_MAX_MAILBOX_BYTES;
-
-	ret = sst_ipc_init(ipc);
-	if (ret != 0)
-		goto ipc_init_err;
-
-	INIT_LIST_HEAD(&hsw->stream_list);
-	init_waitqueue_head(&hsw->boot_wait);
-
-	/* init SST shim */
-	hsw->dsp = sst_dsp_new(dev, dsp_dev, pdata);
-	if (hsw->dsp == NULL) {
-		ret = -ENODEV;
-		goto dsp_new_err;
-	}
-
-	ipc->dsp = hsw->dsp;
-
-	/* allocate DMA buffer for context storage */
-	hsw->dx_context = dma_alloc_coherent(hsw->dsp->dma_dev,
-		SST_HSW_DX_CONTEXT_SIZE, &hsw->dx_context_paddr, GFP_KERNEL);
-	if (hsw->dx_context == NULL) {
-		ret = -ENOMEM;
-		goto dma_err;
-	}
-
-	/* keep the DSP in reset state for base FW loading */
-	sst_dsp_reset(hsw->dsp);
-
-	/* load base module and other modules in base firmware image */
-	ret = sst_hsw_module_load(hsw, SST_HSW_MODULE_BASE_FW, 0, "Base");
-	if (ret < 0)
-		goto fw_err;
-
-	/* try to load module waves */
-	sst_hsw_module_load(hsw, SST_HSW_MODULE_WAVES, 0, "intel/IntcPP01.bin");
-
-	/* allocate scratch mem regions */
-	ret = sst_block_alloc_scratch(hsw->dsp);
-	if (ret < 0)
-		goto boot_err;
-
-	/* init param buffer */
-	sst_hsw_reset_param_buf(hsw);
-
-	/* wait for DSP boot completion */
-	sst_dsp_boot(hsw->dsp);
-	ret = wait_event_timeout(hsw->boot_wait, hsw->boot_complete,
-		msecs_to_jiffies(IPC_BOOT_MSECS));
-	if (ret == 0) {
-		ret = -EIO;
-		ipc->ops.shim_dbg(ipc, "DSP boot timeout");
-		goto boot_err;
-	}
-
-	hsw_debugfs_init(hsw);
-
-	/* init module state after boot */
-	sst_hsw_init_module_state(hsw);
-
-	/* get the FW version */
-	sst_hsw_fw_get_version(hsw, &version);
-
-	/* get the globalmixer */
-	ret = sst_hsw_mixer_get_info(hsw);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: failed to get stream info\n");
-		goto boot_err;
-	}
-
-	pdata->dsp = hsw;
-	return 0;
-
-boot_err:
-	sst_dsp_reset(hsw->dsp);
-	sst_fw_free_all(hsw->dsp);
-fw_err:
-	dma_free_coherent(hsw->dsp->dma_dev, SST_HSW_DX_CONTEXT_SIZE,
-			hsw->dx_context, hsw->dx_context_paddr);
-dma_err:
-	sst_dsp_free(hsw->dsp);
-dsp_new_err:
-	sst_ipc_fini(ipc);
-ipc_init_err:
-	return ret;
-}
-EXPORT_SYMBOL_GPL(sst_hsw_dsp_init);
-
-void sst_hsw_dsp_free(struct device *dev, struct sst_pdata *pdata)
-{
-	struct sst_hsw *hsw = pdata->dsp;
-
-	snd_dma_free_pages(&hsw->trace_dma_descriptor);
-	snd_dma_free_pages(&hsw->dtrace_buffer);
-	sst_dsp_reset(hsw->dsp);
-	sst_fw_free_all(hsw->dsp);
-	dma_free_coherent(hsw->dsp->dma_dev, SST_HSW_DX_CONTEXT_SIZE,
-			hsw->dx_context, hsw->dx_context_paddr);
-	sst_dsp_free(hsw->dsp);
-	sst_ipc_fini(&hsw->ipc);
-}
-EXPORT_SYMBOL_GPL(sst_hsw_dsp_free);
-
-#endif
-
-
-void snd_soc_sof_shutdown(struct device *dev)
-{
-}
-EXPORT_SYMBOL(snd_soc_sof_shutdown);
-
 static int sof_probe(struct platform_device *pdev)
 {
 	struct snd_sof_pdata *plat_data = dev_get_platdata(&pdev->dev);
@@ -248,14 +85,14 @@ static int sof_probe(struct platform_device *pdev)
 	dev_set_drvdata(&pdev->dev, sdev);
 
 	/* probe the DSP hardware */
-	ret = snd_soc_sof_probe(sdev);
+	ret = snd_sof_probe(sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to probe DSP %d\n", ret);
 		return ret;
 	}
 
 	/* register any debug/trace capabilities */
-	ret = snd_soc_sof_init_debug(sdev);
+	ret = snd_sof_init_debug(sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to init DSP trace/debug %d\n", ret);
 		return ret;
@@ -269,21 +106,21 @@ static int sof_probe(struct platform_device *pdev)
 	}
 
 	/* load the firmware */
-	ret = snd_soc_sof_load_firmware(sdev, plat_data->fw);
+	ret = snd_sof_load_firmware(sdev, plat_data->fw);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to load DSP firmware %d\n", ret);
 		return ret;
 	}
 
 	/* boot the firmware */
-	ret = snd_soc_sof_run_firmware(sdev);
+	ret = snd_sof_run_firmware(sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to boot DSP firmware %d\n", ret);
 		return ret;
 	}
 
 	/* load the topology */
-	ret = snd_soc_sof_load_topology(sdev, plat_data->machine->tplg_filename);
+	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to load DSP topology %d\n", ret);
 		return ret;
@@ -303,21 +140,27 @@ static int sof_probe(struct platform_device *pdev)
 
 static int sof_remove(struct platform_device *pdev)
 {
-#if 0
-	struct sst_pdata *sst_pdata = dev_get_platdata(&pdev->dev);
+	struct snd_sof_dev *sdev = dev_get_drvdata(&pdev->dev);
 
 	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_component(&pdev->dev);
-	sst_hsw_dsp_free(&pdev->dev, sst_pdata);
-#endif
+	snd_sof_free_topology(sdev);
+	snd_sof_fw_unload(sdev);
+	snd_sof_ipc_free(sdev);
+	snd_sof_free_debug(sdev);
+	snd_sof_remove(sdev);
 	return 0;
 }
 
 
+void snd_sof_shutdown(struct device *dev)
+{
+}
+EXPORT_SYMBOL(snd_sof_shutdown);
+
 static struct platform_driver sof_driver = {
 	.driver = {
 		.name = "sof-audio",
-		//.pm = &sof_pm,
 	},
 
 	.probe = sof_probe,
