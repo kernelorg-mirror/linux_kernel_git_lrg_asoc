@@ -771,6 +771,7 @@ struct snd_soc_compr_ops {
 /* component interface */
 struct snd_soc_component_driver {
 	const char *name;
+	const char *alias;
 
 	/* Default control and setup, added after probe() is run */
 	const struct snd_kcontrol_new *controls;
