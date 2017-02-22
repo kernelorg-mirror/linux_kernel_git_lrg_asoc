@@ -107,7 +107,7 @@ struct snd_sof_mod_hdr {
 /*
  * Firmware file header.
  */
-struct snd_soc_sof_fw_header {
+struct snd_sof_fw_header {
 	unsigned char sig[SND_SOF_FW_SIG_SIZE]; /* "Reef" */
 	uint32_t file_size; 	/* size of file minus this header */
 	uint32_t num_modules; 	/* number of modules */

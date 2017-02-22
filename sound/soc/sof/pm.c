@@ -64,32 +64,32 @@
 #include <sound/soc.h>
 #include "sof-priv.h"
 
-int snd_soc_sof_runtime_suspend(struct device *dev)
+int snd_sof_runtime_suspend(struct device *dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_runtime_suspend);
+EXPORT_SYMBOL(snd_sof_runtime_suspend);
 
-int snd_soc_sof_runtime_resume(struct device *dev)
+int snd_sof_runtime_resume(struct device *dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_runtime_resume);
+EXPORT_SYMBOL(snd_sof_runtime_resume);
 
-int snd_soc_sof_resume(struct device *dev)
+int snd_sof_resume(struct device *dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_resume);
+EXPORT_SYMBOL(snd_sof_resume);
 
-int snd_soc_sof_suspend(struct device *dev)
+int snd_sof_suspend(struct device *dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_suspend);
+EXPORT_SYMBOL(snd_sof_suspend);
 
-int snd_soc_sof_suspend_late(struct device *dev)
+int snd_sof_suspend_late(struct device *dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_suspend_late);
+EXPORT_SYMBOL(snd_sof_suspend_late);

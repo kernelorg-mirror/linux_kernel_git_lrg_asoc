@@ -129,9 +129,9 @@ static void sof_pci_fw_cb(const struct firmware *fw, void *context)
 }
 
 static const struct dev_pm_ops sof_pci_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(snd_soc_sof_suspend, snd_soc_sof_resume)
-	SET_RUNTIME_PM_OPS(snd_soc_sof_runtime_suspend, snd_soc_sof_runtime_resume, NULL)
-	.suspend_late = snd_soc_sof_suspend_late,
+	SET_SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
+	SET_RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume, NULL)
+	.suspend_late = snd_sof_suspend_late,
 };
 
 static int sof_pci_probe(struct pci_dev *pci,
@@ -197,7 +197,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 
 static void sof_pci_shutdown(struct pci_dev *pci)
 {
-	snd_soc_sof_shutdown(&pci->dev);
+	snd_sof_shutdown(&pci->dev);
 }
 
 static void sof_pci_remove(struct pci_dev *pci)
@@ -213,9 +213,9 @@ static void sof_pci_remove(struct pci_dev *pci)
 
 static const struct snd_sof_machine sof_bxt_machines[] = {
 	{ "INT343A", "bxt_alc298s_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_soc_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_bxt_ops },
 	{ "DLGS7219", "bxt_da7219_max98357a_i2s", "intel/reef-bxt.ri",
-		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_soc_sof_bxt_ops },
+		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_bxt_ops },
 };
 
 static const struct sof_dev_desc bxt_desc = {
@@ -237,7 +237,7 @@ static const struct pci_device_id sof_pci_ids[] = {
 MODULE_DEVICE_TABLE(pci, sof_pci_ids);
 
 /* pci_driver definition */
-static struct pci_driver snd_soc_sof_pci_driver = {
+static struct pci_driver snd_sof_pci_driver = {
 	.name = KBUILD_MODNAME,
 	.id_table = sof_pci_ids,
 	.probe = sof_pci_probe,
@@ -247,4 +247,4 @@ static struct pci_driver snd_soc_sof_pci_driver = {
 		.pm = &sof_pci_pm,
 	},
 };
-module_pci_driver(snd_soc_sof_pci_driver);
+module_pci_driver(snd_sof_pci_driver);

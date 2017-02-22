@@ -69,7 +69,7 @@
 #include "ops.h"
 
 /* generic module parser for mmaped DSPs */
-int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
+int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 	struct snd_sof_mod_hdr *module)
 {
 	struct snd_sof_blk_hdr *block;
@@ -122,14 +122,14 @@ int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_parse_module_memcpy);
+EXPORT_SYMBOL(snd_sof_parse_module_memcpy);
 
 static int check_header(struct snd_sof_dev *sdev, const struct firmware *fw)
 {
-	struct snd_soc_sof_fw_header *header;
+	struct snd_sof_fw_header *header;
 
 	/* Read the header information from the data pointer */
-	header = (struct snd_soc_sof_fw_header *)fw->data;
+	header = (struct snd_sof_fw_header *)fw->data;
 
 	/* verify FW sig */
 	if (strncmp(header->sig, SND_SOF_FW_SIG, SND_SOF_FW_SIG_SIZE) != 0) {
@@ -153,13 +153,13 @@ static int check_header(struct snd_sof_dev *sdev, const struct firmware *fw)
 
 static int load_modules(struct snd_sof_dev *sdev, const struct firmware *fw)
 {
-	struct snd_soc_sof_fw_header *header;
+	struct snd_sof_fw_header *header;
 	struct snd_sof_mod_hdr *module;
 	int (*load_module)(struct snd_sof_dev *sof_dev,
 		struct snd_sof_mod_hdr *hdr);
 	int ret, count;
 
-	header = (struct snd_soc_sof_fw_header *)fw->data;
+	header = (struct snd_sof_fw_header *)fw->data;
 	load_module = sdev->ops->load_module;
 	if (load_module == NULL)
 		return -EINVAL;
@@ -180,7 +180,7 @@ static int load_modules(struct snd_sof_dev *sdev, const struct firmware *fw)
 	return 0;
 }
 
-int snd_soc_sof_load_firmware(struct snd_sof_dev *sdev,
+int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 	const struct firmware *fw)
 {
 	int ret;
@@ -199,11 +199,17 @@ int snd_soc_sof_load_firmware(struct snd_sof_dev *sdev,
 
 	return ret;
 }
-EXPORT_SYMBOL(snd_soc_sof_load_firmware);
+EXPORT_SYMBOL(snd_sof_load_firmware);
 
-int snd_soc_sof_run_firmware(struct snd_sof_dev *sof_dev)
+int snd_sof_run_firmware(struct snd_sof_dev *sof_dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_run_firmware);
+EXPORT_SYMBOL(snd_sof_run_firmware);
+
+void snd_sof_fw_unload(struct snd_sof_dev *sdev)
+{
+
+}
+EXPORT_SYMBOL(snd_sof_fw_unload);
 

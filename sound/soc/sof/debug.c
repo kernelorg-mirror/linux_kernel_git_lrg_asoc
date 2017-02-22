@@ -167,3 +167,9 @@ int snd_sof_dbg_init(struct snd_sof_dev *sdev)
 	return err;
 }
 EXPORT_SYMBOL(snd_sof_dbg_init);
+
+void snd_sof_free_debug(struct snd_sof_dev *sdev)
+{
+
+}
+EXPORT_SYMBOL(snd_sof_free_debug);

@@ -196,16 +196,16 @@ static struct snd_soc_tplg_ops sof_tplg_ops = {
 	.bytes_ext_ops_count	= ARRAY_SIZE(sof_bytes_ext_ops),
 };
 
-int snd_soc_sof_init_topology(struct snd_sof_dev *sdev,
+int snd_sof_init_topology(struct snd_sof_dev *sdev,
 	struct snd_soc_tplg_ops *ops)
 {
 	/* TODO: support linked list of topologies */
 	sdev->tplg_ops = ops;
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_init_topology);
+EXPORT_SYMBOL(snd_sof_init_topology);
 
-int snd_soc_sof_load_topology(struct snd_sof_dev *sdev, const char *file)
+int snd_sof_load_topology(struct snd_sof_dev *sdev, const char *file)
 {
 	const struct firmware *fw;
 	struct snd_soc_tplg_hdr *hdr;
@@ -229,4 +229,10 @@ int snd_soc_sof_load_topology(struct snd_sof_dev *sdev, const char *file)
 
 	return 0;
 }
-EXPORT_SYMBOL(snd_soc_sof_load_topology);
+EXPORT_SYMBOL(snd_sof_load_topology);
+
+void snd_sof_free_topology(struct snd_sof_dev *sdev)
+{
+
+}
+EXPORT_SYMBOL(snd_sof_free_topology);

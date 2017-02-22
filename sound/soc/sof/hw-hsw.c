@@ -206,16 +206,16 @@ static struct sst_dsp_device hsw_dev = {
 };
 
 /* haswell ops */
-struct snd_sof_dsp_ops snd_soc_sof_hsw_ops = {
+struct snd_sof_dsp_ops snd_sof_hsw_ops = {
 
 
 };
-EXPORT_SYMBOL(snd_soc_sof_hsw_ops);
+EXPORT_SYMBOL(snd_sof_hsw_ops);
 
 
 /* broadwell ops */
-struct snd_sof_dsp_ops snd_soc_sof_bdw_ops = {
+struct snd_sof_dsp_ops snd_sof_bdw_ops = {
 
 };
-EXPORT_SYMBOL(snd_soc_sof_bdw_ops);
+EXPORT_SYMBOL(snd_sof_bdw_ops);
 

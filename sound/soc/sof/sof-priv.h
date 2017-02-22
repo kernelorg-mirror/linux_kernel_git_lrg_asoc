@@ -72,7 +72,7 @@
 #define SOF_DBG_MBOX	(1 << 2)
 
 /* max BARs mmaped devices can use */
-#define SND_SOC_SOF_BARS	8
+#define snd_sof_BARS	8
 
 /* time in ms for runtime suspend delay */
 #define SND_SOF_SUSPEND_DELAY	2000
@@ -200,7 +200,7 @@ struct snd_sof_dev {
 	struct snd_sof_mailbox outbox;
 
 	/* memory bases for mmaped DSPs - set by dsp_init() */
-	void __iomem *bar[SND_SOC_SOF_BARS];		/* DSP base address */
+	void __iomem *bar[snd_sof_BARS];		/* DSP base address */
 
 	struct dentry *debugfs_root;
 
@@ -221,21 +221,22 @@ struct snd_sof_dev {
  * Device Level.
  */
 
-void snd_soc_sof_shutdown(struct device *dev);
-int snd_soc_sof_runtime_suspend(struct device *dev);
-int snd_soc_sof_runtime_resume(struct device *dev);
-int snd_soc_sof_resume(struct device *dev);
-int snd_soc_sof_suspend(struct device *dev);
-int snd_soc_sof_suspend_late(struct device *dev);
+void snd_sof_shutdown(struct device *dev);
+int snd_sof_runtime_suspend(struct device *dev);
+int snd_sof_runtime_resume(struct device *dev);
+int snd_sof_resume(struct device *dev);
+int snd_sof_suspend(struct device *dev);
+int snd_sof_suspend_late(struct device *dev);
 
 /*
  * Firmware loading.
  */
-int snd_soc_sof_load_firmware(struct snd_sof_dev *sdev,
+int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 	const struct firmware *fw);
-int snd_soc_sof_run_firmware(struct snd_sof_dev *sdev);
-int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
+int snd_sof_run_firmware(struct snd_sof_dev *sdev);
+int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 	struct snd_sof_mod_hdr *module);
+void snd_sof_fw_unload(struct snd_sof_dev *sdev);
 
 
 /*
@@ -243,6 +244,7 @@ int snd_soc_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
  */
 
 struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev);
+void snd_sof_ipc_free(struct snd_sof_dev *sdev);
 void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id);
 void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id);
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev);
@@ -252,24 +254,27 @@ int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
 /*
  * Topology.
  */
-int snd_soc_sof_init_topology(struct snd_sof_dev *sdev,
+int snd_sof_init_topology(struct snd_sof_dev *sdev,
 	struct snd_soc_tplg_ops *ops);
-int snd_soc_sof_load_topology(struct snd_sof_dev *sdev, const char *file);
+int snd_sof_load_topology(struct snd_sof_dev *sdev, const char *file);
+void snd_sof_free_topology(struct snd_sof_dev *sdev);
+	
 
 /*
  * Trace/debug
  */
-int snd_soc_sof_init_debug(struct snd_sof_dev *sdev);
+int snd_sof_init_debug(struct snd_sof_dev *sdev);
+void snd_sof_free_debug(struct snd_sof_dev *sdev);
 
 /*
  * Platform specific ops.
  */
 
-extern struct snd_sof_dsp_ops snd_soc_sof_byt_ops;
-extern struct snd_sof_dsp_ops snd_soc_sof_cht_ops;
-extern struct snd_sof_dsp_ops snd_soc_sof_hsw_ops;
-extern struct snd_sof_dsp_ops snd_soc_sof_bdw_ops;
-extern struct snd_sof_dsp_ops snd_soc_sof_bxt_ops;
+extern struct snd_sof_dsp_ops snd_sof_byt_ops;
+extern struct snd_sof_dsp_ops snd_sof_cht_ops;
+extern struct snd_sof_dsp_ops snd_sof_hsw_ops;
+extern struct snd_sof_dsp_ops snd_sof_bdw_ops;
+extern struct snd_sof_dsp_ops snd_sof_bxt_ops;
 
 /*
  * ASoC components.
