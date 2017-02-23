@@ -124,6 +124,10 @@ struct sof_dev_desc {
 	/* DMA only valid when resindex_dma_base != -1*/
 	int dma_engine;
 	int dma_size;
+
+	/* IPC timeouts in ms */
+	int ipc_timeout;
+	int boot_timeout;
 };
 
 #endif

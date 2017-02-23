@@ -66,6 +66,9 @@
 #include "sof-priv.h"
 #include "ops.h"
 
+#define TIMEOUT_IPC	5
+#define TIMEOUT_BOOT	100
+
 static int sof_probe(struct platform_device *pdev)
 {
 	struct snd_sof_pdata *plat_data = dev_get_platdata(&pdev->dev);
@@ -83,6 +86,16 @@ static int sof_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&sdev->pcm_list);
 	INIT_LIST_HEAD(&sdev->kcontrol_list);
 	dev_set_drvdata(&pdev->dev, sdev);
+
+	/* set timeouts if none provided */
+	if (plat_data->desc->ipc_timeout == 0)
+		sdev->ipc_timeout = TIMEOUT_IPC;
+	else
+		sdev->ipc_timeout = plat_data->desc->ipc_timeout;
+	if (plat_data->desc->boot_timeout == 0)
+		sdev->boot_timeout = TIMEOUT_BOOT;
+	else
+		sdev->boot_timeout = plat_data->desc->boot_timeout;
 
 	/* probe the DSP hardware */
 	ret = snd_sof_probe(sdev);

@@ -72,7 +72,7 @@
 #define SOF_DBG_MBOX	(1 << 2)
 
 /* max BARs mmaped devices can use */
-#define snd_sof_BARS	8
+#define SND_SOF_BARS	8
 
 /* time in ms for runtime suspend delay */
 #define SND_SOF_SUSPEND_DELAY	2000
@@ -190,6 +190,9 @@ struct snd_sof_dev {
 	struct device *parent;
 	spinlock_t spinlock;
 
+	wait_queue_head_t boot_wait;
+	bool boot_complete;
+
 	struct pci_dev *pci;
 
 	struct snd_sof_pdata *pdata;
@@ -200,7 +203,7 @@ struct snd_sof_dev {
 	struct snd_sof_mailbox outbox;
 
 	/* memory bases for mmaped DSPs - set by dsp_init() */
-	void __iomem *bar[snd_sof_BARS];		/* DSP base address */
+	void __iomem *bar[SND_SOF_BARS];		/* DSP base address */
 
 	struct dentry *debugfs_root;
 
@@ -212,7 +215,10 @@ struct snd_sof_dev {
 	struct list_head pcm_list;
 	struct list_head kcontrol_list;
 	struct snd_soc_component *component;
-	
+
+	/* IPC timeouts in ms */
+	int ipc_timeout;
+	int boot_timeout;
 
 	void *private;			/* core does not touch this */
 };
