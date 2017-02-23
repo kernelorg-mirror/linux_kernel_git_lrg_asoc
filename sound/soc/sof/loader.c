@@ -185,15 +185,24 @@ int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 {
 	int ret;
 
+	/* make sure the FW header and file is valid */
 	ret = check_header(sdev, fw);
 	if (ret < 0) {
-		dev_err(sdev->dev, "invalid FW header\n");
+		dev_err(sdev->dev, "error: invalid FW header\n");
 		return ret;
 	}
 
+	/* prepare the DSP for FW loading */
+	ret = snd_sof_dsp_reset(sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to reset DSP\n");
+		return ret;
+	}
+
+	/* parse and load firmware modules to DSP */
 	ret = load_modules(sdev, fw);
 	if (ret < 0) {
-		dev_err(sdev->dev, "invalid FW modules\n");
+		dev_err(sdev->dev, "error: invalid FW modules\n");
 		return ret;
 	}
 
@@ -201,8 +210,28 @@ int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 }
 EXPORT_SYMBOL(snd_sof_load_firmware);
 
-int snd_sof_run_firmware(struct snd_sof_dev *sof_dev)
+int snd_sof_run_firmware(struct snd_sof_dev *sdev)
 {
+	int ret;
+
+	init_waitqueue_head(&sdev->boot_wait);
+	sdev->boot_complete = false;
+
+	/* boot the firmware on the DSP */
+	ret = snd_sof_dsp_run(sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to reset DSP\n");
+		return ret;
+	}
+
+	/* now wait for the DSP to boot */
+	ret = wait_event_timeout(sdev->boot_wait, sdev->boot_complete,
+		msecs_to_jiffies(sdev->boot_timeout));
+	if (ret == 0) {
+		dev_err(sdev->dev, "error: firmware boot timeout\n");
+		return -EIO;
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(snd_sof_run_firmware);

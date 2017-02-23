@@ -232,6 +232,8 @@ static const struct pci_device_id sof_pci_ids[] = {
 	/* BXT-P */
 	{ PCI_DEVICE(0x8086, 0x5a98),
 		.driver_data = (unsigned long)&bxt_desc},
+	{ PCI_DEVICE(0x8086, 0x1a98),
+		.driver_data = (unsigned long)&bxt_desc},
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, sof_pci_ids);
