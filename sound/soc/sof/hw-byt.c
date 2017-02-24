@@ -455,3 +455,5 @@ struct snd_sof_dsp_ops snd_sof_cht_ops = {
 	.load_module	= snd_sof_parse_module_memcpy,
 };
 EXPORT_SYMBOL(snd_sof_cht_ops);
+
+MODULE_LICENSE("Dual BSD/GPL");

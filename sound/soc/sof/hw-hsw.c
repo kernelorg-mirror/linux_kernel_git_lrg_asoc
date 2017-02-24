@@ -219,3 +219,4 @@ struct snd_sof_dsp_ops snd_sof_bdw_ops = {
 };
 EXPORT_SYMBOL(snd_sof_bdw_ops);
 
+MODULE_LICENSE("Dual BSD/GPL");
