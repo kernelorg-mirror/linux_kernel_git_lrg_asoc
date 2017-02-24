@@ -454,3 +454,5 @@ struct snd_sof_dsp_ops snd_sof_apl_ops = {
 
 };
 EXPORT_SYMBOL(snd_sof_apl_ops);
+
+MODULE_LICENSE("Dual BSD/GPL");
