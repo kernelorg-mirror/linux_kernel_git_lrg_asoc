@@ -57,6 +57,8 @@
  * Hardware interface for audio DSP on Byatrail, Braswell and Cherrytrail.
  */
 
+#define DEBUG
+
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -67,6 +69,7 @@
 #include <linux/firmware.h>
 #include <trace/events/hswadsp.h>
 #include <linux/device.h>
+#include <sound/sof.h>
 #include <uapi/sound/sof-fw.h>
 
 #include "sof-priv.h"
@@ -74,44 +77,66 @@
 #include "intel.h"
 
 /* DSP memories */
-#define BYT_IRAM_OFFSET		0x0C0000
-#define BYT_IRAM_SIZE		(80 * 1024)
-#define BYT_DRAM_OFFSET		0x100000
-#define BYT_DRAM_SIZE		(160 * 1024)
-#define BYT_SHIM_OFFSET		0x140000
-#define BYT_SHIM_SIZE		0x100
-#define BYT_MBOX_OFFSET		0x144000
-#define BYT_MBOX_SIZE		0x1000
+#define IRAM_OFFSET		0x0C0000
+#define IRAM_SIZE		(80 * 1024)
+#define DRAM_OFFSET		0x100000
+#define DRAM_SIZE		(160 * 1024)
+#define SHIM_OFFSET		0x140000
+#define SHIM_SIZE		0x100
+#define MBOX_OFFSET		0x144000
+#define MBOX_SIZE		0x1000
 
 /* DSP peripherals */
-#define BYT_DMAC0_OFFSET	0x098000
-#define BYT_DMAC1_OFFSET	0x09c000
-#define BYT_DMAC_SIZE		0x420
-#define BYT_SSP0_OFFSET		0x0a0000
-#define BYT_SSP1_OFFSET		0x0a1000
-#define BYT_SSP2_OFFSET		0x0a2000
-#define BYT_SSP_SIZE		0x100
+#define DMAC0_OFFSET		0x098000
+#define DMAC1_OFFSET		0x09c000
+#define DMAC2_OFFSET		0x094000
+#define DMAC_SIZE		0x420
+#define SSP0_OFFSET		0x0a0000
+#define SSP1_OFFSET		0x0a1000
+#define SSP2_OFFSET		0x0a2000
+#define SSP3_OFFSET		0x0a4000
+#define SSP4_OFFSET		0x0a5000
+#define SSP5_OFFSET		0x0a6000
+#define SSP_SIZE		0x100
 
 
 /*
  * Debug
  */
 
-#define BYT_MBOX_DUMP_SIZE	0x30
+#define MBOX_DUMP_SIZE	0x30
 
 /* BARs */
 #define BYT_DSP_BAR		0
+#define BYT_PCI_BAR		1
+#define BYT_IMR_BAR		2
 
 static const struct snd_sof_debugfs_map byt_debugfs[] = {
-	{"dmac0", BYT_DSP_BAR, BYT_DMAC0_OFFSET, BYT_DMAC_SIZE},
-	{"dmac1", BYT_DSP_BAR,  BYT_DMAC1_OFFSET, BYT_DMAC_SIZE},
-	{"ssp0",  BYT_DSP_BAR, BYT_SSP0_OFFSET, BYT_SSP_SIZE},
-	{"ssp1", BYT_DSP_BAR, BYT_SSP1_OFFSET, BYT_SSP_SIZE},
-	{"ssp2", BYT_DSP_BAR, BYT_SSP2_OFFSET, BYT_SSP_SIZE},
-	{"iram", BYT_DSP_BAR, BYT_IRAM_OFFSET, BYT_IRAM_SIZE},
-	{"dram", BYT_DSP_BAR, BYT_DRAM_OFFSET, BYT_DRAM_SIZE},
-	{"shim", BYT_DSP_BAR, BYT_SHIM_OFFSET, BYT_SHIM_SIZE},
-	{"mbox", BYT_DSP_BAR, BYT_MBOX_OFFSET, BYT_MBOX_SIZE},
+	{"dmac0", BYT_DSP_BAR, DMAC0_OFFSET, DMAC_SIZE},
+	{"dmac1", BYT_DSP_BAR,  DMAC1_OFFSET, DMAC_SIZE},
+	{"ssp0",  BYT_DSP_BAR, SSP0_OFFSET, SSP_SIZE},
+	{"ssp1", BYT_DSP_BAR, SSP1_OFFSET, SSP_SIZE},
+	{"ssp2", BYT_DSP_BAR, SSP2_OFFSET, SSP_SIZE},
+	{"iram", BYT_DSP_BAR, IRAM_OFFSET, IRAM_SIZE},
+	{"dram", BYT_DSP_BAR, DRAM_OFFSET, DRAM_SIZE},
+	{"shim", BYT_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
+	{"mbox", BYT_DSP_BAR, MBOX_OFFSET, MBOX_SIZE},
+};
+
+static const struct snd_sof_debugfs_map cht_debugfs[] = {
+	{"dmac0", BYT_DSP_BAR, DMAC0_OFFSET, DMAC_SIZE},
+	{"dmac1", BYT_DSP_BAR,  DMAC1_OFFSET, DMAC_SIZE},
+	{"dmac2", BYT_DSP_BAR,  DMAC2_OFFSET, DMAC_SIZE},
+	{"ssp0",  BYT_DSP_BAR, SSP0_OFFSET, SSP_SIZE},
+	{"ssp1", BYT_DSP_BAR, SSP1_OFFSET, SSP_SIZE},
+	{"ssp2", BYT_DSP_BAR, SSP2_OFFSET, SSP_SIZE},
+	{"ssp3", BYT_DSP_BAR, SSP3_OFFSET, SSP_SIZE},
+	{"ssp4", BYT_DSP_BAR, SSP4_OFFSET, SSP_SIZE},
+	{"ssp5", BYT_DSP_BAR, SSP5_OFFSET, SSP_SIZE},
+	{"iram", BYT_DSP_BAR, IRAM_OFFSET, IRAM_SIZE},
+	{"dram", BYT_DSP_BAR, DRAM_OFFSET, DRAM_SIZE},
+	{"shim", BYT_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
+	{"mbox", BYT_DSP_BAR, MBOX_OFFSET, MBOX_SIZE},
 };
 
 static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
@@ -119,17 +144,33 @@ static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
 	int i;
 
 	if (flags & SOF_DBG_REGS) {
-		for (i = 0; i < BYT_SHIM_SIZE; i+=8 ) {
+		for (i = SHIM_OFFSET; i < SHIM_OFFSET  + SHIM_SIZE; i += 8 ) {
 			dev_dbg(sdev->dev, "shim 0x%2.2x value 0x%16.16llx\n",
-				i, snd_sof_dsp_read64(sdev, BYT_DSP_BAR, i));
+				i - SHIM_OFFSET, 
+				snd_sof_dsp_read64(sdev, BYT_DSP_BAR, i));
 		}
 	}
 
 	if (flags & SOF_DBG_MBOX) {
-		for (i = 0; i < BYT_MBOX_DUMP_SIZE; i++) {
-			dev_dbg(sdev->dev, "mbox: %d value 0x%8.8x\n", i,
-				readl(sdev->bar[BYT_DSP_BAR] +
-					i * 4 + BYT_MBOX_OFFSET));
+		for (i = MBOX_OFFSET; i < MBOX_OFFSET + MBOX_DUMP_SIZE; i += 4) {
+			dev_dbg(sdev->dev, "mbox: 0x%2.2x value 0x%8.8x\n",
+				i - MBOX_OFFSET,
+				readl(sdev->bar[BYT_DSP_BAR] + i));
+		}
+	}
+
+	if (flags & SOF_DBG_TEXT) {
+		for (i = IRAM_OFFSET; i < IRAM_OFFSET + MBOX_DUMP_SIZE; i += 4) {
+			dev_dbg(sdev->dev, "iram: 0x%2.2x value 0x%8.8x\n",
+				i - IRAM_OFFSET,
+				readl(sdev->bar[BYT_DSP_BAR] + i));
+		}
+	}
+
+	if (flags & SOF_DBG_PCI) {
+		for (i = 0; i < 0xff; i += 4) {
+			dev_dbg(sdev->dev, "pci: 0x%2.2x value 0x%8.8x\n",
+				i, readl(sdev->bar[BYT_PCI_BAR] + i));
 		}
 	}
 }
@@ -332,7 +373,7 @@ static int byt_run(struct snd_sof_dev *sdev)
 		msleep(100);
 	}
 	if (tries < 0) {
-		dev_err(sdev->dev, "unable to run DSP firmware\n");
+		dev_err(sdev->dev, "error:  unable to run DSP firmware\n");
 		byt_dump(sdev, SOF_DBG_REGS | SOF_DBG_MBOX);
 		return -ENODEV;
 	}
@@ -359,14 +400,118 @@ static int byt_reset(struct snd_sof_dev *sdev)
  * Probe and remove.
  */
 /* probe and remove */
-static int byt_remove(struct snd_sof_dev *sof_dev)
+static int byt_remove(struct snd_sof_dev *sdev)
 {
+	struct snd_sof_pdata *pdata = sdev->pdata;
+	const struct sof_dev_desc *desc = pdata->desc;
+
+	iounmap(sdev->bar[BYT_DSP_BAR]);
+	iounmap(sdev->bar[BYT_PCI_BAR]);
+	iounmap(sdev->bar[BYT_IMR_BAR]);
+	free_irq(desc->irqindex_host_ipc, sdev);
 	return 0;
 }
 
-static int byt_probe(struct snd_sof_dev *sof_dev)
+static int byt_probe(struct snd_sof_dev *sdev)
 {
-	return 0;
+	struct snd_sof_pdata *pdata = sdev->pdata;
+	const struct sof_dev_desc *desc = pdata->desc;
+	struct platform_device *pdev =
+		container_of(sdev->parent, struct platform_device, dev);
+	struct resource *mmio;
+	u32 base, size;
+	int ret = 0;
+
+	/* DSP DMA can only access low 31 bits of host memory */
+	ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
+		return ret;
+	}
+
+	/* LPE base */
+	mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+		desc->resindex_lpe_base);
+	if (mmio) {
+		base = mmio->start;
+		size = resource_size(mmio);
+	} else {
+		dev_err(sdev->dev, "error: failed to get LPE base at idx %d\n",
+			desc->resindex_lpe_base);
+		return -EINVAL;
+	}
+
+	sdev->bar[BYT_DSP_BAR] = ioremap(base, size);
+	if (sdev->bar[BYT_DSP_BAR] == NULL) {
+		dev_err(sdev->dev, "error: failed to ioremap LPE base 0x%x size 0x%x\n",
+			base, size);
+		return -ENODEV;
+	}
+
+	/* PCI base */
+	mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+		desc->resindex_pcicfg_base);
+	if (mmio) {
+		base = mmio->start;
+		size = resource_size(mmio);
+	} else {
+		dev_err(sdev->dev, "error: failed to get PCI base at idx %d\n",
+			desc->resindex_pcicfg_base);
+		iounmap(sdev->bar[BYT_DSP_BAR]);
+		return -EINVAL;
+	}
+
+	sdev->bar[BYT_PCI_BAR] = ioremap(base, size);
+	if (sdev->bar[BYT_PCI_BAR] == NULL) {
+		dev_err(sdev->dev, "error: failed to ioremap PCI base 0x%x size 0x%x\n",
+			base, size);
+		iounmap(sdev->bar[BYT_DSP_BAR]);
+		return -ENODEV;
+	}
+
+	/* IMR base - optional */
+	if (desc->resindex_imr_base == -1)
+		goto irq;
+
+	mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+		desc->resindex_imr_base);
+	if (mmio) {
+		base = mmio->start;
+		size = resource_size(mmio);
+	} else {
+		dev_err(sdev->dev, "error: failed to get IMR base at idx %d\n",
+			desc->resindex_imr_base);
+		iounmap(sdev->bar[BYT_DSP_BAR]);
+		iounmap(sdev->bar[BYT_PCI_BAR]);
+		return -EINVAL;
+	}
+
+	sdev->bar[BYT_IMR_BAR] = ioremap(base, size);
+	if (sdev->bar[BYT_IMR_BAR] == NULL) {
+		dev_err(sdev->dev, "error: failed to ioremap IMR base 0x%x size 0x%x\n",
+			base, size);
+		iounmap(sdev->bar[BYT_DSP_BAR]);
+		iounmap(sdev->bar[BYT_PCI_BAR]);
+		return -ENODEV;
+	}
+
+irq:
+	/* register our IRQ */
+	ret = request_threaded_irq(desc->irqindex_host_ipc, byt_irq_handler,
+		byt_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to get IRQ %d\n",
+			desc->irqindex_host_ipc);
+		iounmap(sdev->bar[BYT_DSP_BAR]);
+		iounmap(sdev->bar[BYT_PCI_BAR]);
+		iounmap(sdev->bar[BYT_IMR_BAR]);
+	}
+
+	/* enable Interrupt from both sides */
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRX, 0x3, 0x0);
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRD, 0x3, 0x0);
+
+	return ret;
 }
 
 
@@ -447,8 +592,8 @@ struct snd_sof_dsp_ops snd_sof_cht_ops = {
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */
-	.debug_map	= byt_debugfs,
-	.debug_map_count	= ARRAY_SIZE(byt_debugfs),
+	.debug_map	= cht_debugfs,
+	.debug_map_count	= ARRAY_SIZE(cht_debugfs),
 	.dbg_dump	= byt_dump,
 
 	/* module loading */

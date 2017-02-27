@@ -61,28 +61,27 @@
  * SHIM registers for BYT, BSW, CHT HSW, BDW
  */
 
-#define SHIM_CSR		0x00
-#define SHIM_PISR		0x08
-#define SHIM_PIMR		0x10
-#define SHIM_ISRX		0x18
-#define SHIM_ISRD		0x20
-#define SHIM_IMRX		0x28
-#define SHIM_IMRD		0x30
-#define SHIM_IPCX		0x38
-#define SHIM_IPCD		0x40
-#define SHIM_ISRSC		0x48
-#define SHIM_ISRLPESC		0x50
-#define SHIM_IMRSC		0x58
-#define SHIM_IMRLPESC		0x60
-#define SHIM_IPCSC		0x68
-#define SHIM_IPCLPESC		0x70
-#define SHIM_CLKCTL		0x78
-#define SHIM_CSR2		0x80
-#define SHIM_LTRC		0xE0
-#define SHIM_HMDC		0xE8
+#define SHIM_CSR		(SHIM_OFFSET + 0x00)
+#define SHIM_PISR		(SHIM_OFFSET + 0x08)
+#define SHIM_PIMR		(SHIM_OFFSET + 0x10)
+#define SHIM_ISRX		(SHIM_OFFSET + 0x18)
+#define SHIM_ISRD		(SHIM_OFFSET + 0x20)
+#define SHIM_IMRX		(SHIM_OFFSET + 0x28)
+#define SHIM_IMRD		(SHIM_OFFSET + 0x30)
+#define SHIM_IPCX		(SHIM_OFFSET + 0x38)
+#define SHIM_IPCD		(SHIM_OFFSET + 0x40)
+#define SHIM_ISRSC		(SHIM_OFFSET + 0x48)
+#define SHIM_ISRLPESC		(SHIM_OFFSET + 0x50)
+#define SHIM_IMRSC		(SHIM_OFFSET + 0x58)
+#define SHIM_IMRLPESC		(SHIM_OFFSET + 0x60)
+#define SHIM_IPCSC		(SHIM_OFFSET + 0x68)
+#define SHIM_IPCLPESC		(SHIM_OFFSET + 0x70)
+#define SHIM_CLKCTL		(SHIM_OFFSET + 0x78)
+#define SHIM_CSR2		(SHIM_OFFSET + 0x80)
+#define SHIM_LTRC		(SHIM_OFFSET + 0xE0)
+#define SHIM_HMDC		(SHIM_OFFSET + 0xE8)
 
 
-#define SHIM_SIZE		0x100
 #define SHIM_PWMCTRL		0x1000
 
 

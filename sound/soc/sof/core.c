@@ -79,6 +79,7 @@ static int sof_probe(struct platform_device *pdev)
 	if (sdev == NULL)
 		return -ENOMEM;
 
+	/* intialise sof device */
 	sdev->dev = &pdev->dev;
 	sdev->parent = plat_data->dev;
 	sdev->ops = plat_data->machine->ops;
@@ -87,7 +88,7 @@ static int sof_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&sdev->kcontrol_list);
 	dev_set_drvdata(&pdev->dev, sdev);
 
-	/* set timeouts if none provided */
+	/* set default timeouts if none provided */
 	if (plat_data->desc->ipc_timeout == 0)
 		sdev->ipc_timeout = TIMEOUT_IPC;
 	else
@@ -100,42 +101,42 @@ static int sof_probe(struct platform_device *pdev)
 	/* probe the DSP hardware */
 	ret = snd_sof_probe(sdev);
 	if (ret < 0) {
-		dev_err(sdev->dev, "failed to probe DSP %d\n", ret);
+		dev_err(sdev->dev, "error: failed to probe DSP %d\n", ret);
 		return ret;
 	}
 
 	/* register any debug/trace capabilities */
 	ret = snd_sof_init_debug(sdev);
 	if (ret < 0) {
-		dev_err(sdev->dev, "failed to init DSP trace/debug %d\n", ret);
+		dev_err(sdev->dev, "error: failed to init DSP trace/debug %d\n", ret);
 		return ret;
 	}
 
 	/* init the IPC */
 	sdev->ipc = snd_sof_ipc_init(sdev);
 	if (sdev->ipc < 0) {
-		dev_err(sdev->dev, "failed to init DSP IPC %d\n", ret);
+		dev_err(sdev->dev, "error: failed to init DSP IPC %d\n", ret);
 		return ret;
 	}
 
 	/* load the firmware */
 	ret = snd_sof_load_firmware(sdev, plat_data->fw);
 	if (ret < 0) {
-		dev_err(sdev->dev, "failed to load DSP firmware %d\n", ret);
+		dev_err(sdev->dev, "error: failed to load DSP firmware %d\n", ret);
 		return ret;
 	}
 
 	/* boot the firmware */
 	ret = snd_sof_run_firmware(sdev);
 	if (ret < 0) {
-		dev_err(sdev->dev, "failed to boot DSP firmware %d\n", ret);
+		dev_err(sdev->dev, "error: failed to boot DSP firmware %d\n", ret);
 		return ret;
 	}
 
 	/* load the topology */
 	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
 	if (ret < 0) {
-		dev_err(sdev->dev, "failed to load DSP topology %d\n", ret);
+		dev_err(sdev->dev, "error: failed to load DSP topology %d\n", ret);
 		return ret;
 	}
 
@@ -143,10 +144,9 @@ static int sof_probe(struct platform_device *pdev)
 	ret = snd_soc_register_platform(&pdev->dev, &sof_soc_platform);
 	if (ret < 0) {
 		dev_err(sdev->dev,
-			"failed to register DSP platform driver %d\n", ret);
+			"error: failed to register DSP platform driver %d\n", ret);
 		return ret;
 	}
-
 
 	return 0;
 }

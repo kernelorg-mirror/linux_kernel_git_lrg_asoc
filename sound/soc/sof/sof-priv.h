@@ -70,6 +70,8 @@
 /* debug flags */
 #define SOF_DBG_REGS	(1 << 1)
 #define SOF_DBG_MBOX	(1 << 2)
+#define SOF_DBG_TEXT	(1 << 3)
+#define SOF_DBG_PCI	(1 << 4)
 
 /* max BARs mmaped devices can use */
 #define SND_SOF_BARS	8

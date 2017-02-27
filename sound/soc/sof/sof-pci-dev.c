@@ -67,7 +67,6 @@
 #include "sof-priv.h"
 
 struct sof_pci_priv {
-	struct device *dev;
 	struct snd_sof_pdata *sof_pdata;
 	struct platform_device *pdev_pcm;
 };
@@ -104,11 +103,10 @@ static const struct snd_sof_machine *
 
 static void sof_pci_fw_cb(const struct firmware *fw, void *context)
 {
-
 	struct sof_pci_priv *priv = context;
-	struct device *dev = priv->dev;
 	struct snd_sof_pdata *sof_pdata = priv->sof_pdata;
 	const struct snd_sof_machine *mach = sof_pdata->machine;
+	struct device *dev = sof_pdata->dev;
 
 	sof_pdata->fw = fw;
 	if (!fw) {
@@ -177,7 +175,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	sof_pdata->machine = mach;
 	sof_pdata->desc = (struct sof_dev_desc*) pci_id->driver_data;
 	priv->sof_pdata = sof_pdata;
-	priv->dev = &pci->dev;
+	sof_pdata->dev = &pci->dev;
 
 	/* register machine driver */
 	sof_pdata->pdev_mach =
@@ -222,7 +220,7 @@ static const struct sof_dev_desc bxt_desc = {
 	.machines		= sof_bxt_machines,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
-	.resindex_fw_base	= -1,
+	.resindex_imr_base	= -1,
 	.irqindex_host_ipc	= -1,
 	.resindex_dma_base	= -1,
 };

@@ -55,6 +55,8 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#define DEBUG
+
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -229,6 +231,8 @@ int snd_sof_run_firmware(struct snd_sof_dev *sdev)
 		msecs_to_jiffies(sdev->boot_timeout));
 	if (ret == 0) {
 		dev_err(sdev->dev, "error: firmware boot timeout\n");
+		snd_sof_dsp_dbg_dump(sdev, SOF_DBG_REGS | SOF_DBG_MBOX |
+			SOF_DBG_TEXT | SOF_DBG_PCI);
 		return -EIO;
 	}
 
