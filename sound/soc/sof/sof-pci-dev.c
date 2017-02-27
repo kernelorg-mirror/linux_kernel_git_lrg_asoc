@@ -165,9 +165,10 @@ static int sof_pci_probe(struct pci_dev *pci,
 	/* find machine */
 	mach = find_machine(desc->machines);
 	if (mach == NULL) {
+		/* dont bind to any particular codec, just initialse the DSP */
 		dev_err(dev, "No matching ASoC machine driver found - using blind\n");
 		sof_pdata->drv_name = "reef-blind";
-		mach = &reef_blind;
+		mach = &desc->machines[0]; /* pick the first - dont care about codec */
 	}
 
 	sof_pdata->id = pci_id->device;

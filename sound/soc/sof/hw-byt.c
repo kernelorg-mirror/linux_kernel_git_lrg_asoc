@@ -486,6 +486,12 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		return -EINVAL;
 	}
 
+	/* some BIOSes dont map IMR */
+	if (base == 0x55aa55aa) {
+		dev_info(sdev->dev, "IMR not set by BIOS. Ignoring\n");
+		goto irq;
+	}
+
 	sdev->bar[BYT_IMR_BAR] = ioremap(base, size);
 	if (sdev->bar[BYT_IMR_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap IMR base 0x%x size 0x%x\n",
