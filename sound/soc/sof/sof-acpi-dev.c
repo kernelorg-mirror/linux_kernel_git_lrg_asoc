@@ -137,7 +137,6 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	const struct sof_dev_desc *desc;
 	const struct snd_sof_machine *mach;
-	struct snd_sof_machine reef_blind;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_acpi_priv *priv;
 	int ret = 0;
@@ -158,9 +157,10 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	/* find machine */
 	mach = find_machine(desc->machines);
 	if (mach == NULL) {
+		/* dont bind to any particular codec, just initialse the DSP */
 		dev_err(dev, "No matching ASoC machine driver found - using blind\n");
 		sof_pdata->drv_name = "reef-blind";
-		mach = &reef_blind;
+		mach = &desc->machines[0]; /* pick the first - dont care about codec */
 	}
 
 	//sof_pdata->id = acpi_id->device;
