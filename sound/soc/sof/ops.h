@@ -130,6 +130,13 @@ static inline int snd_sof_dsp_set_clk(struct snd_sof_dev *sdev, u32 freq)
 		return 0;
 }
 
+/* debug */
+static inline void snd_sof_dsp_dbg_dump(struct snd_sof_dev *sdev, u32 flags)
+{
+	if (sdev->ops->dbg_dump)
+		return sdev->ops->dbg_dump(sdev, flags);
+}
+
 /* register IO */
 static inline void snd_sof_dsp_write(struct snd_sof_dev *sdev, u32 bar,
 	u32 offset, u32 value)

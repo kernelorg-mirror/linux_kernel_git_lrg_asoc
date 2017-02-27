@@ -117,7 +117,7 @@ struct sof_dev_desc {
 	/* Must set to -1 if not used - add new items to end */
 	int resindex_lpe_base;
 	int resindex_pcicfg_base;
-	int resindex_fw_base;
+	int resindex_imr_base;
 	int irqindex_host_ipc;
 	int resindex_dma_base;
 
