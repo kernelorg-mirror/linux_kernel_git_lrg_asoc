@@ -209,21 +209,32 @@ static u64 byt_read64(struct snd_sof_dev *sdev, void __iomem *addr)
  */
 
 static void byt_block_write(struct snd_sof_dev *sdev,
-	volatile u32 __iomem *dest, u32 *src, size_t bytes)
+	volatile void __iomem *dest, const void *src, size_t size)
 {
-	unsigned i, words = bytes >> 2;
+	unsigned i, trail = size % 4, count = size - trail;
 
-	for (i = 0; i < words; i++)
-		writel(src[i], dest + i);
+	/* copy word by word */
+	for (i = 0; i < count; i += 4)
+		writel(*(u32 *)(src + i), dest + i);
+
+	/* trailing bytes */
+	for (; i < count + trail; i++)
+		writeb(*(u8 *)(src + i), dest + i);
+
 }
 
-static void byt_block_read(struct snd_sof_dev *sdev, u32 *dest,
-	volatile u32 __iomem *src, size_t bytes)
+static void byt_block_read(struct snd_sof_dev *sdev, void *dest,
+	const volatile void __iomem *src, size_t size)
 {
-	unsigned i, words = bytes >> 2;
+	unsigned i, trail = size % 4, count = size - trail;
 
-	for (i = 0; i < words; i++)
-		dest[i] = readl(src + i);
+	/* copy word by word */
+	for (i = 0; i < count; i += 4)
+		*(u32 *)(dest + i) = readl(src + i);
+
+	/* trailing bytes */
+	for (; i < count + trail; i++)
+		*(char *)(dest + i) = readb(src + i);
 }
 
 /*
@@ -516,6 +527,9 @@ irq:
 	/* enable Interrupt from both sides */
 	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRX, 0x3, 0x0);
 	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRD, 0x3, 0x0);
+
+	/* set BARS */
+	sdev->cl_bar = BYT_DSP_BAR;
 
 	return ret;
 }

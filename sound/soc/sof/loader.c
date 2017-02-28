@@ -115,7 +115,7 @@ int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 			block->offset);
 
 
-		snd_sof_dsp_block_write(sdev, mem, (void*) block + 1,
+		snd_sof_dsp_block_write(sdev, mem, (void*) block + sizeof(*block),
 			block->size);
 
 		/* next block */

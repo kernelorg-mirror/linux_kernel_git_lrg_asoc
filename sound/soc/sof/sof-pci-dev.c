@@ -139,7 +139,6 @@ static int sof_pci_probe(struct pci_dev *pci,
 	const struct sof_dev_desc *desc =
 		(const struct sof_dev_desc*)pci_id->driver_data;
 	const struct snd_sof_machine *mach;
-	struct snd_sof_machine reef_blind;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_pci_priv *priv;
 	int ret = 0;
