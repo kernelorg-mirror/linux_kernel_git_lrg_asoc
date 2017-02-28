@@ -69,6 +69,39 @@
 
 #include <trace/events/hswadsp.h>
 
+/*
+ * Memory copy.
+ */
+
+static void hsw_block_write(struct snd_sof_dev *sdev,
+	volatile void __iomem *dest, const void *src, size_t size)
+{
+	unsigned i, trail = size % 4, count = size - trail;
+
+	/* copy word by word */
+	for (i = 0; i < count; i += 4)
+		writel(*(u32 *)(src + i), dest + i);
+
+	/* trailing bytes */
+	for (; i < count + trail; i++)
+		writeb(*(u8 *)(src + i), dest + i);
+
+}
+
+static void hsw_block_read(struct snd_sof_dev *sdev, void *dest,
+	const volatile void __iomem *src, size_t size)
+{
+	unsigned i, trail = size % 4, count = size - trail;
+
+	/* copy word by word */
+	for (i = 0; i < count; i += 4)
+		*(u32 *)(dest + i) = readl(src + i);
+
+	/* trailing bytes */
+	for (; i < count + trail; i++)
+		*(char *)(dest + i) = readb(src + i);
+}
+
 static void hsw_notify(struct sst_dsp *dsp)
 {
 	sst_dsp_shim_update_bits(dsp, SST_IPCD,

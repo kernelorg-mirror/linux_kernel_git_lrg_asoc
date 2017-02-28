@@ -115,9 +115,9 @@ struct snd_sof_dsp_ops {
 
 	/* memcpy IO */
 	void (*block_read)(struct snd_sof_dev *sof_dev,
-		u32 *dest, volatile u32 __iomem *src, size_t bytes);
+		void *dest, const volatile void __iomem *src, size_t size);
 	void (*block_write)(struct snd_sof_dev *sof_dev,
-		volatile u32 __iomem *dest, u32 *src, size_t bytes);
+		volatile void __iomem *dest, const void *src, size_t size);
 
 	/* doorbell */
 	irqreturn_t (*irq_handler)(int irq, void *context);
