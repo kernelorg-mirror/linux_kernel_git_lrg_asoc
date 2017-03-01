@@ -55,6 +55,8 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#define DEBUG
+
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
@@ -83,6 +85,7 @@ static int sof_probe(struct platform_device *pdev)
 	sdev->dev = &pdev->dev;
 	sdev->parent = plat_data->dev;
 	sdev->ops = plat_data->machine->ops;
+
 	sdev->pdata = plat_data;
 	INIT_LIST_HEAD(&sdev->pcm_list);
 	INIT_LIST_HEAD(&sdev->kcontrol_list);
@@ -106,7 +109,7 @@ static int sof_probe(struct platform_device *pdev)
 	}
 
 	/* register any debug/trace capabilities */
-	ret = snd_sof_init_debug(sdev);
+	ret = snd_sof_dbg_init(sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to init DSP trace/debug %d\n", ret);
 		return ret;
@@ -116,28 +119,28 @@ static int sof_probe(struct platform_device *pdev)
 	sdev->ipc = snd_sof_ipc_init(sdev);
 	if (sdev->ipc < 0) {
 		dev_err(sdev->dev, "error: failed to init DSP IPC %d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	/* load the firmware */
 	ret = snd_sof_load_firmware(sdev, plat_data->fw);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to load DSP firmware %d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	/* boot the firmware */
 	ret = snd_sof_run_firmware(sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to boot DSP firmware %d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	/* load the topology */
 	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to load DSP topology %d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	/* now register audio DSP platform driver */
@@ -145,10 +148,17 @@ static int sof_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(sdev->dev,
 			"error: failed to register DSP platform driver %d\n", ret);
-		return ret;
+		goto err;
 	}
 
+	/* we return 0 on error if debug is defined as this allows DSP
+	 * memories to and peripherals to be inspected. */
+err:
+#if defined DEBUG
 	return 0;
+#else
+	return ret;
+#endif
 }
 
 static int sof_remove(struct platform_device *pdev)
