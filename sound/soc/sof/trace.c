@@ -189,9 +189,9 @@ static const struct file_operations sst_dma_trace_fops = {
 };
 #endif
 
-int snd_sof_init_debug(struct snd_sof_dev *sof_dev)
+int snd_sof_init_trace(struct snd_sof_dev *sof_dev)
 {
 	return 0;
 }
-EXPORT_SYMBOL(snd_sof_init_debug);
+EXPORT_SYMBOL(snd_sof_init_trace);
 

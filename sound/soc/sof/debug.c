@@ -66,11 +66,13 @@
 #include <asm/uaccess.h>
 #include <uapi/sound/sof-ipc.h>
 #include "sof-priv.h"
+#include "ops.h"
 
 
 static int sof_dfsentry_open(struct inode *inode, struct file *file)
 {
 	file->private_data = inode->i_private;
+
 	return 0;
 }
 
@@ -93,13 +95,13 @@ static ssize_t sof_dfsentry_read(struct file *file, char __user *buffer,
 	if (count > size - pos)
 		count = size - pos;
 
-	size = (count + 3) & (~3);
+	size = (count + 3) & ~3;
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
 	pm_runtime_get(sdev->dev);
-	//sof_memcpy_fromio_32(sdev, buf, dfse->buf + pos, size);
+	snd_sof_dsp_block_read(sdev, buf, dfse->buf + pos, size);
 	pm_runtime_put(sdev->dev);
 
 	ret = copy_to_user(buffer, buf, count);
@@ -152,6 +154,12 @@ int snd_sof_dbg_init(struct snd_sof_dev *sdev)
 	const struct snd_sof_dsp_ops *ops = sdev->ops;
 	const struct snd_sof_debugfs_map *map;
 	int err = 0, i;
+
+	sdev->debugfs_root = debugfs_create_dir("sof", NULL);
+	if (IS_ERR(sdev->debugfs_root) || !sdev->debugfs_root) {
+		dev_err(sdev->dev, "error: failed to create debugfs directory\n");
+		return -EINVAL;
+	}
 
 	for (i = 0; i < ops->debug_map_count; i++) {
 
