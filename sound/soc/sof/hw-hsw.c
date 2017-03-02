@@ -53,6 +53,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* 
+ * Hardwre interface for audio DSP on Haswell and Broadwell
+ */
+
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -63,185 +67,461 @@
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
 
-#include "../intel/common/sst-dsp.h"
-#include "../intel/common/sst-dsp-priv.h"
-#include "../haswell/sst-haswell-ipc.h"
-
 #include <trace/events/hswadsp.h>
+#include <sound/sof.h>
+#include "sof-priv.h"
+#include "ops.h"
+#include "intel.h"
+
+/* DSP memories for HSW */
+#define IRAM_OFFSET     0xa00000
+#define HSW_IRAM_SIZE       (12 * 32 * 1024) 
+#define DRAM_OFFSET     0x000000
+#define HSW_DRAM_SIZE       (16 * 32 * 1024) 
+#define SHIM_OFFSET     0xFB000
+#define SHIM_SIZE       0x100
+#define MBOX_OFFSET     0x9E000
+#define MBOX_SIZE       0x1000
+
+/* DSP peripherals */
+#define DMAC0_OFFSET    0xFE000
+#define DMAC1_OFFSET    0xFF000
+#define DMAC_SIZE       0x420
+#define SSP0_OFFSET     0xFC000
+#define SSP1_OFFSET     0xFD000
+#define SSP_SIZE        0x100
+
+/*
+ * Debug
+ */
+
+#define MBOX_DUMP_SIZE 0x30
+
+/* BARs */
+#define HSW_DSP_BAR 0
+#define HSW_PCI_BAR 1
+
+static const struct snd_sof_debugfs_map hsw_debugfs[] = {
+        {"dmac0", HSW_DSP_BAR, DMAC0_OFFSET, DMAC_SIZE},
+        {"dmac1", HSW_DSP_BAR, DMAC1_OFFSET, DMAC_SIZE},
+        {"ssp0", HSW_DSP_BAR, SSP0_OFFSET, SSP_SIZE},
+        {"ssp1", HSW_DSP_BAR, SSP1_OFFSET, SSP_SIZE},
+        {"iram", HSW_DSP_BAR, IRAM_OFFSET, HSW_IRAM_SIZE},
+        {"dram", HSW_DSP_BAR, DRAM_OFFSET, HSW_DRAM_SIZE},
+        {"shim", HSW_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
+        {"mbox", HSW_DSP_BAR, MBOX_OFFSET, SHIM_SIZE},
+};
+
+static void hsw_dump(struct snd_sof_dev *sdev, u32 flags)
+{
+        int i;
+
+        if (flags & SOF_DBG_REGS) {
+                for (i = SHIM_OFFSET; i < SHIM_OFFSET  + SHIM_SIZE; i += 8 ) {
+                        dev_dbg(sdev->dev, "shim 0x%2.2x value 0x%16.16llx\n",
+                        i - SHIM_OFFSET,
+                        snd_sof_dsp_read64(sdev, HSW_DSP_BAR, i));
+                }
+        }
+
+        if (flags & SOF_DBG_MBOX) {
+                for (i = MBOX_OFFSET; i < MBOX_OFFSET + MBOX_DUMP_SIZE; i += 4)
+                {
+                        dev_dbg(sdev->dev, "mbox: 0x%2.2x value 0x%8.8x\n",
+                        i - MBOX_OFFSET,
+                        readl(sdev->bar[HSW_DSP_BAR] + i));
+                }
+        }
+
+        if (flags & SOF_DBG_TEXT) {
+                for (i = IRAM_OFFSET; i < IRAM_OFFSET + MBOX_DUMP_SIZE; i += 4)
+                {
+                        dev_dbg(sdev->dev, "iram: 0x%2.2x value 0x%8.8x\n",
+                        i - IRAM_OFFSET,
+                        readl(sdev->bar[HSW_DSP_BAR] + i));
+                }
+        }
+
+        if (flags & SOF_DBG_PCI) {
+                for (i = 0; i < 0xff; i += 4) {
+                        dev_dbg(sdev->dev, "pci: 0x%2.2x value 0x%8.8x\n",
+                        i, readl(sdev->bar[HSW_PCI_BAR] + i));
+                }
+        }
+}
+
+#if 0
+
+static void hsw_notify(struct sst_dsp *dsp)
+{
+        sst_dsp_shim_update_bits(dsp, SST_IPCD,
+                SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
+}
+#endif
+
+static bool hsw_is_dsp_busy(struct snd_sof_dev *sdev)
+{
+        u32 ipcx;
+
+        ipcx = snd_sof_dsp_read64(sdev, HSW_DSP_BAR, SHIM_IPCX);
+        return (ipcx & (SHIM_IPCX_BUSY | SHIM_IPCX_DONE));
+}
+
+
+/*
+ * IPC Doorbell IRQ handler and thread.
+ */
+
+static irqreturn_t hsw_irq_handler(int irq, void *context)
+{
+        struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
+        u64 isr;
+        int ret = IRQ_NONE;
+
+        spin_lock(&sdev->spinlock);
+
+        /* Interrupt arrived, check src */
+        isr = snd_sof_dsp_read64(sdev, HSW_DSP_BAR, SHIM_ISRX);
+        if (isr & SHIM_ISRX_DONE) {
+
+                /* Mask Done interrupt before return */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
+                SHIM_IMRX_DONE, SHIM_IMRX_DONE);
+                ret = IRQ_WAKE_THREAD;
+        }
+
+        if (isr & SHIM_ISRX_BUSY) {
+
+                /* Mask Busy interrupt before return */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
+                SHIM_IMRX_BUSY, SHIM_IMRX_BUSY);
+                ret = IRQ_WAKE_THREAD;
+        }
+
+        spin_unlock(&sdev->spinlock);
+        return ret;
+}
+
+static irqreturn_t hsw_irq_thread(int irq, void *context)
+{
+        struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
+        u64 ipcx, ipcd;
+        unsigned long flags;
+
+        spin_lock_irqsave(&sdev->spinlock, flags);
+
+        ipcx = snd_sof_dsp_read64(sdev, HSW_DSP_BAR, SHIM_IPCX);
+        ipcd = snd_sof_dsp_read64(sdev, HSW_DSP_BAR, SHIM_IPCD);
+
+        /* reply message from DSP */
+        if (ipcx & SHIM_IPCX_DONE) {
+
+                /* Handle Immediate reply from DSP Core */
+                snd_sof_ipc_process_reply(sdev, ipcx);
+
+                /* clear DONE bit - tell DSP we have completed */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IPCX,
+                        SHIM_IPCX_DONE, 0);
+
+                /* unmask Done interrupt */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
+                        SHIM_IMRX_DONE, 0);
+        }
+
+        /* new message from DSP */
+        if (ipcd & SHIM_IPCD_BUSY) {
+
+                /* Handle Notification and Delayed reply from DSP Core */
+                snd_sof_ipc_process_notification(sdev, ipcd);
+
+                /* clear BUSY bit and set DONE bit - accept new messages */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IPCD,
+                        SHIM_IPCD_BUSY | SHIM_IPCD_DONE,
+                        SHIM_IPCD_DONE);
+
+                /* unmask busy interrupt */
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
+                        SHIM_IMRX_BUSY, 0);
+        }
+
+        spin_unlock_irqrestore(&sdev->spinlock, flags);
+
+        /* continue to send any remaining messages... */
+        snd_sof_ipc_process_msgs(sdev);
+
+        return IRQ_HANDLED;
+}
+
+
+/*
+ * IPC Mailbox IO
+ */
+
+static void hsw_mailbox_write(struct snd_sof_dev *sdev, void *message,
+        void __iomem *dest, size_t bytes)
+{
+        memcpy_toio(dest, message, bytes);
+}
+
+static void hsw_mailbox_read(struct snd_sof_dev *sdev, void *message,
+        void __iomem *src, size_t bytes)
+{
+        memcpy_fromio(message, src, bytes);
+}
+
+static int hsw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
+{
+        u64 cmd = msg->header;
+
+        /* send the message */
+        hsw_mailbox_write(sdev, sdev->outbox.base, msg->msg_data, 
+                msg->msg_size);
+        snd_sof_dsp_write64(sdev, HSW_DSP_BAR, SHIM_IPCX, cmd);
+
+        return 0;
+}
 
 /*
  * Memory copy.
  */
 
 static void hsw_block_write(struct snd_sof_dev *sdev,
-	volatile void __iomem *dest, const void *src, size_t size)
+        volatile void __iomem *dest, const void *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
+#if 0
+        unsigned i, trail = size % 4, count = size - trail;
 
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		writel(*(u32 *)(src + i), dest + i);
+        /* copy word by word */
+        for (i = 0; i < count; i += 4)
+                writel(*(u32 *)(src + i), dest + i);
 
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		writeb(*(u8 *)(src + i), dest + i);
+        /* trailing bytes */
+        for (; i < count + trail; i++)
+                writeb(*(u8 *)(src + i), dest + i);
+#else
+        u32 tmp = 0;
+        int i, m, n;
+        const u8 *src_byte = src;
 
+        m = size / 4;
+        n = size % 4;
+
+        /* __iowrite32_copy use 32bit size values so divide by 4 */
+        __iowrite32_copy((void *)dest, src, m);
+
+        if (n) {
+                for (i = 0; i < n; i++)
+                        tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
+                __iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
+        }
+#endif
 }
 
 static void hsw_block_read(struct snd_sof_dev *sdev, void *dest,
-	const volatile void __iomem *src, size_t size)
+        const volatile void __iomem *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
+        unsigned i, trail = size % 4, count = size - trail;
 
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		*(u32 *)(dest + i) = readl(src + i);
+        /* copy word by word */
+        for (i = 0; i < count; i += 4)
+                *(u32 *)(dest + i) = readl(src + i);
 
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		*(char *)(dest + i) = readb(src + i);
+        /* trailing bytes */
+        for (; i < count + trail; i++)
+                *(char *)(dest + i) = readb(src + i);
 }
 
-static void hsw_notify(struct sst_dsp *dsp)
+/*
+ * Register IO
+ */
+
+static void hsw_write(struct snd_sof_dev *sdev, void __iomem *addr,
+        u32 value)
 {
-	sst_dsp_shim_update_bits(dsp, SST_IPCD,
-		SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
+        writel(value, addr);
 }
 
-static bool hsw_is_dsp_busy(struct sst_dsp *dsp)
+static u32 hsw_read(struct snd_sof_dev *sdev, void __iomem *addr)
 {
-	u32 ipcx;
+        return readl(addr);
+}
 
-	ipcx = sst_dsp_shim_read64_unlocked(dsp, SST_IPCX);
-	return (ipcx & (SST_IPCX_BUSY | SST_IPCX_DONE));
+static void hsw_write64(struct snd_sof_dev *sdev, void __iomem *addr,
+        u64 value)
+{
+        memcpy_toio(addr, &value, sizeof(value));
+}
+
+static u64 hsw_read64(struct snd_sof_dev *sdev, void __iomem *addr)
+{
+        u64 val;
+
+        memcpy_fromio(&val, addr, sizeof(val));
+        return val;
 }
 
 
-static void hsw_shim_dbg(struct sst_generic_ipc *ipc, const char *text)
+/* 
+ * DSP COntrol.
+ */
+
+static int hsw_run(struct snd_sof_dev *sdev)
 {
-	struct sst_dsp *sst = ipc->dsp;
-	u32 ipcd, ipcx ,isrd, imrx, isrx, imrd;
-	int i;
+        /* set oportunistic mode on engine 0,1 for all channels */
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_HMDC, 
+                SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH, 0);
 
-	ipcx = sst_dsp_shim_read_unlocked(sst, SST_IPCX);
-	ipcd = sst_dsp_shim_read_unlocked(sst, SST_IPCD);
-	isrx = sst_dsp_shim_read_unlocked(sst, SST_ISRX);
-	isrd = sst_dsp_shim_read_unlocked(sst, SST_ISRD);
-	imrx = sst_dsp_shim_read_unlocked(sst, SST_IMRX);
-	imrd = sst_dsp_shim_read_unlocked(sst, SST_IMRD);
+        /* set DSP to RUN */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
+                SHIM_CSR_STALL, 0x0);
 
-	dev_err(ipc->dev,
-		"ipc: --%s--\n ipcx 0x%8x\n ipcd 0x%8x\n"
-		" imrx 0x%8x\n imrd 0x%8x\n"
-		" isrx 0x%8x\n isrd 0x%8x\n",
-		text, ipcx, ipcd, imrx, imrd, isrx, isrd);
-
-	for (i = 0; i < 0xff; i+=8 ) {
-		dev_err(ipc->dev, "shim 0x%2.2x value 0x%16.16llx\n",i,
-			sst_dsp_shim_read64_unlocked(sst, i));
-	}
-
-	for (i = 0xa0000; i < 0xa0100; i+=4) {
-		dev_err(sst->dev, "iram: 0x%x value 0x%8.8x\n", i - 0xa0000,
-			readl(sst->addr.lpe + i));
-	}
-
-	for (i = 0x0; i < 0x100; i+=4) {
-		dev_err(sst->dev, "dram: 0x%x value 0x%8.8x\n", i,
-			readl(sst->addr.lpe + i));
-	}
-
-	for (i = 0x00; i < 0xff; i+=4) {
-		dev_err(sst->dev, "pci: 0x%x value 0x%8.8x\n", i,
-			readl(sst->addr.pci_cfg + i));
-	}
-
-	//TODO: need correct mailbox offset
-	for (i = 0; i < 30; i++) {
-		dev_err(sst->dev, "mbox: 0x%x value 0x%8.8x\n", i,
-			readl(sst->addr.lpe + i * 4 + 0x9e000));
-	}
+        return 0; //TODO: Fix return value
 }
 
-static void hsw_tx_msg(struct sst_generic_ipc *ipc, struct ipc_message *msg)
+static int hsw_reset(struct snd_sof_dev *sdev)
 {
-	/* send the message */
-	sst_dsp_outbox_write(ipc->dsp, msg->tx_data, msg->tx_size);
-	sst_dsp_ipc_msg_tx(ipc->dsp, msg->header);
+        /* put DSP into reset and stall */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
+                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_RST | SHIM_CSR_STALL);
+
+        /* keep in reset for 10ms */
+        mdelay(10);
+
+        /* take DSP out of reset and keep stalled for FW loading */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
+                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_STALL);
+
+        return 0; //TODO: Fix return value
 }
 
-static irqreturn_t hsw_irq_thread(int irq, void *context)
+/*
+ * Probe and remove.
+ */
+static int hsw_probe(struct snd_sof_dev *sdev)
 {
-	struct sst_dsp *sst = (struct sst_dsp *) context;
-	struct sst_hsw *hsw = sst_dsp_get_thread_context(sst);
-	struct sst_generic_ipc *ipc = &hsw->ipc;
-	u32 ipcx, ipcd;
-	unsigned long flags;
+        struct snd_sof_pdata *pdata = sdev->pdata;
+        const struct sof_dev_desc *desc = pdata->desc;
+        struct platform_device *pdev =
+                container_of(sdev->parent, struct platform_device, dev);
+        struct resource *mmio;
+        u32 base, size, fw_dump_bit;
+        int ret = 0;
 
-	spin_lock_irqsave(&sst->spinlock, flags);
+        /* DSP DMA can only access low 31 bits of host memory */
+        ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
+        if (ret < 0) {
+                dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
+                return ret;
+        }
 
-	ipcx = sst_dsp_ipc_msg_rx(hsw->dsp);
-	ipcd = sst_dsp_shim_read_unlocked(sst, SST_IPCD);
+        /* LPE base */
+        mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+                desc->resindex_lpe_base);
+        if (mmio) {
+                base = mmio->start;
+                size = resource_size(mmio);
+        } else {
+                dev_err(sdev->dev, "error: failed to get LPE base at idx %d\n",
+                        desc->resindex_lpe_base);
+                return -EINVAL;
+        }
 
-	/* reply message from DSP */
-	if (ipcx & SST_IPCX_DONE) {
+        sdev->bar[HSW_DSP_BAR] = ioremap(base, size);
+        if (sdev->bar[HSW_DSP_BAR] == NULL) {
+                dev_err(sdev->dev, 
+                        "error: failed to ioremap LPE base 0x%x size 0x%x\n",
+                        base, size);
+                return -ENODEV;
+        }
 
-		/* Handle Immediate reply from DSP Core */
-		hsw_process_reply(hsw, ipcx);
+        /* PCI base */
+        mmio = platform_get_resource(pdev, IORESOURCE_MEM,
+                desc->resindex_pcicfg_base);
+        if (mmio) {
+                base = mmio->start;
+                size = resource_size(mmio);
+        } else {
+                dev_err(sdev->dev, "error: failed to get PCI base at idx %d\n",
+                        desc->resindex_pcicfg_base);
+                ret = -ENODEV;
+                goto pci_err;
+        }
 
-		/* clear DONE bit - tell DSP we have completed */
-		sst_dsp_shim_update_bits_unlocked(sst, SST_IPCX,
-			SST_IPCX_DONE, 0);
+        sdev->bar[HSW_PCI_BAR] = ioremap(base, size);
+        if (sdev->bar[HSW_PCI_BAR] == NULL) {
+                dev_err(sdev->dev, 
+                        "error: failed to ioremap PCI base 0x%x size 0x%x\n",
+                        base, size);
+                ret = -ENODEV;
+                goto pci_err;
+        }
 
-		/* unmask Done interrupt */
-		sst_dsp_shim_update_bits_unlocked(sst, SST_IMRX,
-			SST_IMRX_DONE, 0);
-	}
+        /* always enable the block(DSRAM[0]) used for FW dump */
+        fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
+        /* set default power gating control, enable power gating control 
+        for all blocks. that is,
+        can't be accessed, please enable each block before accessing. */
+        writel(0xffffffff & ~fw_dump_bit, sdev->bar[HSW_PCI_BAR] 
+                + PCI_VDRTCTL0);
 
-	/* new message from DSP */
-	if (ipcd & SST_IPCD_BUSY) {
+        /* set BARS */
+        sdev->cl_bar = HSW_DSP_BAR;
 
-		/* Handle Notification and Delayed reply from DSP Core */
-		hsw_process_notification(hsw, ipcd);
+        return ret;
 
-		/* clear BUSY bit and set DONE bit - accept new messages */
-		sst_dsp_shim_update_bits_unlocked(sst, SST_IPCD,
-			SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
-
-		/* unmask busy interrupt */
-		sst_dsp_shim_update_bits_unlocked(sst, SST_IMRX,
-			SST_IMRX_BUSY, 0);
-	}
-
-	spin_unlock_irqrestore(&sst->spinlock, flags);
-
-	/* continue to send any remaining messages... */
-	queue_kthread_work(&ipc->kworker, &ipc->kwork);
-
-	return IRQ_HANDLED;
+pci_err:
+        iounmap(sdev->bar[HSW_PCI_BAR]);
+        return ret;
 }
 
-static const struct sst_debugfs_map debugfs_bdw[] = {
-	{"dmac0", 0x98000, 0x420},
-	{"dmac1", 0x9c000, 0x420},
-	{"ssp0", 0xa0000, 0x100},
-	{"ssp1", 0xa1000, 0x100},
-	{"ssp2", 0xa2000, 0x100},
-	{"iram", 0xc0000, 80 * 1024},
-	{"dram", 0x100000, 160 * 1024},
-	{"shim", 0x140000, 0x100},
-	{"mbox", 0x144000, 0x1000},
-};
+static int hsw_remove(struct snd_sof_dev *sdev)
+{
+        struct snd_sof_pdata *pdata = sdev->pdata;
+        const struct sof_dev_desc *desc = pdata->desc;
 
-static struct sst_dsp_device hsw_dev = {
-	.thread = hsw_irq_thread,
-	.ops = &haswell_ops,
-};
+        iounmap(sdev->bar[HSW_DSP_BAR]);
+        iounmap(sdev->bar[HSW_PCI_BAR]);
+        free_irq(desc->irqindex_host_ipc, sdev);
+        return 0;
+
+}
 
 /* haswell ops */
 struct snd_sof_dsp_ops snd_sof_hsw_ops = {
 
+        /*Device init */
+        .probe          = hsw_probe,
+        .remove         = hsw_remove,
+        
+        /* DSP Core Control */
+        .run            = hsw_run,
+        .reset          = hsw_reset,
 
+        /* Register IO */
+        .read           = hsw_read,
+        .write          = hsw_write,
+        .read64         = hsw_read64,
+        .write64        = hsw_write64,
+
+        /* Block IO */
+        .block_read     = hsw_block_read,
+        .block_write    = hsw_block_write,
+
+        /* mailbox */
+        .mailbox_read   = hsw_mailbox_read,
+        .mailbox_write  = hsw_mailbox_write,
+
+        /* ipc */
+        .tx_msg     = hsw_tx_msg,
+        //int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
+
+        /* debug */
+        .debug_map  = hsw_debugfs,
+        .debug_map_count    = ARRAY_SIZE(hsw_debugfs),
+        .dbg_dump   = hsw_dump,
+
+        /* Module loading */
+        .load_module    = snd_sof_parse_module_memcpy,
 };
 EXPORT_SYMBOL(snd_sof_hsw_ops);
 
