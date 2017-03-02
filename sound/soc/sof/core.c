@@ -117,7 +117,7 @@ static int sof_probe(struct platform_device *pdev)
 
 	/* init the IPC */
 	sdev->ipc = snd_sof_ipc_init(sdev);
-	if (sdev->ipc < 0) {
+	if (sdev->ipc == NULL) {
 		dev_err(sdev->dev, "error: failed to init DSP IPC %d\n", ret);
 		goto err;
 	}

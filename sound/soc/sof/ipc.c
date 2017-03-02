@@ -386,11 +386,11 @@ struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev)
 	for (i = 0; i < IPC_EMPTY_LIST_SIZE; i++) {
 
 		msg->msg_data = devm_kzalloc(sdev->dev, PAGE_SIZE, GFP_KERNEL);
-		if (msg->msg_data)
+		if (msg->msg_data == NULL)
 			return NULL;
 
 		msg->reply_data = devm_kzalloc(sdev->dev, PAGE_SIZE, GFP_KERNEL);
-		if (msg->msg_data)
+		if (msg->reply_data == NULL)
 			return NULL;
 
 		init_waitqueue_head(&msg->waitq);

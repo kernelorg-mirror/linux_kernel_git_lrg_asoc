@@ -211,6 +211,7 @@ static u64 byt_read64(struct snd_sof_dev *sdev, void __iomem *addr)
 static void byt_block_write(struct snd_sof_dev *sdev,
 	volatile void __iomem *dest, const void *src, size_t size)
 {
+#if 0
 	unsigned i, trail = size % 4, count = size - trail;
 
 	/* copy word by word */
@@ -220,7 +221,23 @@ static void byt_block_write(struct snd_sof_dev *sdev,
 	/* trailing bytes */
 	for (; i < count + trail; i++)
 		writeb(*(u8 *)(src + i), dest + i);
+#else
+	u32 tmp = 0;
+	int i, m, n;
+	const u8 *src_byte = src;
 
+	m = size / 4;
+	n = size % 4;
+
+	/* __iowrite32_copy use 32bit size values so divide by 4 */
+	__iowrite32_copy((void *)dest, src, m);
+
+	if (n) {
+		for (i = 0; i < n; i++)
+			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
+		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
+	}
+#endif
 }
 
 static void byt_block_read(struct snd_sof_dev *sdev, void *dest,
@@ -431,7 +448,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		container_of(sdev->parent, struct platform_device, dev);
 	struct resource *mmio;
 	u32 base, size;
-	int ret = 0;
+	int ret = 0, irq;
 
 	/* DSP DMA can only access low 31 bits of host memory */
 	ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
@@ -468,16 +485,16 @@ static int byt_probe(struct snd_sof_dev *sdev)
 	} else {
 		dev_err(sdev->dev, "error: failed to get PCI base at idx %d\n",
 			desc->resindex_pcicfg_base);
-		iounmap(sdev->bar[BYT_DSP_BAR]);
-		return -EINVAL;
+		ret = -ENODEV;
+		goto pci_err;
 	}
 
 	sdev->bar[BYT_PCI_BAR] = ioremap(base, size);
 	if (sdev->bar[BYT_PCI_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap PCI base 0x%x size 0x%x\n",
 			base, size);
-		iounmap(sdev->bar[BYT_DSP_BAR]);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto pci_err;
 	}
 
 	/* IMR base - optional */
@@ -492,9 +509,8 @@ static int byt_probe(struct snd_sof_dev *sdev)
 	} else {
 		dev_err(sdev->dev, "error: failed to get IMR base at idx %d\n",
 			desc->resindex_imr_base);
-		iounmap(sdev->bar[BYT_DSP_BAR]);
-		iounmap(sdev->bar[BYT_PCI_BAR]);
-		return -EINVAL;
+		ret = -ENODEV;
+		goto imr_err;
 	}
 
 	/* some BIOSes dont map IMR */
@@ -507,21 +523,25 @@ static int byt_probe(struct snd_sof_dev *sdev)
 	if (sdev->bar[BYT_IMR_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap IMR base 0x%x size 0x%x\n",
 			base, size);
-		iounmap(sdev->bar[BYT_DSP_BAR]);
-		iounmap(sdev->bar[BYT_PCI_BAR]);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto imr_err;
 	}
 
 irq:
 	/* register our IRQ */
-	ret = request_threaded_irq(desc->irqindex_host_ipc, byt_irq_handler,
-		byt_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
-	if (ret < 0) {
-		dev_err(sdev->dev, "error: failed to get IRQ %d\n",
+	irq = platform_get_irq(pdev, desc->irqindex_host_ipc);
+	if (irq < 0) {
+		dev_err(sdev->dev, "error: failed to get IRQ at index %d\n",
 			desc->irqindex_host_ipc);
-		iounmap(sdev->bar[BYT_DSP_BAR]);
-		iounmap(sdev->bar[BYT_PCI_BAR]);
-		iounmap(sdev->bar[BYT_IMR_BAR]);
+		ret = irq;
+		goto irq_err;
+	}
+
+	ret = request_threaded_irq(irq, byt_irq_handler, byt_irq_thread,
+		IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n", irq);
+		goto irq_err;		
 	}
 
 	/* enable Interrupt from both sides */
@@ -531,6 +551,14 @@ irq:
 	/* set BARS */
 	sdev->cl_bar = BYT_DSP_BAR;
 
+	return ret;
+
+irq_err:
+	iounmap(sdev->bar[BYT_IMR_BAR]);
+imr_err:
+	iounmap(sdev->bar[BYT_PCI_BAR]);
+pci_err:
+	iounmap(sdev->bar[BYT_DSP_BAR]);	
 	return ret;
 }
 
