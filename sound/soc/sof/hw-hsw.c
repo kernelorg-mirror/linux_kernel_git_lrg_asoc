@@ -53,6 +53,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define DEBUG
+
 /* 
  * Hardwre interface for audio DSP on Haswell and Broadwell
  */
@@ -74,11 +76,11 @@
 #include "intel.h"
 
 /* DSP memories for HSW */
-#define IRAM_OFFSET     0xa00000
+#define IRAM_OFFSET     0x00000
 #define HSW_IRAM_SIZE       (12 * 32 * 1024) 
-#define DRAM_OFFSET     0x000000
+#define DRAM_OFFSET     0x400000
 #define HSW_DRAM_SIZE       (16 * 32 * 1024) 
-#define SHIM_OFFSET     0xFB000
+#define SHIM_OFFSET     0xE7000
 #define SHIM_SIZE       0x100
 #define MBOX_OFFSET     0x9E000
 #define MBOX_SIZE       0x1000
@@ -111,6 +113,139 @@ static const struct snd_sof_debugfs_map hsw_debugfs[] = {
         {"shim", HSW_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
         {"mbox", HSW_DSP_BAR, MBOX_OFFSET, SHIM_SIZE},
 };
+
+/* 
+ * DSP Control.
+ */
+
+static int hsw_run(struct snd_sof_dev *sdev)
+{
+        /* set oportunistic mode on engine 0,1 for all channels */
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_HMDC,
+                SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH, 0);
+
+        /* set DSP to RUN */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR,
+                SHIM_CSR_STALL, 0x0);
+
+        return 0; //TODO: Fix return value
+}
+
+static int hsw_reset(struct snd_sof_dev *sdev)
+{
+        /* put DSP into reset and stall */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR,
+                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_RST | SHIM_CSR_STALL);
+
+        /* keep in reset for 10ms */
+        mdelay(10);
+
+        /* take DSP out of reset and keep stalled for FW loading */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR,
+                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_STALL);
+
+        return 0; //TODO: Fix return value
+}
+
+static int hsw_set_dsp_D0(struct snd_sof_dev *sdev)
+{
+        int tries = 10;
+        u32 reg, fw_dump_bit;
+
+        /* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+        reg &= ~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
+        writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+
+        /* Disable D3PG (VDRTCTL0.D3PGD = 1) */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+        reg |= PCI_VDRTCL0_D3PGD;
+        writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+
+        /* Set D0 state */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_PMCS);
+        reg &= ~PCI_PMCS_PS_MASK;
+        writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_PMCS);
+
+        /* check that ADSP shim is enabled */
+        while (tries--) {
+                reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_PMCS) &
+PCI_PMCS_PS_MASK;
+                if (reg == 0)
+                        goto finish;
+
+                msleep(1);
+        }
+
+        return -ENODEV;
+
+finish:
+        /* select SSP1 19.2MHz base clock, SSP clock 0, turn off Low Power Clock
+ * */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR,
+                SHIM_CSR_S1IOCS | SHIM_CSR_SBCS1 | SHIM_CSR_LPCS, 0x0);
+
+        /* stall DSP core, set clk to 192/96Mhz */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR,
+                SHIM_CSR, SHIM_CSR_STALL | SHIM_CSR_DCS_MASK,
+                SHIM_CSR_STALL | SHIM_CSR_DCS(4));
+
+        /* Set 24MHz MCLK, prevent local clock gating, enable SSP0 clock */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CLKCTL,
+                SHIM_CLKCTL_MASK | SHIM_CLKCTL_DCPLCG | SHIM_CLKCTL_SCOE0,
+                SHIM_CLKCTL_MASK | SHIM_CLKCTL_DCPLCG | SHIM_CLKCTL_SCOE0);
+
+        /* Stall and reset core, set CSR */
+        hsw_reset(sdev);
+
+        /* Enable core clock gating (VDRTCTL2.DCLCGE = 1), delay 50 us */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+        reg |= PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE;
+        writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+
+        udelay(50);
+
+        /* switch on audio PLL */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+        reg &= ~PCI_VDRTCL2_APLLSE_MASK;
+        writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+
+        /* set default power gating control, enable power gating control for all
+ * blocks. that is,
+        can't be accessed, please enable each block before accessing. */
+        reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+        reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
+        /* for D0, always enable the block(DSRAM[0]) used for FW dump */
+        fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
+        writel(reg & ~fw_dump_bit, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+
+
+        /* disable DMA finish function for SSP0 & SSP1 */
+        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR,  SHIM_CSR2,
+SHIM_CSR2_SDFD_SSP1,
+                SHIM_CSR2_SDFD_SSP1);
+
+        /* set on-demond mode on engine 0,1 for all channels */
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_HMDC,
+                        SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH,
+                        SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH);
+
+        /* Enable Interrupt from both sides */
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRX, (SHIM_IMRX_BUSY |
+SHIM_IMRX_DONE),
+                                 0x0);
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRD, (SHIM_IMRD_DONE |
+SHIM_IMRD_BUSY |
+                                SHIM_IMRD_SSP0 | SHIM_IMRD_DMAC), 0x0);
+
+        /* clear IPC registers */
+        snd_sof_dsp_write(sdev, HSW_DSP_BAR, SHIM_IPCX, 0x0);
+        snd_sof_dsp_write(sdev, HSW_DSP_BAR, SHIM_IPCD, 0x0);
+        snd_sof_dsp_write(sdev, HSW_DSP_BAR, 0x80, 0x6);
+        snd_sof_dsp_write(sdev, HSW_DSP_BAR, 0xe0, 0x300a);
+
+        return 0;
+}
 
 static void hsw_dump(struct snd_sof_dev *sdev, u32 flags)
 {
@@ -360,40 +495,6 @@ static u64 hsw_read64(struct snd_sof_dev *sdev, void __iomem *addr)
         return val;
 }
 
-
-/* 
- * DSP COntrol.
- */
-
-static int hsw_run(struct snd_sof_dev *sdev)
-{
-        /* set oportunistic mode on engine 0,1 for all channels */
-        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_HMDC, 
-                SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH, 0);
-
-        /* set DSP to RUN */
-        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
-                SHIM_CSR_STALL, 0x0);
-
-        return 0; //TODO: Fix return value
-}
-
-static int hsw_reset(struct snd_sof_dev *sdev)
-{
-        /* put DSP into reset and stall */
-        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
-                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_RST | SHIM_CSR_STALL);
-
-        /* keep in reset for 10ms */
-        mdelay(10);
-
-        /* take DSP out of reset and keep stalled for FW loading */
-        snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR, 
-                SHIM_CSR_RST | SHIM_CSR_STALL, SHIM_CSR_STALL);
-
-        return 0; //TODO: Fix return value
-}
-
 /*
  * Probe and remove.
  */
@@ -406,13 +507,6 @@ static int hsw_probe(struct snd_sof_dev *sdev)
         struct resource *mmio;
         u32 base, size, fw_dump_bit;
         int ret = 0;
-
-        /* DSP DMA can only access low 31 bits of host memory */
-        ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
-        if (ret < 0) {
-                dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
-                return ret;
-        }
 
         /* LPE base */
         mmio = platform_get_resource(pdev, IORESOURCE_MEM,
@@ -454,6 +548,20 @@ static int hsw_probe(struct snd_sof_dev *sdev)
                         base, size);
                 ret = -ENODEV;
                 goto pci_err;
+        }
+
+        /* enable the DSP SHIM */
+        ret = hsw_set_dsp_D0(sdev);
+        if (ret < 0) {
+                dev_err(sdev->dev, "error: failed to set DSP D0 \n");
+                return ret;
+        }
+
+        /* DSP DMA can only access low 31 bits of host memory */
+        ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
+        if (ret < 0) {
+                dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
+                return ret;
         }
 
         /* always enable the block(DSRAM[0]) used for FW dump */
