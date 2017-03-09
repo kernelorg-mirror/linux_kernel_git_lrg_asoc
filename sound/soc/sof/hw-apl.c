@@ -310,7 +310,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dev_err(&pci->dev, "ioremap error\n");
 		return -ENXIO;
 	}
-
+#if 0
 	/* DSP base */
 	sdev->bar[APL_DSP_BAR] = pci_ioremap_bar(pci, APL_DSP_BAR);
 	if (sdev->bar[APL_DSP_BAR] == NULL) {
@@ -318,7 +318,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		ret = -ENXIO;
 		goto remap_err;
 	}
-
+#endif
 	pci_set_master(pci);
 	synchronize_irq(pci->irq);
 

@@ -469,12 +469,14 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		return -EINVAL;
 	}
 
+	dev_dbg(sdev->dev, "LPE PHY base at 0x%x size 0x%x", base, size);
 	sdev->bar[BYT_DSP_BAR] = ioremap(base, size);
 	if (sdev->bar[BYT_DSP_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap LPE base 0x%x size 0x%x\n",
 			base, size);
 		return -ENODEV;
 	}
+	dev_dbg(sdev->dev, "LPE VADDR %p\n", sdev->bar[BYT_DSP_BAR]);
 
 	/* PCI base */
 	mmio = platform_get_resource(pdev, IORESOURCE_MEM,
@@ -489,6 +491,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		goto pci_err;
 	}
 
+	dev_dbg(sdev->dev, "PCI base at 0x%x size 0x%x", base, size);
 	sdev->bar[BYT_PCI_BAR] = ioremap(base, size);
 	if (sdev->bar[BYT_PCI_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap PCI base 0x%x size 0x%x\n",
@@ -496,6 +499,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		ret = -ENODEV;
 		goto pci_err;
 	}
+	dev_dbg(sdev->dev, "PCI VADDR %p\n", sdev->bar[BYT_PCI_BAR]);
 
 	/* IMR base - optional */
 	if (desc->resindex_imr_base == -1)
@@ -519,6 +523,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		goto irq;
 	}
 
+	dev_dbg(sdev->dev, "IMR base at 0x%x size 0x%x", base, size);
 	sdev->bar[BYT_IMR_BAR] = ioremap(base, size);
 	if (sdev->bar[BYT_IMR_BAR] == NULL) {
 		dev_err(sdev->dev, "error: failed to ioremap IMR base 0x%x size 0x%x\n",
@@ -526,6 +531,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		ret = -ENODEV;
 		goto imr_err;
 	}
+	dev_dbg(sdev->dev, "IMR VADDR %p\n", sdev->bar[BYT_IMR_BAR]);
 
 irq:
 	/* register our IRQ */
@@ -537,6 +543,7 @@ irq:
 		goto irq_err;
 	}
 
+	dev_dbg(sdev->dev, "using IRQ %d\n", irq);
 	ret = request_threaded_irq(irq, byt_irq_handler, byt_irq_thread,
 		IRQF_SHARED, "AudioDSP", sdev);
 	if (ret < 0) {

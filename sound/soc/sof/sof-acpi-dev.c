@@ -55,6 +55,8 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#define DEBUG
+
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
@@ -140,6 +142,8 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_acpi_priv *priv;
 	int ret = 0;
+
+	dev_dbg(&pdev->dev, "ACPI DSP detected");
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
@@ -260,6 +264,32 @@ static struct sof_dev_desc sof_acpi_baytrail_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
 };
+
+static struct snd_sof_machine cherrytrail_machines[] = {
+
+	{"10EC5670", "cht-bsw-rt5672", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+	{"10EC5672", "cht-bsw-rt5672", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg","cht-bsw", &snd_sof_byt_ops },
+	{"10EC5645", "cht-bsw-rt5645", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+	{"10EC5650", "cht-bsw-rt5645", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+	{"193C9890", "cht-bsw-max98090", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+	/* some CHT-T platforms rely on RT5640, use Baytrail machine driver */
+	{"10EC5640", "bytcr_rt5640", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "baytrail-pcm-audio", &snd_sof_byt_ops },
+	{},
+};
+
+static struct sof_dev_desc sof_acpi_cherrytrail_desc = {
+	.machines = cherrytrail_machines,
+	.resindex_lpe_base = 0,
+	.resindex_pcicfg_base = 1,
+	.resindex_imr_base = 2,
+	.irqindex_host_ipc = 5,
+};
 #endif
 
 static const struct acpi_device_id sof_acpi_match[] = {
@@ -269,6 +299,7 @@ static const struct acpi_device_id sof_acpi_match[] = {
 #endif
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_BAYTRAIL)
 	{ "80860F28", (unsigned long)&sof_acpi_baytrail_desc },
+	{ "808622A8", (unsigned long)&sof_acpi_cherrytrail_desc },
 #endif
 	{ }
 };

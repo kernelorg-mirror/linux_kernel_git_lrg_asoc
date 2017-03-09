@@ -169,8 +169,8 @@ static int hsw_set_dsp_D0(struct snd_sof_dev *sdev)
 
         /* check that ADSP shim is enabled */
         while (tries--) {
-                reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_PMCS) &
-PCI_PMCS_PS_MASK;
+                reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_PMCS)
+			& PCI_PMCS_PS_MASK;
                 if (reg == 0)
                         goto finish;
 
@@ -180,8 +180,7 @@ PCI_PMCS_PS_MASK;
         return -ENODEV;
 
 finish:
-        /* select SSP1 19.2MHz base clock, SSP clock 0, turn off Low Power Clock
- * */
+        /* select SSP1 19.2MHz base clock, SSP clock 0, turn off Low Power Clock */
         snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR, SHIM_CSR,
                 SHIM_CSR_S1IOCS | SHIM_CSR_SBCS1 | SHIM_CSR_LPCS, 0x0);
 
@@ -210,20 +209,20 @@ finish:
         reg &= ~PCI_VDRTCL2_APLLSE_MASK;
         writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
 
-        /* set default power gating control, enable power gating control for all
- * blocks. that is,
-        can't be accessed, please enable each block before accessing. */
+        /* set default power gating control, enable power gating control for 
+	all blocks. that is, can't be accessed, please enable each block
+	before accessing. */
         reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
         reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
-        /* for D0, always enable the block(DSRAM[0]) used for FW dump */
+        
+	/* for D0, always enable the block(DSRAM[0]) used for FW dump */
         fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
         writel(reg & ~fw_dump_bit, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
 
 
         /* disable DMA finish function for SSP0 & SSP1 */
         snd_sof_dsp_update_bits_unlocked(sdev, HSW_DSP_BAR,  SHIM_CSR2,
-SHIM_CSR2_SDFD_SSP1,
-                SHIM_CSR2_SDFD_SSP1);
+		SHIM_CSR2_SDFD_SSP1, SHIM_CSR2_SDFD_SSP1);
 
         /* set on-demond mode on engine 0,1 for all channels */
         snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_HMDC,
@@ -231,12 +230,11 @@ SHIM_CSR2_SDFD_SSP1,
                         SHIM_HMDC_HDDA_E0_ALLCH | SHIM_HMDC_HDDA_E1_ALLCH);
 
         /* Enable Interrupt from both sides */
-        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRX, (SHIM_IMRX_BUSY |
-SHIM_IMRX_DONE),
-                                 0x0);
-        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRD, (SHIM_IMRD_DONE |
-SHIM_IMRD_BUSY |
-                                SHIM_IMRD_SSP0 | SHIM_IMRD_DMAC), 0x0);
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRX,
+		(SHIM_IMRX_BUSY | SHIM_IMRX_DONE), 0x0);
+        snd_sof_dsp_update_bits(sdev, HSW_DSP_BAR, SHIM_IMRD,
+		(SHIM_IMRD_DONE |SHIM_IMRD_BUSY | SHIM_IMRD_SSP0
+		| SHIM_IMRD_DMAC), 0x0);
 
         /* clear IPC registers */
         snd_sof_dsp_write(sdev, HSW_DSP_BAR, SHIM_IPCX, 0x0);
@@ -320,16 +318,16 @@ static irqreturn_t hsw_irq_handler(int irq, void *context)
         if (isr & SHIM_ISRX_DONE) {
 
                 /* Mask Done interrupt before return */
-                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
-                SHIM_IMRX_DONE, SHIM_IMRX_DONE);
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR,
+			SHIM_IMRX, SHIM_IMRX_DONE, SHIM_IMRX_DONE);
                 ret = IRQ_WAKE_THREAD;
         }
 
         if (isr & SHIM_ISRX_BUSY) {
 
                 /* Mask Busy interrupt before return */
-                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
-                SHIM_IMRX_BUSY, SHIM_IMRX_BUSY);
+                snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR,
+			SHIM_IMRX, SHIM_IMRX_BUSY, SHIM_IMRX_BUSY);
                 ret = IRQ_WAKE_THREAD;
         }
 
@@ -356,11 +354,11 @@ static irqreturn_t hsw_irq_thread(int irq, void *context)
 
                 /* clear DONE bit - tell DSP we have completed */
                 snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IPCX,
-                        SHIM_IPCX_DONE, 0);
+			SHIM_IPCX_DONE, 0);
 
                 /* unmask Done interrupt */
                 snd_sof_dsp_update_bits64_unlocked(sdev, HSW_DSP_BAR, SHIM_IMRX,
-                        SHIM_IMRX_DONE, 0);
+			SHIM_IMRX_DONE, 0);
         }
 
         /* new message from DSP */
@@ -520,6 +518,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
                 return -EINVAL;
         }
 
+	dev_dbg(sdev->dev, "LPE PHY base at 0x%x size 0x%x", base, size);
         sdev->bar[HSW_DSP_BAR] = ioremap(base, size);
         if (sdev->bar[HSW_DSP_BAR] == NULL) {
                 dev_err(sdev->dev, 
@@ -527,6 +526,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
                         base, size);
                 return -ENODEV;
         }
+	dev_dbg(sdev->dev, "LPE VADDR %p\n", sdev->bar[HSW_DSP_BAR]);
 
         /* PCI base */
         mmio = platform_get_resource(pdev, IORESOURCE_MEM,
@@ -541,6 +541,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
                 goto pci_err;
         }
 
+	dev_dbg(sdev->dev, "PCI base at 0x%x size 0x%x", base, size);
         sdev->bar[HSW_PCI_BAR] = ioremap(base, size);
         if (sdev->bar[HSW_PCI_BAR] == NULL) {
                 dev_err(sdev->dev, 
@@ -549,6 +550,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
                 ret = -ENODEV;
                 goto pci_err;
         }
+	dev_dbg(sdev->dev, "PCI VADDR %p\n", sdev->bar[HSW_PCI_BAR]);
 
         /* enable the DSP SHIM */
         ret = hsw_set_dsp_D0(sdev);
@@ -637,6 +639,39 @@ EXPORT_SYMBOL(snd_sof_hsw_ops);
 /* broadwell ops */
 struct snd_sof_dsp_ops snd_sof_bdw_ops = {
 
+        /*Device init */
+        .probe          = hsw_probe,
+        .remove         = hsw_remove,
+        
+        /* DSP Core Control */
+        .run            = hsw_run,
+        .reset          = hsw_reset,
+
+        /* Register IO */
+        .read           = hsw_read,
+        .write          = hsw_write,
+        .read64         = hsw_read64,
+        .write64        = hsw_write64,
+
+        /* Block IO */
+        .block_read     = hsw_block_read,
+        .block_write    = hsw_block_write,
+
+        /* mailbox */
+        .mailbox_read   = hsw_mailbox_read,
+        .mailbox_write  = hsw_mailbox_write,
+
+        /* ipc */
+        .tx_msg     = hsw_tx_msg,
+        //int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
+
+        /* debug */
+        .debug_map  = hsw_debugfs,
+        .debug_map_count    = ARRAY_SIZE(hsw_debugfs),
+        .dbg_dump   = hsw_dump,
+
+        /* Module loading */
+        .load_module    = snd_sof_parse_module_memcpy,
 };
 EXPORT_SYMBOL(snd_sof_bdw_ops);
 
