@@ -332,6 +332,7 @@ void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 	/* first check for FW boot completion as it's special case */
 	if (!sdev->boot_complete && msg_id & SOF_FW_READY) {
 		sdev->boot_complete = true;
+		dev_dbg(sdev->dev, "booting DSP firmware completed\n");
 		wake_up(&sdev->boot_wait);
 		return;
 	}

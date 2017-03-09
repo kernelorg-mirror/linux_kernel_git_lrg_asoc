@@ -81,10 +81,13 @@ static int sof_probe(struct platform_device *pdev)
 	if (sdev == NULL)
 		return -ENOMEM;
 
+	dev_dbg(&pdev->dev, "probing SOF DSP device....\n");
+
 	/* intialise sof device */
 	sdev->dev = &pdev->dev;
 	sdev->parent = plat_data->dev;
 	sdev->ops = plat_data->machine->ops;
+	sdev->pci = container_of(plat_data->dev, struct pci_dev, dev);
 
 	sdev->pdata = plat_data;
 	INIT_LIST_HEAD(&sdev->pcm_list);

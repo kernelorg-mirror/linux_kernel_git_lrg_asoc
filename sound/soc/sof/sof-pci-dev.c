@@ -55,6 +55,8 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#define DEBUG
+
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
@@ -142,6 +144,8 @@ static int sof_pci_probe(struct pci_dev *pci,
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_pci_priv *priv;
 	int ret = 0;
+
+	dev_dbg(&pci->dev, "PCI DSP detected");
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
