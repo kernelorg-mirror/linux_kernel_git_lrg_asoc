@@ -78,7 +78,7 @@
 /* DSP memories for HSW */
 #define IRAM_OFFSET     0x00000
 #define HSW_IRAM_SIZE       (12 * 32 * 1024) 
-#define DRAM_OFFSET     0x400000
+#define DRAM_OFFSET     0xA0000
 #define HSW_DRAM_SIZE       (16 * 32 * 1024) 
 #define SHIM_OFFSET     0xE7000
 #define SHIM_SIZE       0x100
