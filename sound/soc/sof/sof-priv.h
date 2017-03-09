@@ -187,6 +187,25 @@ struct snd_sof_ipc_msg {
 	bool complete;
 };
 
+struct snd_sof_hda_stream {
+	void __iomem *pphc_addr;
+	void __iomem *pplc_addr; // do we need this ?
+	void __iomem *spib_addr;
+	void __iomem *fifo_addr;
+	void __iomem *drsm_addr;
+	u32 dpib;
+	u32 lpib;
+};
+
+#define SOF_HDA_PLAYBACK_STREAMS	8
+#define SOF_HDA_CAPTURE_STREAMS		8
+
+struct snd_sof_hda_dev {
+	struct snd_sof_hda_stream pstream[SOF_HDA_PLAYBACK_STREAMS];
+	struct snd_sof_hda_stream cstream[SOF_HDA_CAPTURE_STREAMS];
+
+};
+
 struct snd_sof_dev {
 	struct device *dev;
 	struct device *parent;
@@ -203,6 +222,11 @@ struct snd_sof_dev {
 	struct snd_sof_ipc *ipc;
 	struct snd_sof_mailbox inbox;
 	struct snd_sof_mailbox outbox;
+
+	/* front end - platform specific */
+	union {
+		struct snd_sof_hda_dev hda;
+	};
 
 	/* memory bases for mmaped DSPs - set by dsp_init() */
 	void __iomem *bar[SND_SOF_BARS];		/* DSP base address */

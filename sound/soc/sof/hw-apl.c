@@ -57,6 +57,8 @@
  * Hardware interface for audio DSP on Apollolake.
  */
 
+#define DEBUG
+
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -77,6 +79,8 @@
 
 #define APL_HDA_BAR			0
 #define APL_DSP_BAR			1
+#define APL_SPIB_BAR			2
+#define APL_DRSM_BAR			3
 
 /* PCI registers */
 #define PCI_TCSEL			0x44
@@ -88,6 +92,7 @@
 /* Legacy HDA registers and bits used - widths are variable - TODO: check*/
 #define HDA_GCAP			0x0
 #define HDA_GCTL			0x8
+#define HDA_LLCH			0x14
 #define HDA_INTCTL			0x20
 #define HDA_INTSTS			0x24
 
@@ -290,6 +295,168 @@ clear:
 	return -EIO;
 }
 
+#define HDA_MAX_CAPS		10
+#define HDA_CAP_ID_OFF		16
+#define HDA_CAP_ID_MASK		(0xFFF << HDA_CAP_ID_OFF)
+#define HDA_CAP_NEXT_MASK	0xFFFF
+
+#define HDA_PP_CAP_ID			0x3
+#define HDA_REG_PP_PPCH			0x10
+#define HDA_REG_PP_PPCTL		0x04
+#define HDA_PPCTL_PIE			(1<<31)
+#define HDA_PPCTL_GPROCEN		(1<<30)
+
+#define HDA_SPIB_CAP_ID			0x4
+#define HDA_DRSM_CAP_ID			0x5
+
+#define HDA_SPIB_BASE			0x08
+#define HDA_SPIB_INTERVAL		0x08
+#define HDA_SPIB_SPIB			0x00
+#define HDA_SPIB_MAXFIFO		0x04
+
+#define HDA_PPHC_BASE			0x10
+#define HDA_PPHC_INTERVAL		0x10
+
+#define HDA_PPLC_BASE			0x10
+#define HDA_PPLC_MULTI			0x10
+#define HDA_PPLC_INTERVAL		0x10
+
+#define HDA_DRSM_BASE			0x08
+/* Interval used to calculate the iterating register offset */
+#define HDA_DRSM_INTERVAL		0x08
+
+static int apl_get_caps(struct snd_sof_dev *sdev)
+{
+	u32 cap, offset, feature;
+	int ret = -ENODEV, count = 0;
+
+	offset = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_LLCH);
+
+	do {
+		cap = snd_sof_dsp_read(sdev, APL_HDA_BAR, offset);
+
+		dev_vdbg(sdev->dev, "checking for capabilities at offset 0x%x\n",
+			offset & HDA_CAP_NEXT_MASK);
+
+		feature = (cap & HDA_CAP_ID_MASK) >> HDA_CAP_ID_OFF;
+
+		switch (feature) {
+		case HDA_PP_CAP_ID:
+			dev_dbg(sdev->dev, "found DSP capability at 0x%x\n", offset);
+			sdev->bar[APL_DSP_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			ret = 0;
+			break;
+		case HDA_SPIB_CAP_ID:
+			dev_dbg(sdev->dev, "found SPIB capability at 0x%x\n", offset);
+			sdev->bar[APL_SPIB_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			break;
+		case HDA_DRSM_CAP_ID:
+			dev_dbg(sdev->dev, "found DRSM capability at 0x%x\n", offset);
+			sdev->bar[APL_DRSM_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			break;
+		default:
+			dev_vdbg(sdev->dev, "found capability %d at 0x%x\n",
+				feature, offset);
+			break;
+		}		
+
+		offset = cap & HDA_CAP_NEXT_MASK;
+	} while (count++ <= HDA_MAX_CAPS && offset);
+
+
+	return ret;
+}
+
+static int apl_stream_init(struct snd_sof_dev *sdev)
+{
+	struct snd_sof_hda_dev *hdev = &sdev->hda;
+	struct snd_sof_hda_stream *stream;
+	int i, num_playback, num_capture, num_total;
+	u32 gcap;
+
+	gcap = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCAP);
+	dev_dbg(sdev->dev, "hda global caps = 0x%x\n", gcap);
+
+	/* get stream count from GCAP */
+	num_capture = (gcap >> 8) & 0x0f;
+	num_playback = (gcap >> 12) & 0x0f;
+	num_total = num_playback + num_capture;
+
+	dev_dbg(sdev->dev, "detected %d playback and %d capture streams\n",
+		num_playback, num_capture);
+
+	if (num_playback >= SOF_HDA_PLAYBACK_STREAMS) {
+		dev_err(sdev->dev, "error: too many playback streams %d\n",
+			num_playback);
+		return -EINVAL;
+	}
+	if (num_capture >= SOF_HDA_CAPTURE_STREAMS) {
+		dev_err(sdev->dev, "error: too many capture streams %d\n",
+			num_playback);
+		return -EINVAL;
+	}
+
+	/* create playback streams */
+	for (i = 0; i < num_playback; i++) {
+		stream = &hdev->pstream[i];
+
+		/* we always have DSP support */
+		stream->pphc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPHC_BASE +
+				HDA_PPHC_INTERVAL * i;
+
+		stream->pplc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPLC_BASE +
+				HDA_PPLC_MULTI * num_total +
+				HDA_PPLC_INTERVAL * i;
+
+		/* do we support SPIB */
+		if (sdev->bar[APL_SPIB_BAR]) {
+			stream->spib_addr = sdev->bar[APL_SPIB_BAR] +
+				HDA_SPIB_BASE + HDA_SPIB_INTERVAL * i +
+				HDA_SPIB_SPIB;
+
+			stream->fifo_addr = sdev->bar[APL_SPIB_BAR] +
+				HDA_SPIB_BASE + HDA_SPIB_INTERVAL * i +
+				HDA_SPIB_MAXFIFO;
+		}
+
+		/* do we support DRSM */
+		if (sdev->bar[APL_DRSM_BAR])
+			stream->drsm_addr = sdev->bar[APL_DRSM_BAR] +
+				HDA_DRSM_BASE + HDA_DRSM_INTERVAL * i;
+
+	}
+
+	/* create capture streams */
+	for (i = num_playback; i < num_total; i++) {
+		stream = &hdev->cstream[i - num_playback];
+
+		stream->pphc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPHC_BASE +
+				HDA_PPHC_INTERVAL * i;
+
+		stream->pplc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPLC_BASE +
+				HDA_PPLC_MULTI * num_total +
+				HDA_PPLC_INTERVAL * i;
+
+		/* do we support SPIB */
+		if (sdev->bar[APL_SPIB_BAR]) {
+			stream->spib_addr = sdev->bar[APL_SPIB_BAR] +
+				HDA_SPIB_BASE + HDA_SPIB_INTERVAL * i +
+				HDA_SPIB_SPIB;
+
+			stream->fifo_addr = sdev->bar[APL_SPIB_BAR] +
+				HDA_SPIB_BASE + HDA_SPIB_INTERVAL * i +
+				HDA_SPIB_MAXFIFO;
+		}
+
+		/* do we support DRSM */
+		if (sdev->bar[APL_DRSM_BAR])
+			stream->drsm_addr = sdev->bar[APL_DRSM_BAR] +
+				HDA_DRSM_BASE + HDA_DRSM_INTERVAL * i;
+	}
+
+	return 0;
+}
+
 /*
  * Probe and remove.
  */
@@ -319,6 +486,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		goto remap_err;
 	}
 #endif
+
 	pci_set_master(pci);
 	synchronize_irq(pci->irq);
 
@@ -349,7 +517,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	
 	ret = apl_link_reset(sdev);
 	if (ret < 0) {
-		dev_err(&pci->dev, "failed to reset HDA controller\n");
+		dev_err(&pci->dev, "error: failed to reset HDA controller\n");
 		goto reset_err;
 	}
 
@@ -367,8 +535,27 @@ static int apl_probe(struct snd_sof_dev *sdev)
 
 	device_disable_async_suspend(&pci->dev);
 
-	// TODO: get controller capabilities
-	// TODO: enable DSP is controller supports DSP.
+	/* get controller capabilities */
+	ret = apl_get_caps(sdev);
+	if (ret < 0) {
+		dev_err(&pci->dev, "error: failed to find DSP capability\n");
+		goto reset_err;
+	}
+
+	/* init streams */
+	ret = apl_stream_init(sdev);
+	if (ret < 0) {
+		dev_err(&pci->dev, "error: failed to init streams\n");
+		goto reset_err;
+	}
+
+	/* enable DSP features */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
+		0, HDA_PPCTL_GPROCEN);
+
+	/* enable DSP IRQ */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL, 0,
+		HDA_PPCTL_PIE);
 
 	// At this point DSP should be ready for code loading and firmware boot
 
@@ -382,6 +569,14 @@ remap_err:
 
 static int apl_remove(struct snd_sof_dev *sdev)
 {
+	/* disable DSP IRQ */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
+		HDA_PPCTL_PIE, 0);
+
+	/* disable DSP */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
+		HDA_PPCTL_GPROCEN, 0);
+
 	return 0;
 }
 
