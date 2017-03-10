@@ -840,8 +840,7 @@ int sof_hsw_dsp_init(struct device *dev, struct sof_pdata *pdata)
 		ipc->ops.dsp_notify = byt_notify;
 		break;
 	case SST_DEV_ID_LYNX_POINT:
-	case SST_DEV_ID_WILDCAT_POINT:
-		/* Haswell / Broadwell */
+		/* Haswell */
 		dsp_dev = &hsw_dev;
 		dsp_dev->thread_context = hsw;
 		ipc->ops.tx_msg = hsw_tx_msg;
@@ -850,6 +849,17 @@ int sof_hsw_dsp_init(struct device *dev, struct sof_pdata *pdata)
 		ipc->ops.reply_msg_match = hsw_reply_msg_match;
 		ipc->ops.is_dsp_busy = hsw_is_dsp_busy;
 		ipc->ops.dsp_notify = hsw_notify;
+		break;
+	case SST_DEV_ID_WILDCAT_POINT:
+		/* Broadwell */
+		dsp_dev = &bdw_dev;
+		dsp_dev->thread_context = bdw;
+		ipc->ops.tx_msg = bdw_tx_msg;
+		ipc->ops.shim_dbg = bdw_shim_dbg;
+		ipc->ops.tx_data_copy = bdw_tx_data_copy;
+		ipc->ops.reply_msg_match = bdw_reply_msg_match;
+		ipc->ops.is_dsp_busy = bdw_is_dsp_busy;
+		ipc->ops.dsp_notify = bdw_notify;
 		break;
 	default:
 		ret = -EINVAL;

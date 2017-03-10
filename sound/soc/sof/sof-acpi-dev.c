@@ -223,13 +223,15 @@ static struct sof_dev_desc sof_acpi_haswell_desc = {
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
 };
+#endif
 
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_BROADWELL)
 static struct snd_sof_machine broadwell_machines[] = {
 	{ "INT343A", "broadwell-audio", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "haswell-pcm-audio",
+		"intel/reef-bdw.tplg", "broadwell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{ "RT5677CE", "bdw-rt5677", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "haswell-pcm-audio",
+		"intel/reef-bdw.tplg", "broadwell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{}
 };
@@ -295,6 +297,8 @@ static struct sof_dev_desc sof_acpi_cherrytrail_desc = {
 static const struct acpi_device_id sof_acpi_match[] = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_HASWELL)
 	{ "INT33C8", (unsigned long)&sof_acpi_haswell_desc },
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_BROADWELL)
 	{ "INT3438", (unsigned long)&sof_acpi_broadwell_desc },
 #endif
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_BAYTRAIL)
