@@ -84,7 +84,6 @@ struct snd_sof_ipc_msg;
 struct snd_sof_ipc;
 struct snd_sof_debugfs_map;
 struct snd_soc_tplg_ops;
-struct snd_sof_ipc_msg;
 struct snd_soc_component;
 
 struct snd_sof_dsp_ops {
@@ -203,7 +202,6 @@ struct snd_sof_hda_stream {
 struct snd_sof_hda_dev {
 	struct snd_sof_hda_stream pstream[SOF_HDA_PLAYBACK_STREAMS];
 	struct snd_sof_hda_stream cstream[SOF_HDA_CAPTURE_STREAMS];
-
 };
 
 struct snd_sof_dev {
@@ -219,9 +217,11 @@ struct snd_sof_dev {
 	struct snd_sof_pdata *pdata;
 	const struct snd_sof_dsp_ops *ops;
 
+	/* IPC */
 	struct snd_sof_ipc *ipc;
 	struct snd_sof_mailbox inbox;
 	struct snd_sof_mailbox outbox;
+	u64 irq_status;
 
 	/* front end - platform specific */
 	union {
