@@ -74,48 +74,63 @@
 #include "ops.h"
 #include "intel.h"
 
-/* controller reset timrout in ms */
-#define APL_CTRL_RESET_TIMEOUT		100
-
 #define APL_HDA_BAR			0
-#define APL_DSP_BAR			1
+#define APL_PP_BAR			1
 #define APL_SPIB_BAR			2
 #define APL_DRSM_BAR			3
+#define APL_DSP_BAR			4
 
-/* PCI registers */
-#define PCI_TCSEL			0x44
-#define PCI_CGCTL			0x48
-
-/* PCI_CGCTL bits */
-#define PCI_CGCTL_MISCBDCGE_MASK	(1 << 6)
-
-/* Legacy HDA registers and bits used - widths are variable - TODO: check*/
-#define HDA_GCAP			0x0
-#define HDA_GCTL			0x8
-#define HDA_LLCH			0x14
-#define HDA_INTCTL			0x20
-#define HDA_INTSTS			0x24
-
-/* HDA_GCTL register bist */
-#define HDA_GCTL_RESET			(1 << 0)	
-
-/* HDA_INCTL and HDA_INTSTS regs */
-#define HDA_INT_GLOBAL_EN		(1 << 31)
-#define HDA_INT_CTRL_EN			(1 << 30)
-#define HDA_INT_ALL_STREAM		0xff
+static bool is_apl_core_enable(struct snd_sof_dev *sdev,
+	unsigned int core_mask);
 
 /*
  * Debug
  */
 
-
 static const struct snd_sof_debugfs_map apl_debugfs[] = {
-
+	{"hda", APL_HDA_BAR, 0, 0x4000},
+	{"pp", APL_PP_BAR,  0, 0x1000},
+	{"dsp", APL_DSP_BAR,  0, 0x10000},
+//	{"pci", APL_PCI_BAR, 0, 0x150},
 };
 
 static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 {
+	u32 reg;
+	int i;
 
+	if (flags & SOF_DBG_REGS) {
+		for (i = 0; i < 0x40; i += 4 ) {
+			dev_dbg(sdev->dev, "hda 0x%2.2x value 0x%8.8x\n",
+				i, snd_sof_dsp_read(sdev, APL_HDA_BAR, i));
+		}
+		for (i = 0; i < 0x40; i += 4 ) {
+			dev_dbg(sdev->dev, "dsp 0x%2.2x value 0x%8.8x\n",
+				i, snd_sof_dsp_read(sdev, APL_DSP_BAR, i));
+		}
+		for (i = 0; i < 0x40; i += 4 ) {
+			dev_dbg(sdev->dev, "pp 0x%2.2x value 0x%8.8x\n",
+				i, snd_sof_dsp_read(sdev, APL_PP_BAR, i));
+		}
+	}
+
+#if 0
+	if (flags & SOF_DBG_MBOX) {
+		for (i = MBOX_OFFSET; i < MBOX_OFFSET + MBOX_DUMP_SIZE; i += 4) {
+			dev_dbg(sdev->dev, "mbox: 0x%2.2x value 0x%8.8x\n",
+				i - MBOX_OFFSET,
+				readl(sdev->bar[BYT_DSP_BAR] + i));
+		}
+	}
+#endif
+
+	if (flags & SOF_DBG_PCI) {
+		for (i = 0; i < 0x150; i += 4) {
+			pci_read_config_dword(sdev->pci, i, &reg);
+			dev_dbg(sdev->dev, "pci: 0x%2.2x value 0x%8.8x\n",
+				i, reg);
+		}
+	}
 }
 
 /*
@@ -154,16 +169,21 @@ static u64 apl_read64(struct snd_sof_dev *sdev, void __iomem *addr)
 static void apl_block_write(struct snd_sof_dev *sdev,
 	volatile void __iomem *dest, const void *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
+	u32 tmp = 0;
+	int i, m, n;
+	const u8 *src_byte = src;
 
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		writel(*(u32 *)(src + i), dest + i);
+	m = size / 4;
+	n = size % 4;
 
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		writeb(*(u8 *)(src + i), dest + i);
+	/* __iowrite32_copy use 32bit size values so divide by 4 */
+	__iowrite32_copy((void *)dest, src, m);
 
+	if (n) {
+		for (i = 0; i < n; i++)
+			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
+		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
+	}
 }
 
 static void apl_block_read(struct snd_sof_dev *sdev, void *dest,
@@ -198,30 +218,409 @@ static void apl_mailbox_read(struct snd_sof_dev *sdev, void *message,
 }
 
 /*
+ * Interrupts
+ */
+
+static void apl_ipc_int_enable(struct snd_sof_dev *sdev)
+{
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC,
+		SKL_ADSPIC_IPC, SKL_ADSPIC_IPC);
+}
+
+static void apl_ipc_int_disable(struct snd_sof_dev *sdev)
+{
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_IPC, 0);
+}
+
+static void apl_ipc_op_int_enable(struct snd_sof_dev *sdev)
+{
+	/* enable IPC DONE interrupt */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
+		SKL_ADSP_REG_HIPCCTL_DONE, SKL_ADSP_REG_HIPCCTL_DONE);
+
+	/* Enable IPC BUSY interrupt */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
+		SKL_ADSP_REG_HIPCCTL_BUSY, SKL_ADSP_REG_HIPCCTL_BUSY);
+}
+
+static void apl_ipc_op_int_disable(struct snd_sof_dev *sdev)
+{
+	/* disable IPC DONE interrupt */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE, 0);
+
+	/* Disable IPC BUSY interrupt */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_BUSY, 0);
+}
+
+/*
+ * Code loader
+ */
+void apl_cldma_process_intr(struct snd_sof_dev *sdev)
+{
+	u32 status;
+
+	status = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_CL_SD_STS);
+
+//	if (status & SKL_CL_DMA_SD_INT_COMPLETE)
+//		ctx->cl_dev.wake_status = SKL_CL_DMA_BUF_COMPLETE;
+//	else
+//		ctx->cl_dev.wake_status = SKL_CL_DMA_ERR;
+
+	//ctx->cl_dev.wait_condition = true;
+	//wake_up(&ctx->cl_dev.wait_queue);
+}
+
+
+/*
  * IPC Doorbell IRQ handler and thread.
  */
 
 static irqreturn_t apl_irq_handler(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
-	//u64 isr;
 	int ret = IRQ_NONE;
 
 	spin_lock(&sdev->spinlock);
 
-	
+	/* store status */
+	sdev->irq_status = snd_sof_dsp_read(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPIS);
 
+	/* invalid message ? */
+	if (sdev->irq_status == 0xffffffff)
+		goto out;
+
+	/* IPC message ? */
+	if (sdev->irq_status & SKL_ADSPIS_IPC) {
+		apl_ipc_int_disable(sdev);
+		ret = IRQ_WAKE_THREAD;
+	}
+
+	/* code loader ? */
+	if (sdev->irq_status & SKL_ADSPIS_CL_DMA) {
+		//apl_cldma_int_disable(sdev);
+		ret = IRQ_WAKE_THREAD;
+	}
+
+out:
 	spin_unlock(&sdev->spinlock);
 	return ret;
 }
 
 static irqreturn_t apl_irq_thread(int irq, void *context)
 {
-	//struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
+	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
+	//struct sst_generic_ipc *ipc = &skl->ipc;
+	u64 header = 0;
+	u32 hipcie, hipct, hipcte;
+	irqreturn_t ret = IRQ_NONE;
 
+	if (sdev->irq_status & SKL_ADSPIS_CL_DMA)
+		apl_cldma_process_intr(sdev);
 
-	return IRQ_HANDLED;
+	/* Here we handle IPC interrupts only */
+	if (!(sdev->irq_status & SKL_ADSPIS_IPC))
+		return ret;
+
+	hipcie = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCIE);
+	hipct = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCT);
+
+	/* reply message from DSP */
+	if (hipcie & SKL_ADSP_REG_HIPCIE_DONE) {
+
+		
+		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE, 0);
+
+		/* clear DONE bit - tell DSP we have completed the operation */
+		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCIE,
+			SKL_ADSP_REG_HIPCIE_DONE, SKL_ADSP_REG_HIPCIE_DONE);
+
+		/* unmask Done interrupt */
+		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE,
+			SKL_ADSP_REG_HIPCCTL_DONE);
+
+		ret = IRQ_HANDLED;
+	}
+
+	/* New message from DSP */
+	if (hipct & SKL_ADSP_REG_HIPCT_BUSY) {
+
+		hipcte = snd_sof_dsp_read(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_HIPCTE);
+		header = hipct;
+		header <<= 32;
+		header |= hipcte;
+
+		dev_dbg(sdev->dev, "ipc: firmware response :%llx\n", header);
+
+		if (header) {
+			/* Handle Immediate reply from DSP Core */
+			snd_sof_ipc_process_reply(sdev, header);
+		} else {
+			dev_dbg(sdev->dev, "ipc: firmware notification\n");
+			snd_sof_ipc_process_notification(sdev, header);
+		}
+
+		/* clear  busy interrupt */
+		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCT,
+			SKL_ADSP_REG_HIPCT_BUSY, SKL_ADSP_REG_HIPCT_BUSY);
+
+		ret = IRQ_HANDLED;
+	}
+
+	if (ret == IRQ_HANDLED) {
+		apl_ipc_int_enable(sdev);
+		/* continue to send any remaining messages... */
+		snd_sof_ipc_process_msgs(sdev);
+	}
+
+	return ret;
 }
+
+/*
+ * DSP control.
+ */
+
+static int
+apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	u32 reg;
+	int ret;
+
+	/* set reset bits for cores */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CRST_MASK(core_mask),
+			SKL_ADSPCS_CRST_MASK(core_mask));
+
+	/* poll with timeout to check if operation successful */
+	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
+		SKL_ADSPCS_CRST_MASK(core_mask),
+		SKL_ADSPCS_CRST_MASK(core_mask), SKL_DSP_RESET_TO);
+
+	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((reg & SKL_ADSPCS_CRST_MASK(core_mask)) !=
+		SKL_ADSPCS_CRST_MASK(core_mask)) {
+		dev_err(sdev->dev, "reset enter failed: core_mask %x val 0x%x\n",
+			core_mask, reg);
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+static int apl_dsp_core_reset_leave(struct snd_sof_dev *sdev,
+	unsigned int core_mask)
+{
+	u32 reg;
+	int ret;
+
+	/* clear reset bits for cores */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CRST_MASK(core_mask), 0);
+
+	/* poll with timeout to check if operation successful */
+	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
+		SKL_ADSPCS_CRST_MASK(core_mask), 0, SKL_DSP_RESET_TO);
+
+	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((reg & SKL_ADSPCS_CRST_MASK(core_mask)) != 0) {
+		dev_err(sdev->dev, "reset leave failed: core_mask %x val 0x%x\n",
+			core_mask, reg);
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+
+
+static int apl_reset_core(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+		/* stall core */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_HDA_BAR,
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CSTALL_MASK(core_mask),
+		SKL_ADSPCS_CSTALL_MASK(core_mask));
+
+	/* set reset state */
+	return apl_dsp_core_reset_enter(sdev, core_mask);
+}
+
+static int apl_run_core(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	int ret;
+
+	/* leave reset state */
+	ret = apl_dsp_core_reset_leave(sdev, core_mask);
+	if (ret < 0)
+		return ret;
+
+	/* run core */
+	dev_dbg(sdev->dev, "unstall/run core: core_mask = %x\n", core_mask);
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CSTALL_MASK(core_mask), 0);
+
+	if (!is_apl_core_enable(sdev, core_mask)) {
+		apl_reset_core(sdev, core_mask);
+		dev_err(sdev->dev, "DSP start core failed: core_mask %x\n",
+			core_mask);
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+/*
+ * Power Management.
+ */
+
+static int apl_core_power_up(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	u32 reg;
+	int ret;
+
+	/* update bits */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
+			SKL_ADSPCS_SPA_MASK(core_mask),
+			SKL_ADSPCS_SPA_MASK(core_mask));
+
+	/* poll with timeout to check if operation successful */
+	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
+		SKL_ADSPCS_CPA_MASK(core_mask), SKL_ADSPCS_CPA_MASK(core_mask),
+		SKL_DSP_PU_TO);
+	if (ret < 0)
+		dev_err(sdev->dev, "error: timout on core powerup\n");
+
+	/* did core power up ? */
+	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((reg & SKL_ADSPCS_CPA_MASK(core_mask)) !=
+		SKL_ADSPCS_CPA_MASK(core_mask)) {
+		dev_err(sdev->dev, "error: power up core failed core_mask %x rag 0x%x\n",
+			core_mask, reg);
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+static int apl_core_power_down(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	/* update bits */
+	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_SPA_MASK(core_mask), 0);
+
+	/* poll with timeout to check if operation successful */
+	return snd_sof_dsp_register_poll(sdev, APL_DSP_BAR,
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CPA_MASK(core_mask), 0,
+		SKL_DSP_PD_TO);
+}
+
+static int apl_set_dsp_D0(struct snd_sof_dev *sdev, unsigned int core_id)
+{
+	unsigned int core_mask = SKL_DSP_CORE_MASK(core_id);
+	int ret = 0;
+
+	/* core 1 also has to be powered on if core 0 is selected */
+	if (core_id == 0)
+		core_mask |= SKL_DSP_CORE_MASK(1);
+
+	/* power up the cores */
+	ret = apl_core_power_up(sdev, core_mask);
+	if (ret < 0)
+		goto err;
+
+	if (core_id == 0) {
+		/* Enable interrupts after SPA is set and before unstall */
+		apl_ipc_int_enable(sdev);
+		apl_ipc_op_int_enable(sdev);
+
+	}
+err:
+	return ret;
+}
+
+static bool is_apl_core_enable(struct snd_sof_dev *sdev,
+	unsigned int core_mask)
+{
+	int val;
+	bool is_enable;
+
+	val = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+
+	is_enable = ((val & SKL_ADSPCS_CPA_MASK(core_mask)) &&
+			(val & SKL_ADSPCS_SPA_MASK(core_mask)) &&
+			!(val & SKL_ADSPCS_CRST_MASK(core_mask)) &&
+			!(val & SKL_ADSPCS_CSTALL_MASK(core_mask)));
+
+	dev_dbg(sdev->dev, "DSP core(s) enabled? %d : core_mask %x\n",
+		is_enable, core_mask);
+
+	return is_enable;
+}
+
+static int apl_enable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	int ret;
+
+	/* power up */
+	ret = apl_core_power_up(sdev, core_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "dsp core power up failed: core_mask %x\n",
+			core_mask);
+		return ret;
+	}
+
+	return apl_run_core(sdev, core_mask);
+}
+
+static int apl_disable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
+{
+	int ret;
+
+	/* place core in reset prior to power doown */
+	ret = apl_reset_core(sdev, core_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "dsp core reset failed: core_mask %x\n",
+			core_mask);
+		return ret;
+	}
+
+	/* power down core*/
+	ret = apl_core_power_down(sdev, core_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "dsp core power down fail mask %x: %d\n",
+							core_mask, ret);
+		return ret;
+	}
+
+	/* make sure we are in OFF state */
+	if (is_apl_core_enable(sdev, core_mask)) {
+		dev_err(sdev->dev, "dsp core disable fail mask %x: %d\n",
+							core_mask, ret);
+		ret = -EIO;
+	}
+
+	return ret;
+}
+
+static int apl_set_dsp_D3(struct snd_sof_dev *sdev, unsigned int core_id)
+{
+	int ret;
+	unsigned int core_mask = SKL_DSP_CORE_MASK(core_id);
+
+	ret = apl_disable_core(sdev, core_mask);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to enter D3 core %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 
 #if 0
 static void apl_notify(struct snd_sof_dev *dsp)
@@ -245,25 +644,13 @@ static int apl_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 }
 
 /*
- * DSP control.
+ * HDA Operations.
  */
-
-static int apl_run(struct snd_sof_dev *sdev)
-{
-
-
-	return 0;
-}
-
-static int apl_reset(struct snd_sof_dev *sdev)
-{
-
-	return 0;
-}
 
 static int apl_link_reset(struct snd_sof_dev *sdev)
 {
 	unsigned long timeout;
+	u32 gctl = 0;
 
 	/* reset the HDA controller */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_RESET, 0);
@@ -271,59 +658,38 @@ static int apl_link_reset(struct snd_sof_dev *sdev)
 	/* wait for reset */
 	timeout = jiffies + msecs_to_jiffies(APL_CTRL_RESET_TIMEOUT);
 	while (time_before(jiffies, timeout)) {
+
 		usleep_range(500, 1000);
-		if ((snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL) & HDA_GCTL_RESET) == 0)
+		gctl = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL);
+		if ((gctl & HDA_GCTL_RESET) == 0)
 			goto clear;
 	}
 
-	/* reset failed */	
+	/* reset failed */
+	dev_err(sdev->dev, "error: failed to reset HDA controller gctl 0x%x\n",
+		gctl);
 	return -EIO;
 
 clear:
 	/* now take controller out of reset */
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, 0, HDA_GCTL_RESET);
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_RESET,
+		HDA_GCTL_RESET);
 
 	/* wait for controller to be ready */
 	timeout = jiffies + msecs_to_jiffies(APL_CTRL_RESET_TIMEOUT);
 	while (time_before(jiffies, timeout)) {
+
 		usleep_range(500, 1000);
-		if (snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL) == 0)
+		gctl = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL);
+		if ((gctl & HDA_GCTL_RESET) == 1)
 			return 0;
 	}
 
 	/* reset failed */
+	dev_err(sdev->dev, "error: failed to ready HDA controller gctl 0x%x\n",
+		gctl);
 	return -EIO;
 }
-
-#define HDA_MAX_CAPS		10
-#define HDA_CAP_ID_OFF		16
-#define HDA_CAP_ID_MASK		(0xFFF << HDA_CAP_ID_OFF)
-#define HDA_CAP_NEXT_MASK	0xFFFF
-
-#define HDA_PP_CAP_ID			0x3
-#define HDA_REG_PP_PPCH			0x10
-#define HDA_REG_PP_PPCTL		0x04
-#define HDA_PPCTL_PIE			(1<<31)
-#define HDA_PPCTL_GPROCEN		(1<<30)
-
-#define HDA_SPIB_CAP_ID			0x4
-#define HDA_DRSM_CAP_ID			0x5
-
-#define HDA_SPIB_BASE			0x08
-#define HDA_SPIB_INTERVAL		0x08
-#define HDA_SPIB_SPIB			0x00
-#define HDA_SPIB_MAXFIFO		0x04
-
-#define HDA_PPHC_BASE			0x10
-#define HDA_PPHC_INTERVAL		0x10
-
-#define HDA_PPLC_BASE			0x10
-#define HDA_PPLC_MULTI			0x10
-#define HDA_PPLC_INTERVAL		0x10
-
-#define HDA_DRSM_BASE			0x08
-/* Interval used to calculate the iterating register offset */
-#define HDA_DRSM_INTERVAL		0x08
 
 static int apl_get_caps(struct snd_sof_dev *sdev)
 {
@@ -342,17 +708,23 @@ static int apl_get_caps(struct snd_sof_dev *sdev)
 
 		switch (feature) {
 		case HDA_PP_CAP_ID:
-			dev_dbg(sdev->dev, "found DSP capability at 0x%x\n", offset);
-			sdev->bar[APL_DSP_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			dev_dbg(sdev->dev, "found DSP capability at 0x%x\n",
+				offset);
+			sdev->bar[APL_PP_BAR] = sdev->bar[APL_HDA_BAR] +
+				offset;
 			ret = 0;
 			break;
 		case HDA_SPIB_CAP_ID:
-			dev_dbg(sdev->dev, "found SPIB capability at 0x%x\n", offset);
-			sdev->bar[APL_SPIB_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			dev_dbg(sdev->dev, "found SPIB capability at 0x%x\n",
+				offset);
+			sdev->bar[APL_SPIB_BAR] = sdev->bar[APL_HDA_BAR] +
+				offset;
 			break;
 		case HDA_DRSM_CAP_ID:
-			dev_dbg(sdev->dev, "found DRSM capability at 0x%x\n", offset);
-			sdev->bar[APL_DRSM_BAR] = sdev->bar[APL_HDA_BAR] + offset;
+			dev_dbg(sdev->dev, "found DRSM capability at 0x%x\n",
+				offset);
+			sdev->bar[APL_DRSM_BAR] = sdev->bar[APL_HDA_BAR] +
+				offset;
 			break;
 		default:
 			dev_vdbg(sdev->dev, "found capability %d at 0x%x\n",
@@ -401,10 +773,10 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream = &hdev->pstream[i];
 
 		/* we always have DSP support */
-		stream->pphc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPHC_BASE +
+		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
 				HDA_PPHC_INTERVAL * i;
 
-		stream->pplc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPLC_BASE +
+		stream->pplc_addr = sdev->bar[APL_PP_BAR] + HDA_PPLC_BASE +
 				HDA_PPLC_MULTI * num_total +
 				HDA_PPLC_INTERVAL * i;
 
@@ -430,10 +802,10 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 	for (i = num_playback; i < num_total; i++) {
 		stream = &hdev->cstream[i - num_playback];
 
-		stream->pphc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPHC_BASE +
+		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
 				HDA_PPHC_INTERVAL * i;
 
-		stream->pplc_addr = sdev->bar[APL_DSP_BAR] + HDA_PPLC_BASE +
+		stream->pplc_addr = sdev->bar[APL_PP_BAR] + HDA_PPLC_BASE +
 				HDA_PPLC_MULTI * num_total +
 				HDA_PPLC_INTERVAL * i;
 
@@ -457,9 +829,112 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 	return 0;
 }
 
+
 /*
  * Probe and remove.
  */
+
+/*
+ * First boot sequence has some extra steps. Core 0 waits for power
+ * status on core 1, so power up core 1 also momentarily, keep it in
+ * reset/stall and then turn it off
+ */
+static int apl_init(struct snd_sof_dev *sdev,
+			const void *fwdata, u32 fwsize)
+{
+	int stream_tag = 1, ret, i;
+	u32 hipcie, status;
+
+	// TODO: prepare DMA for code loader use
+#if 0
+	stream_tag = sdev->dsp_ops.prepare(sdev->dev, 0x40, fwsize, &sdev->dmab);
+	if (stream_tag <= 0) {
+		dev_err(sdev->dev, "Failed to prepare DMA FW loading err: %x\n",
+				stream_tag);
+		return stream_tag;
+	}
+
+	sdev->dsp_ops.stream_tag = stream_tag;
+	memcpy(sdev->dmab.area, fwdata, fwsize);
+#endif
+	/* Step 1: Power up core 0 and core 1 */
+	ret = apl_core_power_up(sdev, SKL_DSP_CORE_MASK(0) |
+		SKL_DSP_CORE_MASK(1));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: dsp core 0/1 power up failed\n");
+		goto err;
+	}
+
+	/* Step 2: Purge FW request */
+	snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCI,
+		SKL_ADSP_REG_HIPCI_BUSY | (BXT_IPC_PURGE_FW | 
+		((stream_tag - 1) << 9)));
+
+	/* Step 3: Unset core 0 reset state & unstall/run core 0 */
+	ret = apl_run_core(sdev, SKL_DSP_CORE_MASK(0));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: dsp core start failed %d\n", ret);
+		ret = -EIO;
+		goto err;
+	}
+
+	/* Step 4: Wait for IPC DONE Bit from ROM */
+	for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
+
+		hipcie = snd_sof_dsp_read(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_HIPCIE);
+
+		if (hipcie & SKL_ADSP_REG_HIPCIE_DONE) {
+			snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
+					SKL_ADSP_REG_HIPCIE,
+					SKL_ADSP_REG_HIPCIE_DONE,
+					SKL_ADSP_REG_HIPCIE_DONE);
+			goto step5;
+		}
+		mdelay(1);
+	}
+
+	dev_err(sdev->dev, "error: waiting for HIPCIE done, reg: 0x%x\n",
+		hipcie);
+	goto err;
+
+step5:
+	/* Step 5: power down core1 */
+	ret = apl_core_power_down(sdev, SKL_DSP_CORE_MASK(1));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: dsp core 1 power down failed\n");
+		goto err;
+	}
+
+	/* Step 6: Enable Interrupt */
+	apl_ipc_int_enable(sdev);
+	apl_ipc_op_int_enable(sdev);
+
+	/* Step 7: Wait for ROM init */
+	for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
+
+		status = snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS);
+
+		if ((status & SKL_FW_STS_MASK) == SKL_FW_INIT) {
+			dev_info(sdev->dev, "ROM loaded, continue FW loading\n");
+			goto out;
+		}
+		mdelay(1);
+	}
+
+	dev_err(sdev->dev, "error: timeout for ROM init, HIPCIE: 0x%x status 0x%x\n", 
+		hipcie, status);
+	ret = -EIO;
+
+
+err:
+	apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
+	//sdev->dsp_ops.cleanup(sdev->dev, &sdev->dmab, stream_tag);
+	apl_disable_core(sdev, SKL_DSP_CORE_MASK(0) | SKL_DSP_CORE_MASK(1));
+out:
+	return ret;
+}
+
 
 /*
  * We dont need to do a full HDA codec probe as external HDA codec mode is
@@ -477,15 +952,14 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dev_err(&pci->dev, "ioremap error\n");
 		return -ENXIO;
 	}
-#if 0
+
 	/* DSP base */
 	sdev->bar[APL_DSP_BAR] = pci_ioremap_bar(pci, APL_DSP_BAR);
 	if (sdev->bar[APL_DSP_BAR] == NULL) {
 		dev_err(&pci->dev, "ioremap error\n");
 		ret = -ENXIO;
-		goto remap_err;
+		goto err;
 	}
-#endif
 
 	pci_set_master(pci);
 	synchronize_irq(pci->irq);
@@ -513,12 +987,12 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	 * (init chip) and then again set CGCTL.MISCBDCGE to 1
 	 */
 	snd_sof_pci_update_bits(sdev, PCI_CGCTL,
-		PCI_CGCTL_MISCBDCGE_MASK, PCI_CGCTL_MISCBDCGE_MASK);
+		PCI_CGCTL_MISCBDCGE_MASK, 0);
 	
 	ret = apl_link_reset(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to reset HDA controller\n");
-		goto reset_err;
+		goto err;
 	}
 
 	/* clear interrupts */
@@ -527,11 +1001,12 @@ static int apl_probe(struct snd_sof_dev *sdev)
 
 	/* enable CIE and GIE interrupts */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
-		0, HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN);
+		HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN,
+		HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN);
 
 	/* re-enable CGCTL.MISCBDCGE after rest */
 	snd_sof_pci_update_bits(sdev, PCI_CGCTL,
-		PCI_CGCTL_MISCBDCGE_MASK, 0);
+		PCI_CGCTL_MISCBDCGE_MASK, PCI_CGCTL_MISCBDCGE_MASK);
 
 	device_disable_async_suspend(&pci->dev);
 
@@ -539,42 +1014,52 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	ret = apl_get_caps(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to find DSP capability\n");
-		goto reset_err;
+		goto err;
 	}
 
 	/* init streams */
 	ret = apl_stream_init(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to init streams\n");
-		goto reset_err;
+		goto err;
 	}
 
 	/* enable DSP features */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
-		0, HDA_PPCTL_GPROCEN);
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
+		HDA_PPCTL_GPROCEN, HDA_PPCTL_GPROCEN);
 
 	/* enable DSP IRQ */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL, 0,
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, HDA_PPCTL_PIE,
 		HDA_PPCTL_PIE);
 
-	// At this point DSP should be ready for code loading and firmware boot
+	/* At this point DSP should be ready for code loading and firmware boot */
+	ret = apl_init(sdev, NULL, 0);
+	if (ret < 0) {
+		dev_err(&pci->dev, "error: failed to init DSP\n");
+		goto err;
+	}
 
 	return 0;
 
-reset_err:
-remap_err:
-	// TODO:
+err:
+	/* disable DSP */
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
+		HDA_PPCTL_GPROCEN, 0);
+
 	return ret;
 }
 
 static int apl_remove(struct snd_sof_dev *sdev)
 {
+	/* disable cores */
+	apl_disable_core(sdev, SKL_DSP_CORE_MASK(0) | SKL_DSP_CORE_MASK(1));
+
 	/* disable DSP IRQ */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_PIE, 0);
 
 	/* disable DSP */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, HDA_REG_PP_PPCTL,
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
 
 	return 0;
@@ -588,8 +1073,8 @@ struct snd_sof_dsp_ops snd_sof_bxt_ops = {
 	.remove		= apl_remove,
 
 	/* DSP core boot / reset */
-	.run		= apl_run,
-	.reset		= apl_reset,
+//	.run		= apl_run,
+//	.reset		= apl_reset,
 
 	/* Register IO */
 	.write		= apl_write,
@@ -629,8 +1114,8 @@ struct snd_sof_dsp_ops snd_sof_apl_ops = {
 	.remove		= apl_remove,
 
 	/* DSP core boot / reset */
-	.run		= apl_run,
-	.reset		= apl_reset,
+//	.run		= apl_run,
+//	.reset		= apl_reset,
 
 	/* Register IO */
 	.write		= apl_write,

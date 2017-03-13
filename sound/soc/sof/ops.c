@@ -58,6 +58,7 @@
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 #include <uapi/sound/sof-ipc.h>
 #include "ops.h"
 #include "sof-priv.h"
@@ -186,4 +187,43 @@ void snd_sof_dsp_update_bits_forced(struct snd_sof_dev *sdev, u32 bar,
 	spin_unlock_irqrestore(&sdev->spinlock, flags);
 }
 EXPORT_SYMBOL(snd_sof_dsp_update_bits_forced);
+
+int snd_sof_dsp_register_poll(struct snd_sof_dev *sdev, u32 bar, u32 offset,
+	u32 mask, u32 target, u32 timeout)
+{
+	int time, ret;
+	bool done = false;
+
+	/*
+	 * we will poll for couple of ms using mdelay, if not successful
+	 * then go to longer sleep using usleep_range
+	 */
+
+	/* check if set state successful */
+	for (time = 0; time < 5; time++) {
+		if ((snd_sof_dsp_read(sdev, bar, offset) & mask) == target) {
+			done = true;
+			break;
+		}
+		mdelay(1);
+	}
+
+	if (done ==  false) {
+		/* sleeping in 10ms steps so adjust timeout value */
+		timeout /= 10;
+
+		for (time = 0; time < timeout; time++) {
+			if ((snd_sof_dsp_read(sdev, bar, offset) & mask) == target)
+				break;
+
+			usleep_range(5000, 10000);
+		}
+	}
+
+	//reg = snd_sof_dsp_read(sdev, offset);
+	ret = time < timeout ? 0 : -ETIME;
+
+	return ret;
+}
+EXPORT_SYMBOL(snd_sof_dsp_register_poll);
 
