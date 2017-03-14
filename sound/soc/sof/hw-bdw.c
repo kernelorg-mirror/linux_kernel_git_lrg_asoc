@@ -75,7 +75,7 @@
 #include "ops.h"
 #include "intel.h"
 
-/* DSP memories for HSW */
+/* DSP memories for BDW */
 #define IRAM_OFFSET     0xA0000
 #define BDW_IRAM_SIZE       (10 * 32 * 1024) 
 #define DRAM_OFFSET     0x00000
@@ -210,15 +210,13 @@ finish:
 	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
 
 	/* set default power gating control, enable power gating control for 
-	all blocks. that is, can't be accessed, please enable each block
-	before accessing. */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
-	reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
-	
-	/* for D0, always enable the block(DSRAM[0]) used for FW dump */
-	fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
-	writel(reg & ~fw_dump_bit, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
+        all blocks. that is, can't be accessed, please enable each block
+        before accessing. */
+        reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
+        reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
 
+        /* for D0, always enable RAM block*/
+        writel(reg & 0x00000fff, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
 
 	/* disable DMA finish function for SSP0 & SSP1 */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_DSP_BAR,  SHIM_CSR2,
@@ -565,14 +563,6 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 		dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
 		return ret;
 	}
-
-	/* always enable the block(DSRAM[0]) used for FW dump */
-	fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
-	/* set default power gating control, enable power gating control 
-	for all blocks. that is,
-	can't be accessed, please enable each block before accessing. */
-	writel(0xffffffff & ~fw_dump_bit, sdev->bar[BDW_PCI_BAR] 
-		+ PCI_VDRTCTL0);
 
 	/* set BARS */
 	sdev->cl_bar = BDW_DSP_BAR;
