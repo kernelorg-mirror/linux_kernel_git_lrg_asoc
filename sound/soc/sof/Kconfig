@@ -47,11 +47,12 @@ config SND_SOC_SOF_HASWELL
 config SND_SOC_SOF_BROADWELL
 	tristate "SOF support for Broadwell"
 	depends on SND_SOC_SOF_INTEL
-	select SND_SOC_SOF_APCI
+	select SND_SOC_SOF_ACPI
 	help
           This adds support for Sound Open Firmware for Intel(R) platforms
           using the Broadwell processors.
           Say Y if you have such a device.
+          If unsure select "N".
 
 config SND_SOC_SOF_APOLLOLAKE
 	tristate "SOF support for Apollolake"
@@ -61,6 +62,4 @@ config SND_SOC_SOF_APOLLOLAKE
           This adds support for Sound Open Firmware for Intel(R) platforms
           using the Apollolake processors.
           Say Y if you have such a device.
-          If unsure select "N".
-
           If unsure select "N".
