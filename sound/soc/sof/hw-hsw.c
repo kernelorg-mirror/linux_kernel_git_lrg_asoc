@@ -82,7 +82,7 @@
 #define HSW_DRAM_SIZE       (16 * 32 * 1024) 
 #define SHIM_OFFSET     0xE7000
 #define SHIM_SIZE       0x100
-#define MBOX_OFFSET     0x9E000
+#define MBOX_OFFSET     0x7E000
 #define MBOX_SIZE       0x1000
 
 /* DSP peripherals */
@@ -111,7 +111,7 @@ static const struct snd_sof_debugfs_map hsw_debugfs[] = {
 	{"iram", HSW_DSP_BAR, IRAM_OFFSET, HSW_IRAM_SIZE},
 	{"dram", HSW_DSP_BAR, DRAM_OFFSET, HSW_DRAM_SIZE},
 	{"shim", HSW_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
-	{"mbox", HSW_DSP_BAR, MBOX_OFFSET, SHIM_SIZE},
+	{"mbox", HSW_DSP_BAR, MBOX_OFFSET, MBOX_SIZE},
 };
 
 /* 

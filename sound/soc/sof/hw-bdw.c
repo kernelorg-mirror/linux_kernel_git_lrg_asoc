@@ -111,7 +111,7 @@ static const struct snd_sof_debugfs_map bdw_debugfs[] = {
 	{"iram", BDW_DSP_BAR, IRAM_OFFSET, BDW_IRAM_SIZE},
 	{"dram", BDW_DSP_BAR, DRAM_OFFSET, BDW_DRAM_SIZE},
 	{"shim", BDW_DSP_BAR, SHIM_OFFSET, SHIM_SIZE},
-	{"mbox", BDW_DSP_BAR, MBOX_OFFSET, SHIM_SIZE},
+	{"mbox", BDW_DSP_BAR, MBOX_OFFSET, MBOX_SIZE},
 };
 
 /* 
