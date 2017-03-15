@@ -209,7 +209,7 @@ finish:
         all blocks. that is, can't be accessed, please enable each block
         before accessing. */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL0,
-		0xfffff000,0x0);
+		0xfffffffC,0x0);
 
 	/* disable DMA finish function for SSP0 & SSP1 */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_DSP_BAR,  SHIM_CSR2,

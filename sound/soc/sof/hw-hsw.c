@@ -154,19 +154,17 @@ static int hsw_set_dsp_D0(struct snd_sof_dev *sdev)
 	u32 reg, fw_dump_bit;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
-	reg &= ~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
-	writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev,HSW_PCI_BAR, PCI_VDRTCTL2,
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, ~(PCI_VDRTCL2_DCLCGE |
+		PCI_VDRTCL2_DTCGE);
 
 	/* Disable D3PG (VDRTCTL0.D3PGD = 1) */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
-	reg |= PCI_VDRTCL0_D3PGD;
-	writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL0,
+		PCI_VDRTCL0_D3PGD, PCI_VDRTCL0_D3PGD);
 
 	/* Set D0 state */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_PMCS);
-	reg &= ~PCI_PMCS_PS_MASK;
-	writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_PMCS);
+	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_PMCS,
+		PCI_PMCS_PS_MASK, ~PCI_PMCS_PS_MASK);
 
 	/* check that ADSP shim is enabled */
 	while (tries--) {
@@ -199,26 +197,23 @@ finish:
 	hsw_reset(sdev);
 
 	/* Enable core clock gating (VDRTCTL2.DCLCGE = 1), delay 50 us */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
-	reg |= PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE;
-	writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL2,
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, PCI_VDRTCL2_DCLCGE |
+		PCI_VDRTCL2_DTCGE);
 
 	udelay(50);
 
 	/* switch on audio PLL */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
-	reg &= ~PCI_VDRTCL2_APLLSE_MASK;
-	writel(reg, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev. HSW_PCI_BAR, PCI_VDRTCTL2,
+		PCI_VDRTCL2_APLLSE_MASK, ~PCI_VDRTCL2_APLLSE_MASK);
 
 	/* set default power gating control, enable power gating control for 
 	all blocks. that is, can't be accessed, please enable each block
 	before accessing. */
-	reg = readl(sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
-	reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
-	
 	/* for D0, always enable the block(DSRAM[0]) used for FW dump */
-	fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
-	writel(reg & ~fw_dump_bit, sdev->bar[HSW_PCI_BAR] + PCI_VDRTCTL0);
+	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL0,
+		PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK,
+		~fw_dump_bit);
 
 
 	/* disable DMA finish function for SSP0 & SSP1 */
@@ -565,14 +560,6 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 		dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
 		return ret;
 	}
-
-	/* always enable the block(DSRAM[0]) used for FW dump */
-	fw_dump_bit = 1 << PCI_VDRTCL0_DSRAMPGE_SHIFT;
-	/* set default power gating control, enable power gating control 
-	for all blocks. that is,
-	can't be accessed, please enable each block before accessing. */
-	writel(0xffffffff & ~fw_dump_bit, sdev->bar[HSW_PCI_BAR] 
-		+ PCI_VDRTCTL0);
 
 	/* set BARS */
 	sdev->cl_bar = HSW_DSP_BAR;
