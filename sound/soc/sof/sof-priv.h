@@ -222,6 +222,7 @@ struct snd_sof_dev {
 	struct snd_sof_mailbox inbox;
 	struct snd_sof_mailbox outbox;
 	u64 irq_status;
+	int ipc_irq;
 
 	/* front end - platform specific */
 	union {

@@ -430,13 +430,10 @@ static int byt_reset(struct snd_sof_dev *sdev)
 /* probe and remove */
 static int byt_remove(struct snd_sof_dev *sdev)
 {
-	struct snd_sof_pdata *pdata = sdev->pdata;
-	const struct sof_dev_desc *desc = pdata->desc;
-
 	iounmap(sdev->bar[BYT_DSP_BAR]);
 	iounmap(sdev->bar[BYT_PCI_BAR]);
 	iounmap(sdev->bar[BYT_IMR_BAR]);
-	free_irq(desc->irqindex_host_ipc, sdev);
+	free_irq(sdev->ipc_irq, sdev);
 	return 0;
 }
 
@@ -448,7 +445,7 @@ static int byt_probe(struct snd_sof_dev *sdev)
 		container_of(sdev->parent, struct platform_device, dev);
 	struct resource *mmio;
 	u32 base, size;
-	int ret = 0, irq;
+	int ret = 0;
 
 	/* DSP DMA can only access low 31 bits of host memory */
 	ret = dma_coerce_mask_and_coherent(sdev->dev, DMA_BIT_MASK(31));
@@ -535,19 +532,20 @@ static int byt_probe(struct snd_sof_dev *sdev)
 
 irq:
 	/* register our IRQ */
-	irq = platform_get_irq(pdev, desc->irqindex_host_ipc);
-	if (irq < 0) {
+	sdev->ipc_irq = platform_get_irq(pdev, desc->irqindex_host_ipc);
+	if (sdev->ipc_irq < 0) {
 		dev_err(sdev->dev, "error: failed to get IRQ at index %d\n",
 			desc->irqindex_host_ipc);
-		ret = irq;
+		ret = sdev->ipc_irq;
 		goto irq_err;
 	}
 
-	dev_dbg(sdev->dev, "using IRQ %d\n", irq);
-	ret = request_threaded_irq(irq, byt_irq_handler, byt_irq_thread,
-		IRQF_SHARED, "AudioDSP", sdev);
+	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
+	ret = request_threaded_irq(sdev->ipc_irq, byt_irq_handler,
+		byt_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
 	if (ret < 0) {
-		dev_err(sdev->dev, "error: failed to register IRQ %d\n", irq);
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
+			sdev->ipc_irq);
 		goto irq_err;		
 	}
 
