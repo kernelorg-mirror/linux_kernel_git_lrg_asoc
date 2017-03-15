@@ -99,6 +99,7 @@
 #define SSP5_OFFSET		0x0a6000
 #define SSP_SIZE		0x100
 
+#define BYT_PCI_BAR_SIZE	0x200000
 
 /*
  * Debug
@@ -141,6 +142,7 @@ static const struct snd_sof_debugfs_map cht_debugfs[] = {
 
 static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
 {
+	u32 val;
 	int i;
 
 	if (flags & SOF_DBG_REGS) {
@@ -167,10 +169,18 @@ static void byt_dump(struct snd_sof_dev *sdev, u32 flags)
 		}
 	}
 
-	if (flags & SOF_DBG_PCI) {
+	if (flags & SOF_DBG_PCI && sdev->pci == NULL) {
 		for (i = 0; i < 0xff; i += 4) {
 			dev_dbg(sdev->dev, "pci: 0x%2.2x value 0x%8.8x\n",
 				i, readl(sdev->bar[BYT_PCI_BAR] + i));
+		}
+	}
+
+	if (flags & SOF_DBG_PCI && sdev->pci) {
+		for (i = 0; i < 0xff; i += 4) {
+			pci_read_config_dword(sdev->pci, i, &val);
+			dev_dbg(sdev->dev, "pci: 0x%2.2x value 0x%8.8x\n",
+				i, val);
 		}
 	}
 }
@@ -211,17 +221,6 @@ static u64 byt_read64(struct snd_sof_dev *sdev, void __iomem *addr)
 static void byt_block_write(struct snd_sof_dev *sdev,
 	volatile void __iomem *dest, const void *src, size_t size)
 {
-#if 0
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		writel(*(u32 *)(src + i), dest + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		writeb(*(u8 *)(src + i), dest + i);
-#else
 	u32 tmp = 0;
 	int i, m, n;
 	const u8 *src_byte = src;
@@ -237,21 +236,12 @@ static void byt_block_write(struct snd_sof_dev *sdev,
 			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
 		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
 	}
-#endif
 }
 
 static void byt_block_read(struct snd_sof_dev *sdev, void *dest,
 	const volatile void __iomem *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		*(u32 *)(dest + i) = readl(src + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		*(char *)(dest + i) = readb(src + i);
+	memcpy_fromio(dest, src, size);
 }
 
 /*
@@ -419,7 +409,8 @@ static int byt_reset(struct snd_sof_dev *sdev)
 	udelay(10);
 
 	/* take DSP out of reset and keep stalled for FW loading */
-	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_CSR, SHIM_BYT_CSR_RST, 0);
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_CSR,
+		SHIM_BYT_CSR_RST, 0);
 
 	return 0;
 }
@@ -427,17 +418,8 @@ static int byt_reset(struct snd_sof_dev *sdev)
 /*
  * Probe and remove.
  */
-/* probe and remove */
-static int byt_remove(struct snd_sof_dev *sdev)
-{
-	iounmap(sdev->bar[BYT_DSP_BAR]);
-	iounmap(sdev->bar[BYT_PCI_BAR]);
-	iounmap(sdev->bar[BYT_IMR_BAR]);
-	free_irq(sdev->ipc_irq, sdev);
-	return 0;
-}
 
-static int byt_probe(struct snd_sof_dev *sdev)
+static int byt_acpi_probe(struct snd_sof_dev *sdev)
 {
 	struct snd_sof_pdata *pdata = sdev->pdata;
 	const struct sof_dev_desc *desc = pdata->desc;
@@ -567,6 +549,109 @@ pci_err:
 	return ret;
 }
 
+static int byt_pci_probe(struct snd_sof_dev *sdev)
+{
+	struct snd_sof_pdata *pdata = sdev->pdata;
+	const struct sof_dev_desc *desc = pdata->desc;
+	struct pci_dev *pci = sdev->pci;
+	u32 base, size;
+	int ret = 0;
+
+	/* DSP DMA can only access low 31 bits of host memory */
+	ret = dma_coerce_mask_and_coherent(&pci->dev, DMA_BIT_MASK(31));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to set DMA mask %d\n", ret);
+		return ret;
+	}
+
+	/* LPE base */
+	base = pci_resource_start(pci, desc->resindex_lpe_base) - IRAM_OFFSET;
+	size = BYT_PCI_BAR_SIZE;
+
+	dev_dbg(sdev->dev, "LPE PHY base at 0x%x size 0x%x", base, size);
+	sdev->bar[BYT_DSP_BAR] = ioremap(base, size);
+	if (sdev->bar[BYT_DSP_BAR] == NULL) {
+		dev_err(sdev->dev, "error: failed to ioremap LPE base 0x%x size 0x%x\n",
+			base, size);
+		return -ENODEV;
+	}
+	dev_dbg(sdev->dev, "LPE VADDR %p\n", sdev->bar[BYT_DSP_BAR]);
+
+	/* IMR base - optional */
+	if (desc->resindex_imr_base == -1)
+		goto irq;
+
+	base = pci_resource_start(pci, desc->resindex_imr_base);
+	size = pci_resource_len(pci, desc->resindex_imr_base);
+
+	dev_dbg(sdev->dev, "IMR base at 0x%x size 0x%x", base, size);
+	sdev->bar[BYT_IMR_BAR] = ioremap(base, size);
+	if (sdev->bar[BYT_IMR_BAR] == NULL) {
+		dev_err(sdev->dev, "error: failed to ioremap IMR base 0x%x size 0x%x\n",
+			base, size);
+		ret = -ENODEV;
+		goto imr_err;
+	}
+	dev_dbg(sdev->dev, "IMR VADDR %p\n", sdev->bar[BYT_IMR_BAR]);
+
+irq:
+	/* register our IRQ */
+	sdev->ipc_irq = pci->irq;
+	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
+	ret = request_threaded_irq(sdev->ipc_irq, byt_irq_handler,
+		byt_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
+			sdev->ipc_irq);
+		goto irq_err;		
+	}
+
+	/* enable Interrupt from both sides */
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRX, 0x3, 0x0);
+	snd_sof_dsp_update_bits64(sdev, BYT_DSP_BAR, SHIM_IMRD, 0x3, 0x0);
+
+	/* set BARS */
+	sdev->cl_bar = BYT_DSP_BAR;
+
+	return ret;
+
+irq_err:
+	iounmap(sdev->bar[BYT_IMR_BAR]);
+imr_err:
+	iounmap(sdev->bar[BYT_DSP_BAR]);	
+	return ret;
+}
+
+static int byt_probe(struct snd_sof_dev *sdev)
+{
+	if (sdev->pci)
+		return byt_pci_probe(sdev);
+	else
+		return byt_acpi_probe(sdev);
+}
+
+static int byt_acpi_remove(struct snd_sof_dev *sdev)
+{
+	iounmap(sdev->bar[BYT_DSP_BAR]);
+	iounmap(sdev->bar[BYT_PCI_BAR]);
+	iounmap(sdev->bar[BYT_IMR_BAR]);
+	free_irq(sdev->ipc_irq, sdev);
+	return 0;
+}
+
+static int byt_pci_remove(struct snd_sof_dev *sdev)
+{
+	free_irq(sdev->ipc_irq, sdev);
+	return 0;
+}
+
+static int byt_remove(struct snd_sof_dev *sdev)
+{
+	if (sdev->pci)
+		return byt_pci_remove(sdev);
+	else
+		return byt_acpi_remove(sdev);
+}
 
 /* baytrail ops */
 struct snd_sof_dsp_ops snd_sof_byt_ops = {
