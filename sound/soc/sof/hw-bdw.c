@@ -153,19 +153,16 @@ static int bdw_set_dsp_D0(struct snd_sof_dev *sdev)
 	u32 reg, fw_dump_bit;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
-	reg &= ~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
-	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev,BDW_PCI_BAR, PCI_VDRTCTL2,
+PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, ~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE));
 
 	/* Disable D3PG (VDRTCTL0.D3PGD = 1) */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
-	reg |= PCI_VDRTCL0_D3PGD;
-	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL0,
+PCI_VDRTCL0_D3PGD, PCI_VDRTCL0_D3PGD);
 
 	/* Set D0 state */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_PMCS);
-	reg &= ~PCI_PMCS_PS_MASK;
-	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_PMCS);
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_PMCS,
+PCI_PMCS_PS_MASK, ~PCI_PMCS_PS_MASK);
 
 	/* check that ADSP shim is enabled */
 	while (tries--) {
@@ -198,25 +195,20 @@ finish:
 	bdw_reset(sdev);
 
 	/* Enable core clock gating (VDRTCTL2.DCLCGE = 1), delay 50 us */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
-	reg |= PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE;
-	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
+PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
 
 	udelay(50);
 
 	/* switch on audio PLL */
-	reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
-	reg &= ~PCI_VDRTCL2_APLLSE_MASK;
-	writel(reg, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL2);
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
+PCI_VDRTCL2_APLLSE_MASK, ~PCI_VDRTCL2_APLLSE_MASK);
 
 	/* set default power gating control, enable power gating control for 
         all blocks. that is, can't be accessed, please enable each block
         before accessing. */
-        reg = readl(sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
-        reg |= PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK;
-
-        /* for D0, always enable RAM block*/
-        writel(reg & 0x00000fff, sdev->bar[BDW_PCI_BAR] + PCI_VDRTCTL0);
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL0,
+0xfffff000,0x0);
 
 	/* disable DMA finish function for SSP0 & SSP1 */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_DSP_BAR,  SHIM_CSR2,
