@@ -75,6 +75,14 @@
 #include "ops.h"
 #include "intel.h"
 
+/* BARs */
+#define BDW_DSP_BAR 0
+#define BDW_PCI_BAR 1
+
+/*
+ * Debug
+ */
+
 /* DSP memories for BDW */
 #define IRAM_OFFSET     0xA0000
 #define BDW_IRAM_SIZE       (10 * 32 * 1024) 
@@ -84,6 +92,7 @@
 #define SHIM_SIZE       0x100
 #define MBOX_OFFSET     0x9E000
 #define MBOX_SIZE       0x1000
+#define MBOX_DUMP_SIZE 0x30
 
 /* DSP peripherals */
 #define DMAC0_OFFSET    0xFE000
@@ -92,16 +101,6 @@
 #define SSP0_OFFSET     0xFC000
 #define SSP1_OFFSET     0xFD000
 #define SSP_SIZE	0x100
-
-/*
- * Debug
- */
-
-#define MBOX_DUMP_SIZE 0x30
-
-/* BARs */
-#define BDW_DSP_BAR 0
-#define BDW_PCI_BAR 1
 
 static const struct snd_sof_debugfs_map bdw_debugfs[] = {
 	{"dmac0", BDW_DSP_BAR, DMAC0_OFFSET, DMAC_SIZE},
@@ -154,15 +153,16 @@ static int bdw_set_dsp_D0(struct snd_sof_dev *sdev)
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
 	snd_sof_dsp_update_bits_unlocked(sdev,BDW_PCI_BAR, PCI_VDRTCTL2,
-PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, ~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE));
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, 
+		~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE));
 
 	/* Disable D3PG (VDRTCTL0.D3PGD = 1) */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL0,
-PCI_VDRTCL0_D3PGD, PCI_VDRTCL0_D3PGD);
+		PCI_VDRTCL0_D3PGD, PCI_VDRTCL0_D3PGD);
 
 	/* Set D0 state */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_PMCS,
-PCI_PMCS_PS_MASK, ~PCI_PMCS_PS_MASK);
+		PCI_PMCS_PS_MASK, ~PCI_PMCS_PS_MASK);
 
 	/* check that ADSP shim is enabled */
 	while (tries--) {
@@ -196,19 +196,20 @@ finish:
 
 	/* Enable core clock gating (VDRTCTL2.DCLCGE = 1), delay 50 us */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
-PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE,
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE);
 
 	udelay(50);
 
 	/* switch on audio PLL */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
-PCI_VDRTCL2_APLLSE_MASK, ~PCI_VDRTCL2_APLLSE_MASK);
+		PCI_VDRTCL2_APLLSE_MASK, ~PCI_VDRTCL2_APLLSE_MASK);
 
 	/* set default power gating control, enable power gating control for 
         all blocks. that is, can't be accessed, please enable each block
         before accessing. */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL0,
-0xfffff000,0x0);
+		0xfffff000,0x0);
 
 	/* disable DMA finish function for SSP0 & SSP1 */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_DSP_BAR,  SHIM_CSR2,
@@ -408,20 +409,10 @@ static int bdw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
  * Memory copy.
  */
 
+/* write has to deal with copying non 32 bit sized data */
 static void bdw_block_write(struct snd_sof_dev *sdev,
 	volatile void __iomem *dest, const void *src, size_t size)
 {
-#if 0
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		writel(*(u32 *)(src + i), dest + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		writeb(*(u8 *)(src + i), dest + i);
-#else
 	u32 tmp = 0;
 	int i, m, n;
 	const u8 *src_byte = src;
@@ -437,21 +428,12 @@ static void bdw_block_write(struct snd_sof_dev *sdev,
 			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
 		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
 	}
-#endif
 }
 
 static void bdw_block_read(struct snd_sof_dev *sdev, void *dest,
 	const volatile void __iomem *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		*(u32 *)(dest + i) = readl(src + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		*(char *)(dest + i) = readb(src + i);
+	memcpy_fromio(dest, src, size);
 }
 
 /*
@@ -542,6 +524,24 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 	}
 	dev_dbg(sdev->dev, "PCI VADDR %p\n", sdev->bar[BDW_PCI_BAR]);
 
+	/* register our IRQ */
+	sdev->ipc_irq = platform_get_irq(pdev, desc->irqindex_host_ipc);
+	if (sdev->ipc_irq < 0) {
+		dev_err(sdev->dev, "error: failed to get IRQ at index %d\n",
+			desc->irqindex_host_ipc);
+		ret = sdev->ipc_irq;
+		goto irq_err;
+	}
+
+	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
+	ret = request_threaded_irq(sdev->ipc_irq, bdw_irq_handler,
+		bdw_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
+			sdev->ipc_irq);
+		goto irq_err;		
+	}
+
 	/* enable the DSP SHIM */
 	ret = bdw_set_dsp_D0(sdev);
 	if (ret < 0) {
@@ -561,6 +561,8 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 
 	return ret;
 
+irq_err:
+	iounmap(sdev->bar[BDW_DSP_BAR]);
 pci_err:
 	iounmap(sdev->bar[BDW_PCI_BAR]);
 	return ret;
@@ -568,14 +570,10 @@ pci_err:
 
 static int bdw_remove(struct snd_sof_dev *sdev)
 {
-	struct snd_sof_pdata *pdata = sdev->pdata;
-	const struct sof_dev_desc *desc = pdata->desc;
-
 	iounmap(sdev->bar[BDW_DSP_BAR]);
 	iounmap(sdev->bar[BDW_PCI_BAR]);
-	free_irq(desc->irqindex_host_ipc, sdev);
+	free_irq(sdev->ipc_irq, sdev);
 	return 0;
-
 }
 
 /* broadwell ops */

@@ -75,6 +75,15 @@
 #include "ops.h"
 #include "intel.h"
 
+/* BARs */
+#define HSW_DSP_BAR 0
+#define HSW_PCI_BAR 1
+
+
+/*
+ * Debug
+ */
+
 /* DSP memories for HSW */
 #define IRAM_OFFSET     0x80000
 #define HSW_IRAM_SIZE       (10 * 32 * 1024) 
@@ -84,6 +93,7 @@
 #define SHIM_SIZE       0x100
 #define MBOX_OFFSET     0x7E000
 #define MBOX_SIZE       0x1000
+#define MBOX_DUMP_SIZE 0x30
 
 /* DSP peripherals */
 #define DMAC0_OFFSET    0xFE000
@@ -93,15 +103,6 @@
 #define SSP1_OFFSET     0xFD000
 #define SSP_SIZE	0x100
 
-/*
- * Debug
- */
-
-#define MBOX_DUMP_SIZE 0x30
-
-/* BARs */
-#define HSW_DSP_BAR 0
-#define HSW_PCI_BAR 1
 
 static const struct snd_sof_debugfs_map hsw_debugfs[] = {
 	{"dmac0", HSW_DSP_BAR, DMAC0_OFFSET, DMAC_SIZE},
@@ -418,20 +419,10 @@ static int hsw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
  * Memory copy.
  */
 
+/* write has to deal with copying non 32 bit sized data */
 static void hsw_block_write(struct snd_sof_dev *sdev,
 	volatile void __iomem *dest, const void *src, size_t size)
 {
-#if 0
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		writel(*(u32 *)(src + i), dest + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		writeb(*(u8 *)(src + i), dest + i);
-#else
 	u32 tmp = 0;
 	int i, m, n;
 	const u8 *src_byte = src;
@@ -447,21 +438,12 @@ static void hsw_block_write(struct snd_sof_dev *sdev,
 			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
 		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
 	}
-#endif
 }
 
 static void hsw_block_read(struct snd_sof_dev *sdev, void *dest,
 	const volatile void __iomem *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		*(u32 *)(dest + i) = readl(src + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		*(char *)(dest + i) = readb(src + i);
+	memcpy_fromio(dest, src, size);
 }
 
 /*
@@ -552,6 +534,24 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 	}
 	dev_dbg(sdev->dev, "PCI VADDR %p\n", sdev->bar[HSW_PCI_BAR]);
 
+	/* register our IRQ */
+	sdev->ipc_irq = platform_get_irq(pdev, desc->irqindex_host_ipc);
+	if (sdev->ipc_irq < 0) {
+		dev_err(sdev->dev, "error: failed to get IRQ at index %d\n",
+			desc->irqindex_host_ipc);
+		ret = sdev->ipc_irq;
+		goto irq_err;
+	}
+
+	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
+	ret = request_threaded_irq(sdev->ipc_irq, hsw_irq_handler,
+		hsw_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
+			sdev->ipc_irq);
+		goto irq_err;		
+	}
+
 	/* enable the DSP SHIM */
 	ret = hsw_set_dsp_D0(sdev);
 	if (ret < 0) {
@@ -579,6 +579,8 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 
 	return ret;
 
+irq_err:
+	iounmap(sdev->bar[HSW_DSP_BAR]);
 pci_err:
 	iounmap(sdev->bar[HSW_PCI_BAR]);
 	return ret;
@@ -586,12 +588,9 @@ pci_err:
 
 static int hsw_remove(struct snd_sof_dev *sdev)
 {
-	struct snd_sof_pdata *pdata = sdev->pdata;
-	const struct sof_dev_desc *desc = pdata->desc;
-
 	iounmap(sdev->bar[HSW_DSP_BAR]);
 	iounmap(sdev->bar[HSW_PCI_BAR]);
-	free_irq(desc->irqindex_host_ipc, sdev);
+	free_irq(sdev->ipc_irq, sdev);
 	return 0;
 
 }
