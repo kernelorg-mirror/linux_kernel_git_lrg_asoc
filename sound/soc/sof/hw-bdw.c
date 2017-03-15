@@ -152,7 +152,7 @@ static int bdw_set_dsp_D0(struct snd_sof_dev *sdev)
 	u32 reg, fw_dump_bit;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
-	snd_sof_dsp_update_bits_unlocked(sdev,BDW_PCI_BAR, PCI_VDRTCTL2,
+	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
 		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, 
 		~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE));
 

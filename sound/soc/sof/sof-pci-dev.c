@@ -211,6 +211,7 @@ static void sof_pci_remove(struct pci_dev *pci)
 	if (!IS_ERR_OR_NULL(priv->pdev_pcm))
 		platform_device_unregister(priv->pdev_pcm);
 	release_firmware(sof_pdata->fw);
+	pci_release_regions(pci);
 }
 
 static const struct snd_sof_machine sof_bxt_machines[] = {
@@ -229,6 +230,20 @@ static const struct sof_dev_desc bxt_desc = {
 	.resindex_dma_base	= -1,
 };
 
+static const struct snd_sof_machine sof_byt_machines[] = {
+	{ "INT343A", "edison", "intel/reef-byt.ri",
+		"intel/reef-byt.tplg", "baytrail-pcm-audio", &snd_sof_byt_ops },
+};
+
+static const struct sof_dev_desc byt_desc = {
+	.machines		= sof_byt_machines,
+	.resindex_lpe_base	= 3,	/* IRAM, but subtract IRAM offset */
+	.resindex_pcicfg_base	= -1,
+	.resindex_imr_base	= 0,
+	.irqindex_host_ipc	= -1,
+	.resindex_dma_base	= -1,
+};
+
 /* PCI IDs */
 static const struct pci_device_id sof_pci_ids[] = {
 	/* BXT-P */
@@ -236,6 +251,8 @@ static const struct pci_device_id sof_pci_ids[] = {
 		.driver_data = (unsigned long)&bxt_desc},
 	{ PCI_DEVICE(0x8086, 0x1a98),
 		.driver_data = (unsigned long)&bxt_desc},
+	{ PCI_DEVICE(0x8086, 0x119a),
+		.driver_data = (unsigned long)&byt_desc},
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, sof_pci_ids);

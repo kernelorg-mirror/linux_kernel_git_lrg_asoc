@@ -189,15 +189,7 @@ static void apl_block_write(struct snd_sof_dev *sdev,
 static void apl_block_read(struct snd_sof_dev *sdev, void *dest,
 	const volatile void __iomem *src, size_t size)
 {
-	unsigned i, trail = size % 4, count = size - trail;
-
-	/* copy word by word */
-	for (i = 0; i < count; i += 4)
-		*(u32 *)(dest + i) = readl(src + i);
-
-	/* trailing bytes */
-	for (; i < count + trail; i++)
-		*(char *)(dest + i) = readb(src + i);
+	memcpy_fromio(dest, src, size);
 }
 
 
@@ -258,6 +250,75 @@ static void apl_ipc_op_int_disable(struct snd_sof_dev *sdev)
 /*
  * Code loader
  */
+
+/* set up HDA stream buffer descriptor list */
+static void apl_cldma_setup_bdle(struct snd_sof_dev *sdev,
+		struct snd_dma_buffer *dmab_data,
+		u32 **bdlp, int size, int with_ioc)
+{
+#if 0
+	u32 *bdl = *bdlp;
+
+	ctx->cl_dev.frags = 0;
+	while (size > 0) {
+		phys_addr_t addr = virt_to_phys(dmab_data->area +
+				(ctx->cl_dev.frags * ctx->cl_dev.bufsize));
+
+		bdl[0] = cpu_to_le32(lower_32_bits(addr));
+		bdl[1] = cpu_to_le32(upper_32_bits(addr));
+
+		bdl[2] = cpu_to_le32(ctx->cl_dev.bufsize);
+
+		size -= ctx->cl_dev.bufsize;
+		bdl[3] = (size || !with_ioc) ? 0 : cpu_to_le32(0x01);
+
+		bdl += 4;
+		ctx->cl_dev.frags++;
+	}
+#endif
+}
+
+int apl_cldma_prepare(struct snd_sof_dev *sdev)
+{
+#if 0
+	int ret;
+	u32 *bdl;
+
+	ctx->cl_dev.bufsize = SKL_MAX_BUFFER_SIZE;
+
+
+	/* Allocate firmware buffer*/
+	ret = ctx->dsp_ops.alloc_dma_buf(ctx->dev,
+			&ctx->cl_dev.dmab_data, ctx->cl_dev.bufsize);
+	if (ret < 0) {
+		dev_err(ctx->dev, "Alloc buffer for base fw failed: %x\n", ret);
+		return ret;
+	}
+	/* Setup Code loader BDL */
+	ret = ctx->dsp_ops.alloc_dma_buf(ctx->dev,
+			&ctx->cl_dev.dmab_bdl, PAGE_SIZE);
+	if (ret < 0) {
+		dev_err(ctx->dev, "Alloc buffer for blde failed: %x\n", ret);
+		ctx->dsp_ops.free_dma_buf(ctx->dev, &ctx->cl_dev.dmab_data);
+		return ret;
+	}
+	bdl = (u32 *)ctx->cl_dev.dmab_bdl.area;
+
+	/* Allocate BDLs */
+	ctx->cl_dev.ops.cl_setup_bdle(ctx, &ctx->cl_dev.dmab_data,
+			&bdl, ctx->cl_dev.bufsize, 1);
+	ctx->cl_dev.ops.cl_setup_controller(ctx, &ctx->cl_dev.dmab_bdl,
+			ctx->cl_dev.bufsize, ctx->cl_dev.frags);
+
+	ctx->cl_dev.curr_spib_pos = 0;
+	ctx->cl_dev.dma_buffer_offset = 0;
+	init_waitqueue_head(&ctx->cl_dev.wait_queue);
+
+	return ret;
+#endif
+	return 0;
+}
+
 void apl_cldma_process_intr(struct snd_sof_dev *sdev)
 {
 	u32 status;
@@ -313,7 +374,6 @@ out:
 static irqreturn_t apl_irq_thread(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
-	//struct sst_generic_ipc *ipc = &skl->ipc;
 	u64 header = 0;
 	u32 hipcie, hipct, hipcte;
 	irqreturn_t ret = IRQ_NONE;
@@ -389,7 +449,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 static int
 apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
 {
-	u32 reg;
+	u32 adspcs;
 	int ret;
 
 	/* set reset bits for cores */
@@ -402,11 +462,11 @@ apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
 		SKL_ADSPCS_CRST_MASK(core_mask),
 		SKL_ADSPCS_CRST_MASK(core_mask), SKL_DSP_RESET_TO);
 
-	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
-	if ((reg & SKL_ADSPCS_CRST_MASK(core_mask)) !=
+	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((adspcs & SKL_ADSPCS_CRST_MASK(core_mask)) !=
 		SKL_ADSPCS_CRST_MASK(core_mask)) {
-		dev_err(sdev->dev, "reset enter failed: core_mask %x val 0x%x\n",
-			core_mask, reg);
+		dev_err(sdev->dev, "reset enter failed: core_mask %x adspcs 0x%x\n",
+			core_mask, adspcs);
 		ret = -EIO;
 	}
 
@@ -416,7 +476,7 @@ apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
 static int apl_dsp_core_reset_leave(struct snd_sof_dev *sdev,
 	unsigned int core_mask)
 {
-	u32 reg;
+	u32 adspcs;
 	int ret;
 
 	/* clear reset bits for cores */
@@ -427,10 +487,10 @@ static int apl_dsp_core_reset_leave(struct snd_sof_dev *sdev,
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
 		SKL_ADSPCS_CRST_MASK(core_mask), 0, SKL_DSP_RESET_TO);
 
-	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
-	if ((reg & SKL_ADSPCS_CRST_MASK(core_mask)) != 0) {
-		dev_err(sdev->dev, "reset leave failed: core_mask %x val 0x%x\n",
-			core_mask, reg);
+	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((adspcs & SKL_ADSPCS_CRST_MASK(core_mask)) != 0) {
+		dev_err(sdev->dev, "reset leave failed: core_mask %x adspcs 0x%x\n",
+			core_mask, adspcs);
 		ret = -EIO;
 	}
 
@@ -480,7 +540,7 @@ static int apl_run_core(struct snd_sof_dev *sdev, unsigned int core_mask)
 
 static int apl_core_power_up(struct snd_sof_dev *sdev, unsigned int core_mask)
 {
-	u32 reg;
+	u32 adspcs;
 	int ret;
 
 	/* update bits */
@@ -496,11 +556,11 @@ static int apl_core_power_up(struct snd_sof_dev *sdev, unsigned int core_mask)
 		dev_err(sdev->dev, "error: timout on core powerup\n");
 
 	/* did core power up ? */
-	reg = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
-	if ((reg & SKL_ADSPCS_CPA_MASK(core_mask)) !=
+	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
+	if ((adspcs & SKL_ADSPCS_CPA_MASK(core_mask)) !=
 		SKL_ADSPCS_CPA_MASK(core_mask)) {
-		dev_err(sdev->dev, "error: power up core failed core_mask %x rag 0x%x\n",
-			core_mask, reg);
+		dev_err(sdev->dev, "error: power up core failed core_mask %x adspcs 0x%x\n",
+			core_mask, adspcs);
 		ret = -EIO;
 	}
 
@@ -1004,6 +1064,17 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN,
 		HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN);
 
+	/* register our IRQ */
+	sdev->ipc_irq = pci->irq;
+	dev_dbg(sdev->dev, "using PCI IRQ %d\n", sdev->ipc_irq);
+	ret = request_threaded_irq(sdev->ipc_irq, apl_irq_handler,
+		apl_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
+			sdev->ipc_irq);
+		goto err;		
+	}
+
 	/* re-enable CGCTL.MISCBDCGE after rest */
 	snd_sof_pci_update_bits(sdev, PCI_CGCTL,
 		PCI_CGCTL_MISCBDCGE_MASK, PCI_CGCTL_MISCBDCGE_MASK);
@@ -1014,14 +1085,14 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	ret = apl_get_caps(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to find DSP capability\n");
-		goto err;
+		goto irq_err;
 	}
 
 	/* init streams */
 	ret = apl_stream_init(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to init streams\n");
-		goto err;
+		goto irq_err;
 	}
 
 	/* enable DSP features */
@@ -1036,11 +1107,13 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	ret = apl_init(sdev, NULL, 0);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to init DSP\n");
-		goto err;
+		goto irq_err;
 	}
 
 	return 0;
 
+irq_err:
+	free_irq(sdev->ipc_irq, sdev);
 err:
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
@@ -1061,6 +1134,8 @@ static int apl_remove(struct snd_sof_dev *sdev)
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
+
+	free_irq(sdev->ipc_irq, sdev);
 
 	return 0;
 }
