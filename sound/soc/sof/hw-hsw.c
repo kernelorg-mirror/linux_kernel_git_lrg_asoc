@@ -151,12 +151,12 @@ static int hsw_reset(struct snd_sof_dev *sdev)
 static int hsw_set_dsp_D0(struct snd_sof_dev *sdev)
 {
 	int tries = 10;
-	u32 reg, fw_dump_bit;
+	u32 reg, fw_dump_bit = 0;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
 	snd_sof_dsp_update_bits_unlocked(sdev,HSW_PCI_BAR, PCI_VDRTCTL2,
-		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, ~(PCI_VDRTCL2_DCLCGE |
-		PCI_VDRTCL2_DTCGE);
+		PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE, 
+		~(PCI_VDRTCL2_DCLCGE | PCI_VDRTCL2_DTCGE));
 
 	/* Disable D3PG (VDRTCTL0.D3PGD = 1) */
 	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL0,
@@ -204,7 +204,7 @@ finish:
 	udelay(50);
 
 	/* switch on audio PLL */
-	snd_sof_dsp_update_bits_unlocked(sdev. HSW_PCI_BAR, PCI_VDRTCTL2,
+	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL2,
 		PCI_VDRTCL2_APLLSE_MASK, ~PCI_VDRTCL2_APLLSE_MASK);
 
 	/* set default power gating control, enable power gating control for 
