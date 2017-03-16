@@ -21,7 +21,7 @@
  *   o Add more codecs and platforms to ensure good API coverage.
  *   o Support TDM on PCM and I2S
  */
-
+#define DEBUG
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -1038,6 +1038,7 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	struct device_node *platform_of_node;
 	const char *platform_name;
 	int i;
+	bool cpu_dai_not_found = false;
 
 	dev_dbg(card->dev, "ASoC: binding %s\n", dai_link->name);
 
@@ -1056,9 +1057,11 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	cpu_dai_component.dai_name = dai_link->cpu_dai_name;
 	rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
 	if (!rtd->cpu_dai) {
-		dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
-			dai_link->cpu_dai_name);
-		goto _err_defer;
+		/* report later, but let topology based dai links continue */
+		cpu_dai_not_found = true;
+		//dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
+		//	dai_link->cpu_dai_name);
+		//goto _err_defer;
 	}
 
 	rtd->num_codecs = dai_link->num_codecs;
@@ -1105,6 +1108,17 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 		goto _err_defer;
 	}
 
+	/* ignore machine driver FE DAI's ? */
+	if (rtd->platform->driver->bind_only_be && dai_link->no_pcm)
+		goto add;
+
+	if (cpu_dai_not_found == true) {
+		dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
+			dai_link->cpu_dai_name);
+		goto _err_defer;
+	}
+
+add:
 	soc_add_pcm_runtime(card, rtd);
 	return 0;
 
