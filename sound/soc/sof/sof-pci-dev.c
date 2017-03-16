@@ -179,7 +179,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	sof_pdata->machine = mach;
 	sof_pdata->desc = (struct sof_dev_desc*) pci_id->driver_data;
 	priv->sof_pdata = sof_pdata;
-	sof_pdata->dev = &pci->dev;
+	sof_pdata->pci = pci;
 
 	/* register machine driver */
 	sof_pdata->pdev_mach =

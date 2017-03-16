@@ -107,7 +107,7 @@ static void sof_acpi_fw_cb(const struct firmware *fw, void *context)
 	struct sof_acpi_priv *priv = context;
 	struct snd_sof_pdata *sof_pdata = priv->sof_pdata;
 	const struct snd_sof_machine *mach = sof_pdata->machine;
-	struct device *dev = sof_pdata->dev;
+	struct device *dev = &sof_pdata->pdev->dev;
 
 	sof_pdata->fw = fw;
 	if (!fw) {
@@ -172,7 +172,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	sof_pdata->machine = mach;
 	sof_pdata->desc = (struct sof_dev_desc*) id->driver_data;
 	priv->sof_pdata = sof_pdata;
-	sof_pdata->dev = &pdev->dev;
+	sof_pdata->pdev = pdev;
 
 	/* register machine driver */
 	sof_pdata->pdev_mach =
@@ -250,8 +250,8 @@ static struct snd_sof_machine baytrail_machines[] = {
 	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
 		&snd_sof_byt_ops },
-	{ "10EC5651", "byt-rt5640", "intel/reef-byt.ri",
-		"intel/reef-byt.tplg", "baytrail-pcm-audio",
+	{ "10EC5651", "bytcr_rt5651", "intel/reef-byt.ri",
+		"intel/reef-byt.tplg", "sst-mfld-platform",
 		&snd_sof_byt_ops },
 	{ "193C9890", "byt-max98090", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",

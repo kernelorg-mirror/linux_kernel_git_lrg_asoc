@@ -278,7 +278,7 @@ static void apl_cldma_setup_bdle(struct snd_sof_dev *sdev,
 #endif
 }
 
-int apl_cldma_prepare(struct snd_sof_dev *sdev)
+int apl_cldma_new(struct snd_sof_dev *sdev)
 {
 #if 0
 	int ret;
@@ -319,7 +319,7 @@ int apl_cldma_prepare(struct snd_sof_dev *sdev)
 	return 0;
 }
 
-void apl_cldma_process_intr(struct snd_sof_dev *sdev)
+void apl_cldma_do_irq(struct snd_sof_dev *sdev)
 {
 	u32 status;
 
@@ -378,8 +378,9 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 	u32 hipcie, hipct, hipcte;
 	irqreturn_t ret = IRQ_NONE;
 
+	/* code loader ? */
 	if (sdev->irq_status & SKL_ADSPIS_CL_DMA)
-		apl_cldma_process_intr(sdev);
+		apl_cldma_do_irq(sdev);
 
 	/* Here we handle IPC interrupts only */
 	if (!(sdev->irq_status & SKL_ADSPIS_IPC))

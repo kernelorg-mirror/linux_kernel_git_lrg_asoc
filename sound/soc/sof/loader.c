@@ -236,7 +236,8 @@ int snd_sof_run_firmware(struct snd_sof_dev *sdev)
 		snd_sof_dsp_dbg_dump(sdev, SOF_DBG_REGS | SOF_DBG_MBOX |
 			SOF_DBG_TEXT | SOF_DBG_PCI);
 		return -EIO;
-	}
+	} else
+		dev_info(sdev->dev, "firmware boot complete\n");
 
 	return 0;
 }

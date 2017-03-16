@@ -74,7 +74,11 @@ struct snd_sof_pdata {
 	const struct firmware *fw;
 	const char *drv_name;
 	const char *name;
+
+	/* parent devices */
 	struct device *dev;
+	struct pci_dev *pci;
+	struct platform_device *pdev;
 
 	/* descriptor */
 	const struct sof_dev_desc *desc;
