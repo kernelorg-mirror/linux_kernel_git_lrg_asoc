@@ -63,6 +63,7 @@
 #include <linux/pci.h>
 #include <linux/firmware.h>
 #include <sound/pcm.h>
+#include <sound/soc.h>
 #include <uapi/sound/sof-ipc.h>
 #include <uapi/sound/sof-fw.h>
 #include <uapi/sound/asoc.h>
@@ -209,6 +210,9 @@ struct snd_sof_dev {
 	struct device *parent;
 	spinlock_t spinlock;
 
+	/* ASoC components */
+	struct snd_soc_platform_driver plat_drv;
+
 	wait_queue_head_t boot_wait;
 	bool boot_complete;
 
@@ -260,6 +264,8 @@ int snd_sof_runtime_resume(struct device *dev);
 int snd_sof_resume(struct device *dev);
 int snd_sof_suspend(struct device *dev);
 int snd_sof_suspend_late(struct device *dev);
+
+void snd_sof_new_platform_drv(struct snd_sof_dev *sdev);
 
 /*
  * Firmware loading.
@@ -313,7 +319,6 @@ extern struct snd_sof_dsp_ops snd_sof_bxt_ops;
 /*
  * ASoC components.
  */
-extern struct snd_soc_platform_driver sof_soc_platform;
 extern const struct snd_soc_component_driver sof_dai_component;
 
 #endif

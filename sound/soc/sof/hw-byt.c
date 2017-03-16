@@ -497,7 +497,7 @@ static int byt_acpi_probe(struct snd_sof_dev *sdev)
 	}
 
 	/* some BIOSes dont map IMR */
-	if (base == 0x55aa55aa) {
+	if (base == 0x55aa55aa || base == 0x0) {
 		dev_info(sdev->dev, "IMR not set by BIOS. Ignoring\n");
 		goto irq;
 	}
@@ -583,6 +583,12 @@ static int byt_pci_probe(struct snd_sof_dev *sdev)
 
 	base = pci_resource_start(pci, desc->resindex_imr_base);
 	size = pci_resource_len(pci, desc->resindex_imr_base);
+
+	/* some BIOSes dont map IMR */
+	if (base == 0x55aa55aa || base == 0x0) {
+		dev_info(sdev->dev, "IMR not set by BIOS. Ignoring\n");
+		goto irq;
+	}
 
 	dev_dbg(sdev->dev, "IMR base at 0x%x size 0x%x", base, size);
 	sdev->bar[BYT_IMR_BAR] = ioremap(base, size);

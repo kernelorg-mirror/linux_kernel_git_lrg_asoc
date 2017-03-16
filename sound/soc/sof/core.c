@@ -85,14 +85,22 @@ static int sof_probe(struct platform_device *pdev)
 
 	/* intialise sof device */
 	sdev->dev = &pdev->dev;
-	sdev->parent = plat_data->dev;
+	if (plat_data->pci) {
+		sdev->pci = plat_data->pci;
+		sdev->parent = &plat_data->pci->dev;
+	} else if (plat_data->pdev) {
+		sdev->parent = &plat_data->pdev->dev;
+	} else
+		sdev->parent = plat_data->dev;
 	sdev->ops = plat_data->machine->ops;
-	sdev->pci = container_of(plat_data->dev, struct pci_dev, dev);
 
 	sdev->pdata = plat_data;
 	INIT_LIST_HEAD(&sdev->pcm_list);
 	INIT_LIST_HEAD(&sdev->kcontrol_list);
 	dev_set_drvdata(&pdev->dev, sdev);
+
+	/* set up platform driver */
+	snd_sof_new_platform_drv(sdev);
 
 	/* set default timeouts if none provided */
 	if (plat_data->desc->ipc_timeout == 0)
@@ -138,16 +146,8 @@ static int sof_probe(struct platform_device *pdev)
 		dev_err(sdev->dev, "error: failed to boot DSP firmware %d\n", ret);
 		goto err;
 	}
-
-	/* load the topology */
-	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
-	if (ret < 0) {
-		dev_err(sdev->dev, "error: failed to load DSP topology %d\n", ret);
-		goto err;
-	}
-
 	/* now register audio DSP platform driver */
-	ret = snd_soc_register_platform(&pdev->dev, &sof_soc_platform);
+	ret = snd_soc_register_platform(&pdev->dev, &sdev->plat_drv);
 	if (ret < 0) {
 		dev_err(sdev->dev,
 			"error: failed to register DSP platform driver %d\n", ret);

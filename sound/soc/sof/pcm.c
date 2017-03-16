@@ -386,10 +386,18 @@ static void sof_pcm_free(struct snd_pcm *pcm)
 
 static int sof_pcm_probe(struct snd_soc_platform *platform)
 {
-	//struct snd_sof_dev *sdev =
-	//	snd_soc_platform_get_drvdata(platform);
-	//struct snd_sof_pdata *plat_data = dev_get_platdata(platform->dev);
-	int ret = 0;
+	struct snd_sof_dev *sdev =
+		snd_soc_platform_get_drvdata(platform);
+	struct snd_sof_pdata *plat_data = dev_get_platdata(platform->dev);
+	int ret;
+
+	/* load the default topology */
+	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to load DSP topology %d\n",
+			ret);
+		goto err;
+	}
 
 	/* enable runtime PM with auto suspend */
 	pm_runtime_set_autosuspend_delay(platform->dev,
@@ -398,6 +406,7 @@ static int sof_pcm_probe(struct snd_soc_platform *platform)
 	pm_runtime_enable(platform->dev);
 	pm_runtime_idle(platform->dev);
 
+err:
 	return ret;
 }
 
@@ -408,14 +417,34 @@ static int sof_pcm_remove(struct snd_soc_platform *platform)
 	return 0;
 }
 
-struct snd_soc_platform_driver sof_soc_platform = {
-	.probe		= sof_pcm_probe,
-	.remove		= sof_pcm_remove,
-	.ops		= &sof_pcm_ops,
-	.pcm_new	= sof_pcm_new,
-	.pcm_free	= sof_pcm_free,
-};
+void snd_sof_new_platform_drv(struct snd_sof_dev *sdev)
+{
+	struct snd_soc_platform_driver *pd = &sdev->plat_drv;
+	struct snd_sof_pdata *plat_data = sdev->pdata;
 
+	pd->probe = sof_pcm_probe;
+	pd->remove = sof_pcm_remove;
+	pd->ops	= &sof_pcm_ops;
+	pd->pcm_new = sof_pcm_new;
+	pd->pcm_free = sof_pcm_free;
+	pd->bind_only_be = true;
+	pd->component_driver.alias = plat_data->machine->asoc_plat_name;
+}
+
+#if 0
+void snd_sof_new_dai_drv(struct snd_sof_dev *sdev)
+{
+	struct snd_soc_dai_driver *dd = &sdev->plat_drv;
+	struct snd_sof_pdata *plat_data = sdev->pdata;
+
+	pd->probe = sof_pcm_probe;
+	pd->remove = sof_pcm_remove;
+	pd->ops	= &sof_pcm_ops;
+	pd->pcm_new = sof_pcm_new;
+	pd->pcm_free = sof_pcm_free;
+	pd->component_driver.alias = plat_data->machine->asoc_plat_name;
+}
+#endif
 #if 0
 const struct snd_soc_component_driver sof_dai_component = {
 	.name = "haswell-dai",
