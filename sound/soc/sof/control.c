@@ -54,3 +54,57 @@
  */
 
 /* Mixer Controls */
+
+
+#include <linux/slab.h>
+#include <linux/device.h>
+#include <linux/module.h>
+#include <linux/pm_runtime.h>
+#include <sound/soc-topology.h>
+#include <sound/soc.h>
+#include <sound/control.h>
+#include <uapi/sound/sof-ipc.h>
+#include "sof-priv.h"
+
+int snd_sof_volume_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *sm =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	struct snd_sof_dev *sdev = sm->dobj.private;
+	unsigned int volume = 0;
+
+	pm_runtime_get_sync(sdev->dev);
+#if 0
+	sst_hsw_mixer_get_volume(hsw, 0, 0, &volume);
+	ucontrol->value.integer.value[0] = hsw_ipc_to_mixer(volume);
+
+	sst_hsw_mixer_get_volume(hsw, 0, 1, &volume);
+	ucontrol->value.integer.value[1] = hsw_ipc_to_mixer(volume);
+#endif
+	pm_runtime_mark_last_busy(sdev->dev);
+	pm_runtime_put_autosuspend(sdev->dev);
+	return 0;
+}
+
+int snd_sof_volume_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *sm =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	struct snd_sof_dev *sdev = sm->dobj.private;
+	unsigned int volume = 0;
+
+	pm_runtime_get_sync(sdev->dev);
+#if 0
+	sst_hsw_mixer_get_volume(hsw, 0, 0, &volume);
+	ucontrol->value.integer.value[0] = hsw_ipc_to_mixer(volume);
+
+	sst_hsw_mixer_get_volume(hsw, 0, 1, &volume);
+	ucontrol->value.integer.value[1] = hsw_ipc_to_mixer(volume);
+#endif
+	pm_runtime_mark_last_busy(sdev->dev);
+	pm_runtime_put_autosuspend(sdev->dev);
+	return 0;
+}
+

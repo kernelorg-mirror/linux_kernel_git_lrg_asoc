@@ -392,6 +392,7 @@ static int sof_pcm_probe(struct snd_soc_platform *platform)
 	int ret;
 
 	/* load the default topology */
+	sdev->component = &platform->component;
 	ret = snd_sof_load_topology(sdev, plat_data->machine->tplg_filename);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to load DSP topology %d\n",
