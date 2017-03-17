@@ -1038,7 +1038,7 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	struct device_node *platform_of_node;
 	const char *platform_name;
 	int i;
-	bool cpu_dai_not_found = false;
+	bool cpu_dai_found = true;
 
 	dev_dbg(card->dev, "ASoC: binding %s\n", dai_link->name);
 
@@ -1058,10 +1058,7 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
 	if (!rtd->cpu_dai) {
 		/* report later, but let topology based dai links continue */
-		cpu_dai_not_found = true;
-		//dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
-		//	dai_link->cpu_dai_name);
-		//goto _err_defer;
+		cpu_dai_found = false;
 	}
 
 	rtd->num_codecs = dai_link->num_codecs;
@@ -1108,19 +1105,30 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 		goto _err_defer;
 	}
 
-	/* ignore machine driver FE DAI's ? */
-	if (rtd->platform->driver->bind_only_be && dai_link->no_pcm)
-		goto add;
 
-	if (cpu_dai_not_found == true) {
-		dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
-			dai_link->cpu_dai_name);
-		goto _err_defer;
+	/* all components found ? */
+	if (cpu_dai_found == true) {
+		soc_add_pcm_runtime(card, rtd);
+		return 0;
 	}
 
-add:
-	soc_add_pcm_runtime(card, rtd);
-	return 0;
+	/* cpu dai is missing, is platform using topology for FE/PCMS ? */
+	if (rtd->platform->driver->bind_only_be) {
+
+		/* BE DAIs can be bound with dummy */
+		if (dai_link->no_pcm) {
+			cpu_dai_component.name = "snd-soc-dummy";
+			cpu_dai_component.dai_name = "snd-soc-dummy-dai";
+			rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
+			if (rtd->cpu_dai)
+				soc_add_pcm_runtime(card, rtd);
+		}
+
+		/* DAI will be updated by topology */
+		return 0;
+	}
+	dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
+		dai_link->cpu_dai_name);
 
 _err_defer:
 	soc_free_pcm_runtime(rtd);
