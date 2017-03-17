@@ -67,6 +67,12 @@
 #define SND_SOF_FW_ABI		1
 #define SND_SOF_FW_SIG		"Reef"
 
+
+/*
+ * Topology
+ */
+#define SOF_TPLG_KCTL_VOL_ID	256
+
 /*
  * Firmware module is made up of 1 . N blocks of different types. The
  * Block header is used to determine where and how block is to be copied in the

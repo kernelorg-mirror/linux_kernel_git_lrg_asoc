@@ -73,6 +73,34 @@
 static int sof_control_load(struct snd_soc_component *scomp,
 	struct snd_kcontrol_new *kc, struct snd_soc_tplg_ctl_hdr *hdr)
 {
+	struct soc_mixer_control *sm;
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct snd_soc_dobj *dobj = NULL;
+
+	switch (hdr->ops.info) {
+	case SND_SOC_TPLG_CTL_VOLSW:
+	case SND_SOC_TPLG_CTL_VOLSW_SX:
+	case SND_SOC_TPLG_CTL_VOLSW_XR_SX:
+		sm = kc->private_value;
+		dobj = &sm->dobj;
+		break;
+	case SND_SOC_TPLG_CTL_ENUM:
+	case SND_SOC_TPLG_CTL_BYTES:
+	case SND_SOC_TPLG_CTL_ENUM_VALUE:
+	case SND_SOC_TPLG_CTL_RANGE:
+	case SND_SOC_TPLG_CTL_STROBE:
+	case SND_SOC_TPLG_DAPM_CTL_VOLSW:
+	case SND_SOC_TPLG_DAPM_CTL_ENUM_DOUBLE:
+	case SND_SOC_TPLG_DAPM_CTL_ENUM_VIRT:
+	case SND_SOC_TPLG_DAPM_CTL_ENUM_VALUE:
+	case SND_SOC_TPLG_DAPM_CTL_PIN:
+	default:
+		dev_warn(sdev->dev, "control type not supported %d:%d:%d\n",
+			hdr->ops.get, hdr->ops.put, hdr->ops.info);
+		return 0;
+	}
+
+	dobj->private = sdev;
 	return 0;
 }
 
@@ -155,7 +183,7 @@ static int sof_manifest(struct snd_soc_component *scomp,
 
 /* vendor specific kcontrol handlers available for binding */
 static const struct snd_soc_tplg_kcontrol_ops sof_io_ops[] = {
-{},
+	{SOF_TPLG_KCTL_VOL_ID, snd_sof_volume_get, snd_sof_volume_put},
 };
 
 /* vendor specific bytes ext handlers available for binding */

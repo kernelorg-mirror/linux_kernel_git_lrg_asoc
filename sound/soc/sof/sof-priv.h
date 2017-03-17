@@ -321,4 +321,13 @@ extern struct snd_sof_dsp_ops snd_sof_bxt_ops;
  */
 extern const struct snd_soc_component_driver sof_dai_component;
 
+/*
+ * Kcontrols.
+ */
+
+int snd_sof_volume_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol);
+int snd_sof_volume_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol);
+
 #endif
