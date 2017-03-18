@@ -67,6 +67,29 @@
 #include <linux/acpi.h>
 #include "sof-priv.h"
 
+/* machine driver reuse - platform data */
+#include "../intel/common/sst-acpi.h"
+
+//#error split out HID find funcs, have seperate make rules fr mach drivers. non shared IRQs
+
+static struct platform_device * 
+	mrfld_new_mach_data(struct snd_sof_pdata *sof_pdata)
+{
+	struct sst_acpi_mach pmach;
+	struct device *dev = &sof_pdata->pdev->dev;
+	const struct snd_sof_machine *mach = sof_pdata->machine;
+	struct platform_device *pdev = NULL;
+
+	memset(&pmach, 0, sizeof(pmach));
+	memcpy((void*)pmach.id, mach->codec_id, ACPI_ID_LEN);
+	pmach.drv_name = mach->drv_name;
+	//pmach.board;
+
+	pdev = platform_device_register_data(dev, mach->drv_name, -1,
+		&pmach, sizeof(pmach));
+	return pdev;
+}
+
 struct sof_acpi_priv {
 	struct snd_sof_pdata *sof_pdata;
 	struct platform_device *pdev_pcm;
@@ -80,6 +103,7 @@ static acpi_status mach_match(acpi_handle handle, u32 level,
 
 	*(bool *)context = true;
 	status = acpi_evaluate_integer(handle, "_STA", NULL, &sta);
+
 	if (ACPI_FAILURE(status) || !(sta & ACPI_STA_DEVICE_PRESENT))
 		*(bool *)context = false;
 
@@ -174,10 +198,14 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	priv->sof_pdata = sof_pdata;
 	sof_pdata->pdev = pdev;
 
-	/* register machine driver */
-	sof_pdata->pdev_mach =
-		platform_device_register_data(dev, mach->drv_name, -1,
-					      sof_pdata, sizeof(*sof_pdata));
+	/* do we need to generate any machine plat data ? */ 
+	if (mach->new_mach_data)
+		sof_pdata->pdev_mach = mach->new_mach_data(sof_pdata);
+	else
+		/* register machine driver without plat data*/
+		sof_pdata->pdev_mach =
+			platform_device_register_data(dev, mach->drv_name, -1,
+				NULL, 0);
 	if (IS_ERR(sof_pdata->pdev_mach))
 		return PTR_ERR(sof_pdata->pdev_mach);
 
@@ -270,7 +298,8 @@ static struct sof_dev_desc sof_acpi_baytrail_desc = {
 static struct snd_sof_machine cherrytrail_machines[] = {
 
 	{"10EC5670", "cht-bsw-rt5672", "intel/reef-cht.ri",
-		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
+		mrfld_new_mach_data },
 	{"10EC5672", "cht-bsw-rt5672", "intel/reef-cht.ri",
 		"intel/reef-cht.tplg","cht-bsw", &snd_sof_byt_ops },
 	{"10EC5645", "cht-bsw-rt5645", "intel/reef-cht.ri",
