@@ -65,15 +65,17 @@
 #include <sound/pcm.h>
 #include <sound/sof.h>
 #include <linux/acpi.h>
+#include <acpi/acpi_bus.h>
+#include <asm/cpu_device_id.h>
+#include <asm/iosf_mbi.h>
 #include "sof-priv.h"
 
 /* machine driver reuse - platform data */
 #include "../intel/common/sst-acpi.h"
 
-//#error split out HID find funcs, have seperate make rules fr mach drivers. non shared IRQs
 
 static struct platform_device * 
-	mrfld_new_mach_data(struct snd_sof_pdata *sof_pdata)
+	mfld_new_mach_data(struct snd_sof_pdata *sof_pdata)
 {
 	struct sst_acpi_mach pmach;
 	struct device *dev = &sof_pdata->pdev->dev;
@@ -89,6 +91,9 @@ static struct platform_device *
 		&pmach, sizeof(pmach));
 	return pdev;
 }
+
+
+
 
 struct sof_acpi_priv {
 	struct snd_sof_pdata *sof_pdata;
@@ -110,17 +115,28 @@ static acpi_status mach_match(acpi_handle handle, u32 level,
 	return AE_OK;
 }
 
-static const struct snd_sof_machine *
-	find_machine(const struct snd_sof_machine *machines)
+static const struct snd_sof_machine *find_machine(struct device *dev,
+		const struct snd_sof_machine *machines,
+		const struct sof_dev_desc **desc)
 {
 	const struct snd_sof_machine *mach;
 	bool found = false;
+	int confirm;
 
 	for (mach = machines; mach->codec_id[0]; mach++) {
 		if (ACPI_SUCCESS(acpi_get_devices(mach->codec_id,
 						  mach_match,
-						  &found, NULL)) && found)
+						  &found, NULL)) && found) {
+
+			/* is help needed to confirm the machine */
+			if (mach->confirm_mach) {
+				confirm = mach->confirm_mach(dev, desc);
+				if (confirm <= 0)
+					continue;
+			}
+
 			return mach;
+		}
 	}
 
 	return NULL;
@@ -162,7 +178,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	const struct acpi_device_id *id;
 	struct device *dev = &pdev->dev;
 	const struct sof_dev_desc *desc;
-	const struct snd_sof_machine *mach;
+	struct snd_sof_machine *mach;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_acpi_priv *priv;
 	int ret = 0;
@@ -183,12 +199,19 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	desc = (const struct sof_dev_desc*)id->driver_data;
 
 	/* find machine */
-	mach = find_machine(desc->machines);
+	mach = find_machine(dev, desc->machines, &desc);
 	if (mach == NULL) {
 		/* dont bind to any particular codec, just initialse the DSP */
-		dev_err(dev, "No matching ASoC machine driver found - using blind\n");
-		sof_pdata->drv_name = "reef-blind";
-		mach = &desc->machines[0]; /* pick the first - dont care about codec */
+		dev_err(dev, "No matching ASoC machine driver found - using nocodec\n");
+		sof_pdata->drv_name = "sof-nocodec";
+		mach = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
+		if (mach == NULL)
+			return -ENOMEM;
+
+		mach->drv_name = "sof-nocodec";
+		mach->fw_filename = desc->nocodec_fw_filename;
+		mach->tplg_filename = desc->nocodec_tplg_filename;
+		mach->ops = desc->machines[0].ops;
 	}
 
 	//sof_pdata->id = acpi_id->device;
@@ -250,6 +273,8 @@ static struct sof_dev_desc sof_acpi_haswell_desc = {
 	.resindex_pcicfg_base = 1,
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
+	.nocodec_fw_filename = "intel/reef-hsw.ri",
+	.nocodec_tplg_filename = "intel/reef-hsw.tplg"
 };
 #endif
 
@@ -270,21 +295,43 @@ static struct sof_dev_desc sof_acpi_broadwell_desc = {
 	.resindex_pcicfg_base = 1,
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
+	.nocodec_fw_filename = "intel/reef-bdw.ri",
+	.nocodec_tplg_filename = "intel/reef-bdw.tplg"
 };
 #endif
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_BAYTRAIL)
+
+static int is_byt_cr(struct device *dev, const struct sof_dev_desc **desc);
+
 static struct snd_sof_machine baytrail_machines[] = {
+	{ "10EC5640", "bytcr-rt5640", "intel/reef-byt.ri",
+		"intel/reef-byt.tplg", "sst-mfld-platform",
+		&snd_sof_byt_ops, mfld_new_mach_data, is_byt_cr},
 	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
-		&snd_sof_byt_ops },
+		&snd_sof_byt_ops, },
 	{ "10EC5651", "bytcr_rt5651", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "sst-mfld-platform",
-		&snd_sof_byt_ops },
+		&snd_sof_byt_ops, mfld_new_mach_data, is_byt_cr},
+	{ "10EC5651", "byt-rt5651", "intel/reef-byt.ri",
+		"intel/reef-byt.tplg", "baytrail-pcm-audio",
+		&snd_sof_byt_ops, },
 	{ "193C9890", "byt-max98090", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
 		&snd_sof_byt_ops },
 	{}
+};
+
+/* BYTCR uses different IRQ index */
+static struct sof_dev_desc sof_acpi_baytrailcr_desc = {
+	.machines = baytrail_machines,
+	.resindex_lpe_base = 0,
+	.resindex_pcicfg_base = 1,
+	.resindex_imr_base = 2,
+	.irqindex_host_ipc = 0,
+	.nocodec_fw_filename = "intel/reef-byt.ri",
+	.nocodec_tplg_filename = "intel/reef-byt.tplg"
 };
 
 static struct sof_dev_desc sof_acpi_baytrail_desc = {
@@ -293,21 +340,63 @@ static struct sof_dev_desc sof_acpi_baytrail_desc = {
 	.resindex_pcicfg_base = 1,
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
+	.nocodec_fw_filename = "intel/reef-byt.ri",
+	.nocodec_tplg_filename = "intel/reef-byt.tplg"
 };
+
+static int is_byt_cr(struct device *dev, const struct sof_dev_desc **desc)
+{
+	u32 bios_status;
+	int status;
+
+	if (!IS_ENABLED(CONFIG_IOSF_MBI) || !iosf_mbi_available()) {
+		dev_info(dev, "IOSF_MBI not enabled - cant determine CPU variant\n");
+		return -EIO;
+	}
+
+	status = iosf_mbi_read(BT_MBI_UNIT_PMC, /* 0x04 PUNIT */
+			       MBI_REG_READ, /* 0x10 */
+			       0x006, /* BIOS_CONFIG */
+			       &bios_status);
+
+	if (status) {
+		dev_err(dev, "error: could not read PUNIT BIOS_CONFIG\n");
+		return -EIO;
+	} else {
+		/* bits 26:27 mirror PMIC options */
+		bios_status = (bios_status >> 26) & 3;
+
+		if ((bios_status == 1) || (bios_status == 3)) {
+			dev_info(dev, "BYT-CR detected\n");
+			*desc = &sof_acpi_baytrailcr_desc;
+			return 1;
+		} else {
+			dev_info(dev, "BYT-CR not detected\n");
+			return 0;
+		}
+	}
+}
 
 static struct snd_sof_machine cherrytrail_machines[] = {
 
 	{"10EC5670", "cht-bsw-rt5672", "intel/reef-cht.ri",
 		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
-		mrfld_new_mach_data },
+		mfld_new_mach_data },
 	{"10EC5672", "cht-bsw-rt5672", "intel/reef-cht.ri",
-		"intel/reef-cht.tplg","cht-bsw", &snd_sof_byt_ops },
+		"intel/reef-cht.tplg","sst-mfld-platform", &snd_sof_byt_ops,
+		mfld_new_mach_data },
 	{"10EC5645", "cht-bsw-rt5645", "intel/reef-cht.ri",
-		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
+		mfld_new_mach_data },
 	{"10EC5650", "cht-bsw-rt5645", "intel/reef-cht.ri",
-		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
+		mfld_new_mach_data },
+	{"10EC5670", "cht-bsw-rt5672", "intel/reef-cht.ri",
+		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
+		mfld_new_mach_data },
 	{"193C9890", "cht-bsw-max98090", "intel/reef-cht.ri",
-		"intel/reef-cht.tplg", "cht-bsw", &snd_sof_byt_ops },
+		"intel/reef-cht.tplg", "sst-mfld-platform", &snd_sof_byt_ops,
+		mfld_new_mach_data },
 	/* some CHT-T platforms rely on RT5640, use Baytrail machine driver */
 	{"10EC5640", "bytcr_rt5640", "intel/reef-cht.ri",
 		"intel/reef-cht.tplg", "baytrail-pcm-audio", &snd_sof_byt_ops },
@@ -320,6 +409,8 @@ static struct sof_dev_desc sof_acpi_cherrytrail_desc = {
 	.resindex_pcicfg_base = 1,
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
+	.nocodec_fw_filename = "intel/reef-cht.ri",
+	.nocodec_tplg_filename = "intel/reef-cht.tplg"
 };
 #endif
 
