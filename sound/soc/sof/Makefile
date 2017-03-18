@@ -8,8 +8,10 @@ snd-sof-intel-apl-objs := hw-apl.o
 snd-sof-pci-objs := sof-pci-dev.o
 snd-sof-acpi-objs := sof-acpi-dev.o
 snd-sof-platform-objs := sof-platform-dev.o
+snd-sof-nocodec-objs := nocodec.o
 
 obj-$(CONFIG_SND_SOC_SOF) += snd-sof.o
+obj-$(CONFIG_SND_SOC_SOF_NOCODEC) += snd-sof-nocodec.o
 
 obj-$(CONFIG_SND_SOC_SOF_ACPI) += sof-acpi-dev.o
 obj-$(CONFIG_SND_SOC_SOF_PCI) += sof-pci-dev.o

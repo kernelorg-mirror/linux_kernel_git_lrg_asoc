@@ -7,10 +7,14 @@ config SND_SOC_SOF_ACPI
 config SND_SOC_SOF_PLATFORM
 	tristate
 
+config SND_SOC_SOF_NOCODEC
+	tristate
+
 config SND_SOC_SOF
 	tristate "Sound Open Firmware Support"
 	default m
 	select SND_SOC_TOPOLOGY
+	select SND_SOC_SOF_NOCODEC
 	help
           This adds support for SOF
           Say Y if you have such a device.

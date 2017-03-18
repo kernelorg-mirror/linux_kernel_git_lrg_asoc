@@ -110,6 +110,9 @@ struct snd_sof_machine {
 	/* machine driver private data fixup */
 	struct platform_device * (*new_mach_data)
 		(struct snd_sof_pdata *sof_pdata);
+	/* machine detection helper */
+	int (*confirm_mach)(struct device *dev,
+		const struct sof_dev_desc **desc);
 };
 
 /* 
@@ -135,6 +138,10 @@ struct sof_dev_desc {
 	/* IPC timeouts in ms */
 	int ipc_timeout;
 	int boot_timeout;
+
+	/* defaults for no codec mode */
+	const char *nocodec_fw_filename;
+	const char *nocodec_tplg_filename;
 };
 
 #endif

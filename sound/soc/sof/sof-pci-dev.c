@@ -140,7 +140,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	struct device *dev = &pci->dev;
 	const struct sof_dev_desc *desc =
 		(const struct sof_dev_desc*)pci_id->driver_data;
-	const struct snd_sof_machine *mach;
+	struct snd_sof_machine *mach;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_pci_priv *priv;
 	int ret = 0;
@@ -168,10 +168,16 @@ static int sof_pci_probe(struct pci_dev *pci,
 	/* find machine */
 	mach = find_machine(desc->machines);
 	if (mach == NULL) {
-		/* dont bind to any particular codec, just initialse the DSP */
-		dev_err(dev, "No matching ASoC machine driver found - using blind\n");
-		sof_pdata->drv_name = "reef-blind";
-		mach = &desc->machines[0]; /* pick the first - dont care about codec */
+		dev_err(dev, "No matching ASoC machine driver found - using nocodec\n");
+		sof_pdata->drv_name = "sof-nocodec";
+		mach = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
+		if (mach == NULL)
+			return -ENOMEM;
+
+		mach->drv_name = "sof-nocodec";
+		mach->fw_filename = desc->nocodec_fw_filename;
+		mach->tplg_filename = desc->nocodec_tplg_filename;
+		mach->ops = desc->machines[0].ops;
 	}
 
 	sof_pdata->id = pci_id->device;
@@ -228,6 +234,8 @@ static const struct sof_dev_desc bxt_desc = {
 	.resindex_imr_base	= -1,
 	.irqindex_host_ipc	= -1,
 	.resindex_dma_base	= -1,
+	.nocodec_fw_filename = "intel/reef-bxt.ri",
+	.nocodec_tplg_filename = "intel/reef-bxt.tplg"
 };
 
 static const struct snd_sof_machine sof_byt_machines[] = {
@@ -242,6 +250,8 @@ static const struct sof_dev_desc byt_desc = {
 	.resindex_imr_base	= 0,
 	.irqindex_host_ipc	= -1,
 	.resindex_dma_base	= -1,
+	.nocodec_fw_filename = "intel/reef-byt.ri",
+	.nocodec_tplg_filename = "intel/reef-byt.tplg"
 };
 
 /* PCI IDs */
