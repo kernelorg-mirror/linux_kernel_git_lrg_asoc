@@ -107,6 +107,9 @@ struct snd_sof_machine {
 	const char *asoc_plat_name;
 	/* machine specific ops */
 	const struct snd_sof_dsp_ops *ops;
+	/* machine driver private data fixup */
+	struct platform_device * (*new_mach_data)
+		(struct snd_sof_pdata *sof_pdata);
 };
 
 /* 
