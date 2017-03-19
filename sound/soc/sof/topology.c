@@ -55,6 +55,8 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#define DEBUG
+
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -238,6 +240,8 @@ int snd_sof_load_topology(struct snd_sof_dev *sdev, const char *file)
 	const struct firmware *fw;
 	struct snd_soc_tplg_hdr *hdr;
 	int ret;
+
+	dev_dbg(sdev->dev, "loading topology\n");
 
 	ret = request_firmware(&fw, file, sdev->dev);
 	if (ret < 0) {
