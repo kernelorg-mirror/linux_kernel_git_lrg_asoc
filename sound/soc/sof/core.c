@@ -146,6 +146,7 @@ static int sof_probe(struct platform_device *pdev)
 		dev_err(sdev->dev, "error: failed to boot DSP firmware %d\n", ret);
 		goto err;
 	}
+
 	/* now register audio DSP platform driver */
 	ret = snd_soc_register_platform(&pdev->dev, &sdev->plat_drv);
 	if (ret < 0) {

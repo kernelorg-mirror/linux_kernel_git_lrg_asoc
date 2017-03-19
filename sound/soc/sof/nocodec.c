@@ -12,7 +12,6 @@
  * more details.
  */
 
-// TODO: make the platform configurable. hard coded to HSW/BDW atm....
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -26,8 +25,6 @@
 #include <sound/soc.h>
 #include <sound/jack.h>
 
-//#include "../common/sst-dsp.h"
-//#include "../haswell/sst-haswell-ipc.h"
 
 static int sof_nocodec_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
@@ -88,6 +85,7 @@ static struct snd_soc_ops sof_nocodec_ops = {
 	.hw_params = sof_nocodec_hw_params,
 };
 
+/* we just set some BEs - FE provided by topology */
 static struct snd_soc_dai_link sof_nocodec_dais[] = {
 	/* Back End DAI links */
 	{
@@ -95,7 +93,7 @@ static struct snd_soc_dai_link sof_nocodec_dais[] = {
 		.name = "Codec",
 		.id = 0,
 		.cpu_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "snd-soc-dummy",
+		.platform_name = "sof-platform",
 		.no_pcm = 1,
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",

@@ -178,6 +178,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 		mach->fw_filename = desc->nocodec_fw_filename;
 		mach->tplg_filename = desc->nocodec_tplg_filename;
 		mach->ops = desc->machines[0].ops;
+		mach->asoc_plat_name = "sof-platform";
 	}
 
 	sof_pdata->id = pci_id->device;
@@ -193,6 +194,8 @@ static int sof_pci_probe(struct pci_dev *pci,
 					      sof_pdata, sizeof(*sof_pdata));
 	if (IS_ERR(sof_pdata->pdev_mach))
 		return PTR_ERR(sof_pdata->pdev_mach);
+	dev_dbg(dev, "created machine %s\n",
+		dev_name(&sof_pdata->pdev_mach->dev));
 
 	/* continue probing after firmware is loaded */
 	ret = request_firmware_nowait(THIS_MODULE, true, mach->fw_filename,

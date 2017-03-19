@@ -212,6 +212,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 		mach->fw_filename = desc->nocodec_fw_filename;
 		mach->tplg_filename = desc->nocodec_tplg_filename;
 		mach->ops = desc->machines[0].ops;
+		mach->asoc_plat_name = "sof-platform";
 	}
 
 	//sof_pdata->id = acpi_id->device;
@@ -231,6 +232,8 @@ static int sof_acpi_probe(struct platform_device *pdev)
 				NULL, 0);
 	if (IS_ERR(sof_pdata->pdev_mach))
 		return PTR_ERR(sof_pdata->pdev_mach);
+	dev_dbg(dev, "created machine %s\n",
+		dev_name(&sof_pdata->pdev_mach->dev));
 
 	/* continue SST probing after firmware is loaded */
 	ret = request_firmware_nowait(THIS_MODULE, true, mach->fw_filename,
