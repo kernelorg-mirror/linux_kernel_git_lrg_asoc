@@ -223,6 +223,7 @@ static void sof_pci_remove(struct pci_dev *pci)
 	pci_release_regions(pci);
 }
 
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 static const struct snd_sof_machine sof_bxt_machines[] = {
 	{ "INT343A", "bxt_alc298s_i2s", "intel/reef-bxt.ri",
 		"intel/reef-bxt.tplg", "0000:00:0e.0", &snd_sof_bxt_ops },
@@ -240,7 +241,9 @@ static const struct sof_dev_desc bxt_desc = {
 	.nocodec_fw_filename = "intel/reef-bxt.ri",
 	.nocodec_tplg_filename = "intel/reef-bxt.tplg"
 };
+#endif
 
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_BAYTRAIL)
 static const struct snd_sof_machine sof_byt_machines[] = {
 	{ "INT343A", "edison", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio", &snd_sof_byt_ops },
@@ -256,16 +259,21 @@ static const struct sof_dev_desc byt_desc = {
 	.nocodec_fw_filename = "intel/reef-byt.ri",
 	.nocodec_tplg_filename = "intel/reef-byt.tplg"
 };
+#endif
 
 /* PCI IDs */
 static const struct pci_device_id sof_pci_ids[] = {
-	/* BXT-P */
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
+	/* BXT-P & Apollolake */
 	{ PCI_DEVICE(0x8086, 0x5a98),
 		.driver_data = (unsigned long)&bxt_desc},
 	{ PCI_DEVICE(0x8086, 0x1a98),
 		.driver_data = (unsigned long)&bxt_desc},
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SOF_BAYTRAIL)
 	{ PCI_DEVICE(0x8086, 0x119a),
 		.driver_data = (unsigned long)&byt_desc},
+#endif
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, sof_pci_ids);

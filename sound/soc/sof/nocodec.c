@@ -60,27 +60,6 @@ static int sof_nocodec_codec_fixup(struct snd_soc_pcm_runtime *rtd,
        return 0;
 }
 
-static int sof_nocodec_init(struct snd_soc_pcm_runtime *runtime)
-{
-#if 0
-	struct sst_pdata *pdata = dev_get_platdata(runtime->platform->dev);
-	struct sst_hsw *broadwell = pdata->dsp;
-	int ret;
-
-	snd_soc_set_dmi_name(runtime->card, "sof");
-
-	/* Set ADSP SSP port settings */
-	ret = sst_hsw_device_set_config(broadwell, SST_HSW_DEVICE_SSP_2,
-		15360000,
-		SST_HSW_DEVICE_CLOCK_MASTER, 9);
-	if (ret < 0) {
-		dev_err(runtime->dev, "error: failed to set device config\n");
-		return ret;
-	}
-#endif
-	return 0;
-}
-
 static struct snd_soc_ops sof_nocodec_ops = {
 	.hw_params = sof_nocodec_hw_params,
 };

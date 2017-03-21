@@ -149,7 +149,7 @@ static int bdw_reset(struct snd_sof_dev *sdev)
 static int bdw_set_dsp_D0(struct snd_sof_dev *sdev)
 {
 	int tries = 10;
-	u32 reg, fw_dump_bit;
+	u32 reg;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
 	snd_sof_dsp_update_bits_unlocked(sdev, BDW_PCI_BAR, PCI_VDRTCTL2,
@@ -475,7 +475,7 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 	struct platform_device *pdev =
 		container_of(sdev->parent, struct platform_device, dev);
 	struct resource *mmio;
-	u32 base, size, fw_dump_bit;
+	u32 base, size;
 	int ret = 0;
 
 	/* LPE base */
@@ -535,7 +535,7 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 
 	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
 	ret = request_threaded_irq(sdev->ipc_irq, bdw_irq_handler,
-		bdw_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+		bdw_irq_thread, 0, "AudioDSP", sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
 			sdev->ipc_irq);

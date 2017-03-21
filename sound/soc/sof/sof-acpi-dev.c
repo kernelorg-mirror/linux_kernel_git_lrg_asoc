@@ -92,9 +92,6 @@ static struct platform_device *
 	return pdev;
 }
 
-
-
-
 struct sof_acpi_priv {
 	struct snd_sof_pdata *sof_pdata;
 	struct platform_device *pdev_pcm;
@@ -284,10 +281,13 @@ static struct sof_dev_desc sof_acpi_haswell_desc = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_BROADWELL)
 static struct snd_sof_machine broadwell_machines[] = {
 	{ "INT343A", "broadwell-audio", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "broadwell-pcm-audio",
+		"intel/reef-bdw.tplg", "haswell-pcm-audio",
+		&snd_sof_bdw_ops },
+	{ "INT33CA", "haswell-audio", "intel/reef-bdw.ri",
+		"intel/reef-bdw.tplg", "haswell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{ "RT5677CE", "bdw-rt5677", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "broadwell-pcm-audio",
+		"intel/reef-bdw.tplg", "haswell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{}
 };

@@ -423,7 +423,7 @@ void snd_sof_new_platform_drv(struct snd_sof_dev *sdev)
 	struct snd_soc_platform_driver *pd = &sdev->plat_drv;
 	struct snd_sof_pdata *plat_data = sdev->pdata;
 
-	dev_dbg(sdev->dev, "creating platform drv %s\n", 
+	dev_dbg(sdev->dev, "using platform alias %s\n", 
 		plat_data->machine->asoc_plat_name);	
 
 	pd->probe = sof_pcm_probe;

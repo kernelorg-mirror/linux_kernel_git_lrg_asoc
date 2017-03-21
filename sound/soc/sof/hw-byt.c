@@ -605,7 +605,7 @@ irq:
 	sdev->ipc_irq = pci->irq;
 	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
 	ret = request_threaded_irq(sdev->ipc_irq, byt_irq_handler,
-		byt_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+		byt_irq_thread, 0, "AudioDSP", sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
 			sdev->ipc_irq);
