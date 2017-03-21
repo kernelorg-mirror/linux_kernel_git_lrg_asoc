@@ -151,7 +151,7 @@ static int hsw_reset(struct snd_sof_dev *sdev)
 static int hsw_set_dsp_D0(struct snd_sof_dev *sdev)
 {
 	int tries = 10;
-	u32 reg, fw_dump_bit = 0;
+	u32 reg;
 
 	/* Disable core clock gating (VDRTCTL2.DCLCGE = 0) */
 	snd_sof_dsp_update_bits_unlocked(sdev,HSW_PCI_BAR, PCI_VDRTCTL2,
@@ -210,10 +210,8 @@ finish:
 	/* set default power gating control, enable power gating control for 
 	all blocks. that is, can't be accessed, please enable each block
 	before accessing. */
-	/* for D0, always enable the block(DSRAM[0]) used for FW dump */
 	snd_sof_dsp_update_bits_unlocked(sdev, HSW_PCI_BAR, PCI_VDRTCTL0,
-		PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK,
-		~fw_dump_bit);
+		PCI_VDRTCL0_DSRAMPGE_MASK | PCI_VDRTCL0_ISRAMPGE_MASK, 0);
 
 
 	/* disable DMA finish function for SSP0 & SSP1 */
@@ -480,7 +478,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 	struct platform_device *pdev =
 		container_of(sdev->parent, struct platform_device, dev);
 	struct resource *mmio;
-	u32 base, size, fw_dump_bit;
+	u32 base, size;
 	int ret = 0;
 
 	/* LPE base */
@@ -540,7 +538,7 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 
 	dev_dbg(sdev->dev, "using IRQ %d\n", sdev->ipc_irq);
 	ret = request_threaded_irq(sdev->ipc_irq, hsw_irq_handler,
-		hsw_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
+		hsw_irq_thread, 0, "AudioDSP", sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to register IRQ %d\n",
 			sdev->ipc_irq);
