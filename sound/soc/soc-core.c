@@ -1093,10 +1093,17 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 			if (platform_of_node != dai_link->platform_of_node)
 				continue;
 		} else {
-			if (strcmp(platform->component.name, platform_name))
-				continue;
-		}
 
+			if (platform->component.driver->alias) {
+				if (strcmp(platform->component.driver->alias,
+					platform_name))
+					continue;
+			} else {
+
+				if (strcmp(platform->component.name, platform_name))
+					continue;
+			}
+		}
 		rtd->platform = platform;
 	}
 	if (!rtd->platform) {
@@ -1104,7 +1111,6 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 			dai_link->platform_name);
 		goto _err_defer;
 	}
-
 
 	/* all components found ? */
 	if (cpu_dai_found == true) {
@@ -1116,13 +1122,12 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	if (rtd->platform->driver->bind_only_be) {
 
 		/* BE DAIs can be bound with dummy */
-		if (dai_link->no_pcm) {
-			cpu_dai_component.name = "snd-soc-dummy";
-			cpu_dai_component.dai_name = "snd-soc-dummy-dai";
-			rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
-			if (rtd->cpu_dai)
-				soc_add_pcm_runtime(card, rtd);
-		}
+		dai_link->no_pcm = 1;
+		cpu_dai_component.name = "snd-soc-dummy";
+		cpu_dai_component.dai_name = "snd-soc-dummy-dai";
+		rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
+		if (rtd->cpu_dai)
+			soc_add_pcm_runtime(card, rtd);
 
 		/* DAI will be updated by topology */
 		return 0;
@@ -2987,9 +2992,9 @@ static int snd_soc_component_initialize(struct snd_soc_component *component,
 	struct snd_soc_dapm_context *dapm;
 
 	/* use the driver alias as component name if it's supplied */
-	if (driver->alias)
-		component->name = kstrdup(driver->alias, GFP_KERNEL);
-	else
+	//if (driver->alias)
+//		component->name = kstrdup(driver->alias, GFP_KERNEL);
+//	else
 		component->name = fmt_single_name(dev, &component->id);
 	if (!component->name) {
 		dev_err(dev, "ASoC: Failed to allocate name\n");
