@@ -343,7 +343,7 @@ EXPORT_SYMBOL(snd_sof_ipc_process_notification);
 
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev)
 {
-	schedule_work(&sdev->ipc->kwork);
+//	schedule_work(&sdev->ipc->kwork);
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_msgs);
 
