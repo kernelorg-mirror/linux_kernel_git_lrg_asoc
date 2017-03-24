@@ -1040,6 +1040,9 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	const char *platform_name;
 	int i;
 
+	if (dai_link->ignore)
+		return 0;
+
 	dev_dbg(card->dev, "ASoC: binding %s\n", dai_link->name);
 
 	if (soc_is_dai_link_bound(card, dai_link)) {
@@ -2050,6 +2053,39 @@ int snd_soc_set_dmi_name(struct snd_soc_card *card, const char *flavour)
 }
 EXPORT_SYMBOL_GPL(snd_soc_set_dmi_name);
 
+static void soc_check_tplg_fes(struct snd_soc_card *card)
+{
+	struct snd_soc_platform *platform;
+	struct snd_soc_pcm_runtime *rtd;
+	const char *p;
+	int i;
+
+	list_for_each_entry(platform, &platform_list, list) {
+
+		/* does this platform overide FEs ? */
+		if (!platform->ignore_machine)
+			continue;
+
+		/* for this machine ? */
+		if (strcmp(platform->ignore_machine, card->name))
+			continue;
+
+		/* machine matches, so override the rtd data */
+		for (i = 0; i < card->num_links; i++) {
+
+			rtd = &card->dai_link[i];
+
+			if (rtd->dynamic) {
+				rtd->ignore = true;
+				continue;
+			}
+
+			rtd->platform_name = platform->component.name;
+		}
+
+	}
+}
+
 static int snd_soc_instantiate_card(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec;
@@ -2059,6 +2095,9 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 
 	mutex_lock(&client_mutex);
 	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
+
+	/* check whether any platform is ignore machine FE and using topology */
+	soc_check_tplg_fes(card));
 
 	/* bind DAIs */
 	for (i = 0; i < card->num_links; i++) {
