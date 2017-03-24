@@ -64,6 +64,13 @@ static struct snd_soc_ops sof_nocodec_ops = {
 	.hw_params = sof_nocodec_hw_params,
 };
 
+static int nocodec_rtd_init(struct snd_soc_pcm_runtime *rtd)
+{
+	snd_soc_set_dmi_name(rtd->card, NULL);
+
+	return 0;
+}
+
 /* we just set some BEs - FE provided by topology */
 static struct snd_soc_dai_link sof_nocodec_dais[] = {
 	/* Back End DAI links */
@@ -71,6 +78,7 @@ static struct snd_soc_dai_link sof_nocodec_dais[] = {
 		/* SSP0 - Codec */
 		.name = "Codec",
 		.id = 0,
+		.init = nocodec_rtd_init,
 		.cpu_dai_name = "snd-soc-dummy-dai",
 		.platform_name = "sof-platform",
 		.no_pcm = 1,
