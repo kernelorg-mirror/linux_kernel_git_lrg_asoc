@@ -209,7 +209,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 		mach->fw_filename = desc->nocodec_fw_filename;
 		mach->tplg_filename = desc->nocodec_tplg_filename;
 		mach->ops = desc->machines[0].ops;
-		mach->asoc_plat_name = "sof-platform";
+		mach->asoc_plat_name = "sof-platform";/// used ???
 	}
 
 	//sof_pdata->id = acpi_id->device;

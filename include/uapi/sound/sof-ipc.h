@@ -53,6 +53,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
+ *         Keyon Jie <yang.jie@linux.intel.com>
  */
 
 #ifndef __INCLUDE_UAPI_SOF_IPC_H__
@@ -89,14 +90,13 @@
 
 /* Global Message Types */
 #define SOF_IPC_GLB_NONE			SOF_GLB_TYPE(0x0)
-#define SOF_IPC_GLB_VERSION			SOF_GLB_TYPE(0x1)
-#define SOF_IPC_GLB_COMPOUND			SOF_GLB_TYPE(0x2)
-#define SOF_IPC_GLB_TPLG_MSG			SOF_GLB_TYPE(0x3)
-#define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x4)
-#define SOF_IPC_GLB_COMP_MSG			SOF_GLB_TYPE(0x5)
-#define SOF_IPC_GLB_STREAM_MSG			SOF_GLB_TYPE(0x6)
-#define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x7)
-#define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x8)
+#define SOF_IPC_GLB_COMPOUND			SOF_GLB_TYPE(0x1)
+#define SOF_IPC_GLB_TPLG_MSG			SOF_GLB_TYPE(0x2)
+#define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x3)
+#define SOF_IPC_GLB_COMP_MSG			SOF_GLB_TYPE(0x4)
+#define SOF_IPC_GLB_STREAM_MSG			SOF_GLB_TYPE(0x5)
+#define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x6)
+#define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x7)
 
 /* DSP Command Message Types */
 #define SOF_IPC_TPLG_COMP_NEW			SOF_CMD_TYPE(0x000)
@@ -146,10 +146,14 @@
 
 /*
  * Command Header - Header for all IPC. Identifies IPC message.
+ * The size can be greater than the structure size and that means there is
+ * extended bespoke data beyond the end of the structure including variable
+ * arrays.
  */
 
 struct sof_ipc_hdr {
 	uint32_t cmd;			/* SOF_IPC_GLB_ + cmd */
+	uint32_t size;			/* size of structure */
 }  __attribute__((packed));
 
 /*
@@ -183,12 +187,13 @@ struct sof_ipc_fw_version {
 
 
 /* FW ready Message - sent by firmware when boot has completed */
-struct sst_intel_ipc_fw_ready {
+struct sof_ipc_fw_ready {
+	struct sof_ipc_hdr hdr;
 	uint32_t inbox_offset;
 	uint32_t outbox_offset;
 	uint32_t inbox_size;
 	uint32_t outbox_size;
-	uint32_t fw_info_size;
+	struct sof_ipc_fw_version version;
 	/* TODO: capabilities and features */
 } __attribute__((packed));
 
@@ -358,6 +363,7 @@ struct sof_ipc_pcm_params {
 	uint32_t frame_size;
 	uint32_t period_bytes;	/* 0 means variable */
 	uint32_t period_count;	/* 0 means variable */
+	enum sof_ipc_chmap channel_map[];
 }  __attribute__((packed));
 
 
@@ -443,6 +449,13 @@ enum sof_comp_type {
 	SOF_COMP_SWITCH,
 };
 
+/* types of DAI */
+enum sof_ipc_dai_type {
+	SOF_DAI_INTEL_SSP = 0,
+	SOF_DAI_INTEL_DMIC,
+	SOF_DAI_INTEL_HDA,
+};
+
 #define SOF_IPC_MAX_COMP_SIZE	256
 
 /* create new generic component - SOF_IPC_TPLG_COMP_NEW */
@@ -478,8 +491,8 @@ struct sof_ipc_comp_dai {
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	enum sof_ipc_stream_direction direction;
-	uint32_t id;
-	uint32_t type;
+	uint32_t index;
+	enum sof_ipc_dai_type type;
 	uint32_t dmac_id;
 	uint32_t dmac_chan;
 	uint32_t dmac_config; /* DMA engine specific */

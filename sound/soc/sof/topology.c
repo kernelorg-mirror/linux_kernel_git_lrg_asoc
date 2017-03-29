@@ -162,6 +162,7 @@ static int sof_dai_unload(struct snd_soc_component *scomp,
 static int sof_link_load(struct snd_soc_component *scomp,
 	struct snd_soc_dai_link *link)
 {
+	link->platform_name = "sof-audio";
 	return 0;
 }
 

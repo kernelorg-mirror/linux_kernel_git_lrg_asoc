@@ -133,7 +133,7 @@
 
 #define IPC_EMPTY_LIST_SIZE	8
 
-/* SST generic IPC data */
+/* SOF generic IPC data */
 struct snd_sof_ipc {
 	struct snd_sof_dev *sdev;
 
@@ -327,6 +327,56 @@ void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_reply);
 
+struct snd_sof_ipc_fw_ready {
+	uint32_t inbox_offset;
+	uint32_t outbox_offset;
+	uint32_t inbox_size;
+	uint32_t outbox_size;
+	uint32_t fw_info_size;
+	/* TODO: capabilities and features */
+} __attribute__((packed));
+
+#if 0
+static void sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
+{
+	struct snd_sof_ipc_fw_ready fw_ready;
+	u32 offset;
+	int i;
+
+	/* mailbox must be on 4k boundary */
+	offset = (header & 0x0000FFFF) << 12;
+
+	dev_dbg(hsw->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+		header, offset);
+
+	/* copy data from the DSP FW ready offset */
+	sof_dsp_read(hsw->dsp, &fw_ready, offset, sizeof(fw_ready));
+
+	sof_dsp_mailbox_init(hsw->dsp, fw_ready.inbox_offset,
+		fw_ready.inbox_size, fw_ready.outbox_offset,
+		fw_ready.outbox_size);
+
+
+	dev_dbg(hsw->dev, " mailbox upstream 0x%x - size 0x%x\n",
+		fw_ready.inbox_offset, fw_ready.inbox_size);
+	dev_dbg(hsw->dev, " mailbox downstream 0x%x - size 0x%x\n",
+		fw_ready.outbox_offset, fw_ready.outbox_size);
+	if (fw_ready.fw_info_size < sizeof(fw_ready.fw_info)) {
+		fw_ready.fw_info[fw_ready.fw_info_size] = 0;
+		dev_dbg(hsw->dev, " Firmware info: %s \n", fw_ready.fw_info);
+
+		/* log the FW version info got from the mailbox here. */
+		memcpy(fw_info, fw_ready.fw_info, fw_ready.fw_info_size);
+		pinfo = &fw_info[0];
+		for (i = 0; i < ARRAY_SIZE(tmp); i++)
+			tmp[i] = strsep(&pinfo, " ");
+		dev_info(hsw->dev, "FW loaded, mailbox readback FW info: type %s, - "
+			"version: %s.%s, build %s, source commit id: %s\n",
+			tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]);
+	}
+}
+#endif
+
 void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 {
 	/* first check for FW boot completion as it's special case */
@@ -379,11 +429,15 @@ struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev)
 	INIT_WORK(&ipc->kwork, ipc_tx_next_msg);
 	ipc->sdev = sdev;
 
+	/* pre-allocate messages */
+	dev_dbg(sdev->dev, "pre-allocate %d IPC messages\n",
+		IPC_EMPTY_LIST_SIZE);
 	msg = devm_kzalloc(sdev->dev, sizeof(struct snd_sof_ipc_msg) *
 		IPC_EMPTY_LIST_SIZE, GFP_KERNEL);
 	if (msg == NULL)
 		return NULL;
-
+	
+	/* pre-allocate message data */	
 	for (i = 0; i < IPC_EMPTY_LIST_SIZE; i++) {
 
 		msg->msg_data = devm_kzalloc(sdev->dev, PAGE_SIZE, GFP_KERNEL);
@@ -411,90 +465,7 @@ void snd_sof_ipc_free(struct snd_sof_dev *sdev)
 }
 EXPORT_SYMBOL(snd_sof_ipc_free);
 
-
 #if 0
-
-#define DMA_TRACE_PAGE_NUMBER 4
-static int hsw_setup_dma_trace_page_table(struct sof_hsw *hsw)
-{
-	struct snd_dma_buffer *dmab = &hsw->dtrace_buffer;
-	struct dma_trace_buffer *hbuf = &hsw->host_buffer;
-	struct dma_trace_sg *sg_elem;
-	int i, pages;
-
-	hbuf->read_offset = 0;
-	hbuf->write_offset = 0;
-	hbuf->rcurrent = hbuf->wcurrent = hbuf->elem_list.next;
-	pages = DMA_TRACE_PAGE_NUMBER;
-	hbuf->size = pages * PAGE_SIZE;
-
-	for (i = 0; i < pages; i++) {
-		u32 idx = (((i << 2) + i)) >> 1;
-		u32 pfn = snd_sgbuf_get_addr(dmab, i * PAGE_SIZE) >> PAGE_SHIFT;
-		u32 *pg_table;
-
-		sg_elem = devm_kzalloc(hsw->dev, sizeof(*sg_elem), GFP_KERNEL);
-		sg_elem->size = PAGE_SIZE;
-		sg_elem->buf = snd_sgbuf_get_ptr(dmab, i * PAGE_SIZE);
-		list_add_tail(&sg_elem->list, &hbuf->elem_list);
-		pg_table = (u32 *)(hsw->trace_dma_descriptor.area + idx);
-
-		if (i & 1)
-			*pg_table |= (pfn << 4);
-		else
-			*pg_table |= pfn;
-	}
-
-	hbuf->rcurrent = hbuf->wcurrent = hbuf->elem_list.next;
-
-	return 0;
-}
-
-
-
-
-static void hsw_fw_ready(struct sof_hsw *hsw, u32 header)
-{
-	struct sof_hsw_ipc_fw_ready fw_ready;
-	u32 offset;
-	u8 fw_info[IPC_MAX_MAILBOX_BYTES - 5 * sizeof(u32)];
-	char *tmp[5], *pinfo;
-	int i = 0;
-
-	offset = (header & 0x1FFFFFFF) << 3;
-
-	dev_dbg(hsw->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
-		header, offset);
-
-	/* copy data from the DSP FW ready offset */
-	sof_dsp_read(hsw->dsp, &fw_ready, offset, sizeof(fw_ready));
-
-	sof_dsp_mailbox_init(hsw->dsp, fw_ready.inbox_offset,
-		fw_ready.inbox_size, fw_ready.outbox_offset,
-		fw_ready.outbox_size);
-
-	hsw->boot_complete = true;
-	wake_up(&hsw->boot_wait);
-
-	dev_dbg(hsw->dev, " mailbox upstream 0x%x - size 0x%x\n",
-		fw_ready.inbox_offset, fw_ready.inbox_size);
-	dev_dbg(hsw->dev, " mailbox downstream 0x%x - size 0x%x\n",
-		fw_ready.outbox_offset, fw_ready.outbox_size);
-	if (fw_ready.fw_info_size < sizeof(fw_ready.fw_info)) {
-		fw_ready.fw_info[fw_ready.fw_info_size] = 0;
-		dev_dbg(hsw->dev, " Firmware info: %s \n", fw_ready.fw_info);
-
-		/* log the FW version info got from the mailbox here. */
-		memcpy(fw_info, fw_ready.fw_info, fw_ready.fw_info_size);
-		pinfo = &fw_info[0];
-		for (i = 0; i < ARRAY_SIZE(tmp); i++)
-			tmp[i] = strsep(&pinfo, " ");
-		dev_info(hsw->dev, "FW loaded, mailbox readback FW info: type %s, - "
-			"version: %s.%s, build %s, source commit id: %s\n",
-			tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]);
-	}
-}
-
 
 
 static int hsw_process_reply(struct sof_hsw *hsw, u32 header)
@@ -786,11 +757,6 @@ int sof_hsw_dsp_runtime_resume(struct sof_hsw *hsw)
 }
 
 
-struct sof_dsp *sof_hsw_get_dsp(struct sof_hsw *hsw)
-{
-	return hsw->dsp;
-}
-
 static void hsw_tx_data_copy(struct snd_sof_ipc_msg *msg, char *tx_data,
 	size_t tx_size)
 {
@@ -806,168 +772,4 @@ static u64 hsw_reply_msg_match(u64 header, u64 *mask)
 	return header;
 }
 
-
-int sof_hsw_dsp_init(struct device *dev, struct sof_pdata *pdata)
-{
-	struct sof_hsw_ipc_fw_version version;
-	struct sof_hsw *hsw;
-	struct snd_sof_ipc *ipc;
-	struct sof_dsp_device *dsp_dev;
-	int ret;
-
-	dev_dbg(dev, "initialising Audio DSP IPC\n");
-
-	hsw = devm_kzalloc(dev, sizeof(*hsw), GFP_KERNEL);
-	if (hsw == NULL)
-		return -ENOMEM;
-
-	hsw->dev = dev;
-
-	ipc = &hsw->ipc;
-	ipc->dev = dev;
-
-	/* set up ops depending on hardware */
-	switch (pdata->id) {
-	case SST_DEV_ID_BYT:
-		/* Baytrail */
-		dsp_dev = &byt_dev;
-		dsp_dev->thread_context = hsw;
-		ipc->ops.tx_msg = byt_tx_msg;
-		ipc->ops.shim_dbg = byt_shim_dbg;
-		ipc->ops.tx_data_copy = hsw_tx_data_copy;
-		ipc->ops.reply_msg_match = hsw_reply_msg_match;
-		ipc->ops.is_dsp_busy = byt_is_dsp_busy;
-		ipc->ops.dsp_notify = byt_notify;
-		break;
-	case SST_DEV_ID_LYNX_POINT:
-		/* Haswell */
-		dsp_dev = &hsw_dev;
-		dsp_dev->thread_context = hsw;
-		ipc->ops.tx_msg = hsw_tx_msg;
-		ipc->ops.shim_dbg = hsw_shim_dbg;
-		ipc->ops.tx_data_copy = hsw_tx_data_copy;
-		ipc->ops.reply_msg_match = hsw_reply_msg_match;
-		ipc->ops.is_dsp_busy = hsw_is_dsp_busy;
-		ipc->ops.dsp_notify = hsw_notify;
-		break;
-	case SST_DEV_ID_WILDCAT_POINT:
-		/* Broadwell */
-		dsp_dev = &bdw_dev;
-		dsp_dev->thread_context = bdw;
-		ipc->ops.tx_msg = bdw_tx_msg;
-		ipc->ops.shim_dbg = bdw_shim_dbg;
-		ipc->ops.tx_data_copy = bdw_tx_data_copy;
-		ipc->ops.reply_msg_match = bdw_reply_msg_match;
-		ipc->ops.is_dsp_busy = bdw_is_dsp_busy;
-		ipc->ops.dsp_notify = bdw_notify;
-		break;
-	default:
-		ret = -EINVAL;
-		dev_err(dev, "error: unsupported DSP ID 0x%x\n", pdata->id);
-		goto ipc_init_err;
-	}
-
-	ipc->tx_data_max_size = IPC_MAX_MAILBOX_BYTES;
-	ipc->rx_data_max_size = IPC_MAX_MAILBOX_BYTES;
-
-	ret = sof_ipc_init(ipc);
-	if (ret != 0)
-		goto ipc_init_err;
-
-	INIT_LIST_HEAD(&hsw->stream_list);
-	init_waitqueue_head(&hsw->boot_wait);
-
-	/* init SST shim */
-	hsw->dsp = sof_dsp_new(dev, dsp_dev, pdata);
-	if (hsw->dsp == NULL) {
-		ret = -ENODEV;
-		goto dsp_new_err;
-	}
-
-	ipc->dsp = hsw->dsp;
-
-	/* allocate DMA buffer for context storage */
-	hsw->dx_context = dma_alloc_coherent(hsw->dsp->dma_dev,
-		SST_HSW_DX_CONTEXT_SIZE, &hsw->dx_context_paddr, GFP_KERNEL);
-	if (hsw->dx_context == NULL) {
-		ret = -ENOMEM;
-		goto dma_err;
-	}
-
-	/* keep the DSP in reset state for base FW loading */
-	sof_dsp_reset(hsw->dsp);
-
-	/* load base module and other modules in base firmware image */
-	ret = sof_hsw_module_load(hsw, SST_HSW_MODULE_BASE_FW, 0, "Base");
-	if (ret < 0)
-		goto fw_err;
-
-	/* try to load module waves */
-	sof_hsw_module_load(hsw, SST_HSW_MODULE_WAVES, 0, "intel/IntcPP01.bin");
-
-	/* allocate scratch mem regions */
-	ret = sof_block_alloc_scratch(hsw->dsp);
-	if (ret < 0)
-		goto boot_err;
-
-	/* init param buffer */
-	sof_hsw_reset_param_buf(hsw);
-
-	/* wait for DSP boot completion */
-	sof_dsp_boot(hsw->dsp);
-	ret = wait_event_timeout(hsw->boot_wait, hsw->boot_complete,
-		msecs_to_jiffies(IPC_BOOT_MSECS));
-	if (ret == 0) {
-		ret = -EIO;
-		ipc->ops.shim_dbg(ipc, "DSP boot timeout");
-		goto boot_err;
-	}
-
-	hsw_debugfs_init(hsw);
-
-	/* init module state after boot */
-	sof_hsw_init_module_state(hsw);
-
-	/* get the FW version */
-	sof_hsw_fw_get_version(hsw, &version);
-
-	/* get the globalmixer */
-	ret = sof_hsw_mixer_get_info(hsw);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: failed to get stream info\n");
-		goto boot_err;
-	}
-
-	pdata->dsp = hsw;
-	return 0;
-
-boot_err:
-	sof_dsp_reset(hsw->dsp);
-	sof_fw_free_all(hsw->dsp);
-fw_err:
-	dma_free_coherent(hsw->dsp->dma_dev, SST_HSW_DX_CONTEXT_SIZE,
-			hsw->dx_context, hsw->dx_context_paddr);
-dma_err:
-	sof_dsp_free(hsw->dsp);
-dsp_new_err:
-	sof_ipc_fini(ipc);
-ipc_init_err:
-	return ret;
-}
-EXPORT_SYMBOL(sof_hsw_dsp_init);
-
-void sof_hsw_dsp_free(struct device *dev, struct sof_pdata *pdata)
-{
-	struct sof_hsw *hsw = pdata->dsp;
-
-	snd_dma_free_pages(&hsw->trace_dma_descriptor);
-	snd_dma_free_pages(&hsw->dtrace_buffer);
-	sof_dsp_reset(hsw->dsp);
-	sof_fw_free_all(hsw->dsp);
-	dma_free_coherent(hsw->dsp->dma_dev, SST_HSW_DX_CONTEXT_SIZE,
-			hsw->dx_context, hsw->dx_context_paddr);
-	sof_dsp_free(hsw->dsp);
-	sof_ipc_fini(&hsw->ipc);
-}
-EXPORT_SYMBOL(sof_hsw_dsp_free);
 #endif

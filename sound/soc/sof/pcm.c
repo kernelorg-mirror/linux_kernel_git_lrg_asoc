@@ -73,9 +73,6 @@
 #include <uapi/sound/sof-ipc.h>
 #include "sof-priv.h"
 
-#define SOF_PCM_PERIODS_MAX	64
-#define SOF_PCM_PERIODS_MIN	2
-
 
 /* Create DMA buffer page table for DSP */
 static int create_page_table(struct snd_pcm_substream *substream,
@@ -123,6 +120,7 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct sof_ipc_pcm_params ipc_params;
 	int ret;
 
+	/* allocate audio buffer pages */
 	ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: could not allocate %d bytes for PCM %d\n",
@@ -130,11 +128,13 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
+	/* craete compressed page table for audio firmware */
 	ret = create_page_table(substream, runtime->dma_area,
 		runtime->dma_bytes);
 	if (ret < 0)
 		return ret;
 
+	/* number of pages should be rounded up */
 	if (runtime->dma_bytes % PAGE_SIZE)
 		ipc_params.buffer.pages = (runtime->dma_bytes / PAGE_SIZE) + 1;
 	else
@@ -166,9 +166,8 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 		break;
 	}
 
-	ret = snd_sof_ipc_stream_pcm_params(sdev, &ipc_params);
-
-	return ret;
+	/* send IPC to the DSP */
+	return snd_sof_ipc_stream_pcm_params(sdev, &ipc_params);
 }
 
 static int sof_pcm_hw_free(struct snd_pcm_substream *substream)
@@ -296,21 +295,49 @@ static struct snd_pcm_ops sof_pcm_ops = {
 	.page		= snd_pcm_sgbuf_ops_page,
 };
 
+struct snd_sof_pcm *find_spcm(struct snd_sof_dev *sdev,
+	struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_sof_pcm *spcm = NULL;
+
+	list_for_each_entry(spcm, &sdev->pcm_list, list) {
+printk(KERN_ERR "spcm %d d %d\n", spcm->pcm.dai_id, rtd->dai_link->id);
+		if (spcm->pcm.dai_id == rtd->dai_link->id)
+			return spcm;
+	}
+
+	return NULL;
+}
+
 static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_sof_dev *sdev =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	struct snd_sof_pcm *spcm = rtd->sof;
+	struct snd_sof_pcm *spcm;
 	struct snd_pcm *pcm = rtd->pcm;
 	int ret = 0;
 
-	pcm->private_data = sdev;
+	spcm = find_spcm(sdev, rtd);
+	if (spcm == NULL) {
+		dev_err(sdev->dev, "error: cant find SOF PCM\n");
+		return -ENODEV;
+	}
+	rtd->sof = spcm;
+
+	dev_dbg(sdev->dev, "creating new PCM %s\n", spcm->pcm.pcm_name);
+
+	pcm->private_data = spcm;
 
 	/* do we need to allocate playback PCM DMA pages */
 	if (!spcm->pcm.playback)
 		goto capture;
 
 	/* pre-allocate playback audio buffer pages */
+	dev_dbg(sdev->dev, "spcm: allocate %s playback DMA buffer min 0x%x max 0x%x\n",
+		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].name,
+		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_min,
+		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_max);
+
 	ret = snd_pcm_lib_preallocate_pages_for_all(pcm,
 		SNDRV_DMA_TYPE_DEV_SG, sdev->dev,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_min,
@@ -338,10 +365,15 @@ capture:
 		return ret;
 
 	/* pre-allocate capture audio buffer pages */
+	dev_dbg(sdev->dev, "spcm: allocate %s capture DMA buffer min 0x%x max 0x%x\n",
+		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].name,
+		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_min,
+		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_max);
+
 	ret = snd_pcm_lib_preallocate_pages_for_all(pcm,
 		SNDRV_DMA_TYPE_DEV_SG, sdev->dev,
-		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_min,
-		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_max);
+		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_min,
+		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_max);
 	if (ret) {
 		dev_err(sdev->dev, "error: cant alloc DMA buffer size 0x%x/0x%x for %s %d\n",
 			spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_min,
@@ -431,8 +463,7 @@ void snd_sof_new_platform_drv(struct snd_sof_dev *sdev)
 	pd->ops	= &sof_pcm_ops;
 	pd->pcm_new = sof_pcm_new;
 	pd->pcm_free = sof_pcm_free;
-	pd->bind_only_be = true;
-	pd->component_driver.alias = plat_data->machine->asoc_plat_name;
+	pd->ignore_machine = plat_data->machine->drv_name;
 }
 
 #if 0
