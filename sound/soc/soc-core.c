@@ -2056,31 +2056,30 @@ EXPORT_SYMBOL_GPL(snd_soc_set_dmi_name);
 static void soc_check_tplg_fes(struct snd_soc_card *card)
 {
 	struct snd_soc_platform *platform;
-	struct snd_soc_pcm_runtime *rtd;
-	const char *p;
+	struct snd_soc_dai_link *dai_link;
 	int i;
 
 	list_for_each_entry(platform, &platform_list, list) {
 
 		/* does this platform overide FEs ? */
-		if (!platform->ignore_machine)
+		if (!platform->driver->ignore_machine)
 			continue;
 
 		/* for this machine ? */
-		if (strcmp(platform->ignore_machine, card->name))
+		if (strcmp(platform->driver->ignore_machine, card->name))
 			continue;
 
 		/* machine matches, so override the rtd data */
 		for (i = 0; i < card->num_links; i++) {
 
-			rtd = &card->dai_link[i];
+			dai_link = &card->dai_link[i];
 
-			if (rtd->dynamic) {
-				rtd->ignore = true;
+			if (dai_link->dynamic) {
+				dai_link->ignore = true;
 				continue;
 			}
 
-			rtd->platform_name = platform->component.name;
+			dai_link->platform_name = platform->component.name;
 		}
 
 	}
@@ -3367,8 +3366,6 @@ static int snd_soc_platform_drv_pcm_new(struct snd_soc_pcm_runtime *rtd)
 
 	if (platform->driver->pcm_new)
 		return platform->driver->pcm_new(rtd);
-	else
-		return 0;
 }
 
 static void snd_soc_platform_drv_pcm_free(struct snd_pcm *pcm)
