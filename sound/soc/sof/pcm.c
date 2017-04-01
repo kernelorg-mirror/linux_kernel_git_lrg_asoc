@@ -301,7 +301,7 @@ struct snd_sof_pcm *find_spcm(struct snd_sof_dev *sdev,
 	struct snd_sof_pcm *spcm = NULL;
 
 	list_for_each_entry(spcm, &sdev->pcm_list, list) {
-printk(KERN_ERR "spcm %d d %d\n", spcm->pcm.dai_id, rtd->dai_link->id);
+
 		if (spcm->pcm.dai_id == rtd->dai_link->id)
 			return spcm;
 	}
