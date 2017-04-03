@@ -143,7 +143,6 @@
 /* get message id */
 #define SOF_IPC_MESSAGE_ID(x)			(x & 0xffff)
 
-
 /*
  * Command Header - Header for all IPC. Identifies IPC message.
  * The size can be greater than the structure size and that means there is
@@ -170,32 +169,6 @@ struct sof_ipc_compound_hdr {
 	uint32_t count;			/* count of 0 means end of compound sequence */
 }  __attribute__((packed));
 
-
-/*
- * Firmware boot and version
- */
-
-/* FW version - SOF_IPC_GLB_VERSION */
-struct sof_ipc_fw_version {
-	uint16_t major;
-	uint16_t minor;
-	uint16_t build;
-	uint8_t date[11];
-	uint8_t time[8];
-	uint8_t tag[5];
-} __attribute__((packed));
-
-
-/* FW ready Message - sent by firmware when boot has completed */
-struct sof_ipc_fw_ready {
-	struct sof_ipc_hdr hdr;
-	uint32_t inbox_offset;
-	uint32_t outbox_offset;
-	uint32_t inbox_size;
-	uint32_t outbox_size;
-	struct sof_ipc_fw_version version;
-	/* TODO: capabilities and features */
-} __attribute__((packed));
 
 /*
  * DAI Configuration.
@@ -261,6 +234,8 @@ struct sof_ipc_dai_dmic_params {
 /*
  * Stream configuration.
  */
+
+#define SOF_MAX_CHAN		8
 
 /* channel positions - uses same values as ALSA */
 enum sof_ipc_chmap {
@@ -342,7 +317,7 @@ enum sof_ipc_stream_direction {
 };
 
 /* stream ring info */
-struct sof_ipc_ring_buffer {
+struct sof_ipc_host_buffer {
 	uint32_t phy_addr;
 	uint32_t pages;
 	uint32_t size;
@@ -354,7 +329,7 @@ struct sof_ipc_ring_buffer {
 struct sof_ipc_pcm_params {
 	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
-	struct sof_ipc_ring_buffer buffer;
+	struct sof_ipc_host_buffer buffer;
 	enum sof_ipc_stream_direction direction;
 	enum sof_ipc_frame frame_fmt;
 	enum sof_ipc_buffer_format buffer_fmt;
@@ -371,7 +346,7 @@ struct sof_ipc_pcm_params {
 struct sof_ipc_vorbis_params {
 	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
-	struct sof_ipc_ring_buffer buffer;
+	struct sof_ipc_host_buffer buffer;
 	enum sof_ipc_stream_direction direction;
 	enum sof_ipc_frame frame_fmt;
 	enum sof_ipc_buffer_format buffer_fmt;
@@ -470,7 +445,7 @@ struct sof_ipc_pcm_comp {
 	uint32_t format;	/* data format */
 	uint32_t frames;	/* number of frames to process */
 	uint32_t channels;	/* number of channels */
-	enum sof_ipc_chmap chmap[0];	/* channel map */
+	enum sof_ipc_chmap chmap[SOF_MAX_CHAN];	/* channel map */
 } __attribute__((packed));
 
 /* generic host component */
@@ -625,10 +600,44 @@ struct sof_ipc_pm_ctx_elem {
  * SOF_IPC_PM_CTX_SIZE */
 struct sof_ipc_pm_ctx {
 	struct sof_ipc_hdr hdr;
-	struct sof_ipc_ring_buffer buffer;
+	struct sof_ipc_host_buffer buffer;
 	uint32_t num_elems;
 	uint32_t size;
 	struct sof_ipc_pm_ctx_elem elems[];
 };
+
+/*
+ * Firmware boot and version
+ */
+
+/* FW version - SOF_IPC_GLB_VERSION */
+struct sof_ipc_fw_version {
+	uint16_t major;
+	uint16_t minor;
+	uint16_t build;
+	uint8_t date[11];
+	uint8_t time[8];
+	uint8_t tag[5];
+} __attribute__((packed));
+
+
+/* FW ready Message - sent by firmware when boot has completed */
+struct sof_ipc_fw_ready {
+	struct sof_ipc_hdr hdr;
+	uint32_t inbox_offset;
+	uint32_t outbox_offset;
+	uint32_t inbox_size;
+	uint32_t outbox_size;
+	struct sof_ipc_fw_version version;
+	/* TODO: capabilities and features */
+} __attribute__((packed));
+
+/* sent by the driver once FW has booted */
+struct sof_ipc_platform_data {
+	struct sof_ipc_hdr hdr;
+	struct sof_ipc_host_buffer ipc_buffer;	/* for DMA IPC mode */
+	struct sof_ipc_host_buffer trace_buffer;	/* trace buffer */
+	struct sof_ipc_host_buffer dbg_buffer;	/* debug buffer */
+}  __attribute__((packed));
 
 #endif

@@ -327,18 +327,11 @@ void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_reply);
 
-struct snd_sof_ipc_fw_ready {
-	uint32_t inbox_offset;
-	uint32_t outbox_offset;
-	uint32_t inbox_size;
-	uint32_t outbox_size;
-	uint32_t fw_info_size;
-	/* TODO: capabilities and features */
-} __attribute__((packed));
 
-#if 0
+
 static void sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 {
+#if 0
 	struct snd_sof_ipc_fw_ready fw_ready;
 	u32 offset;
 	int i;
@@ -374,8 +367,9 @@ static void sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 			"version: %s.%s, build %s, source commit id: %s\n",
 			tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]);
 	}
-}
 #endif
+}
+
 
 void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 {
