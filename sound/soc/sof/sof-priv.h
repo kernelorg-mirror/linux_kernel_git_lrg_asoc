@@ -195,10 +195,31 @@ struct snd_sof_hda_stream {
 	void __iomem *drsm_addr;
 	u32 dpib;
 	u32 lpib;
+	int stream_tag;
+	int direction;
+	bool open;
+	bool running;
+	struct snd_dma_buffer bdl;
+	void __iomem *sd_addr;	/* stream descriptor pointer */
+	int sd_offset; /* Stream descriptor offset */
+	__le32 *posbuf;		/* position buffer pointer */
+	unsigned int frags;	/* number for period in the play buffer */
+	unsigned int format_val;	/* format value to be set in the
+					 * controller and the codec
+					 */
+	unsigned int bufsize;	/* size of the play buffer in bytes */
+	unsigned int fifo_size;	/* FIFO size */
+	unsigned char index;		/* stream index */
+	/*PCM Support*/
+	struct snd_pcm_substream *substream; 	/*Assigned substream
+						* set in PCM open
+						*/
 };
 
 #define SOF_HDA_PLAYBACK_STREAMS	8
 #define SOF_HDA_CAPTURE_STREAMS		8
+#define SOF_HDA_PLAYBACK 0
+#define SOF_HDA_CAPTURE 1
 
 struct snd_sof_hda_dev {
 	struct snd_sof_hda_stream pstream[SOF_HDA_PLAYBACK_STREAMS];
@@ -240,6 +261,7 @@ struct snd_sof_dev {
 
 	/* firmware loader */
 	int cl_bar;
+	struct snd_dma_buffer dmab;
 
 	/* topology */
 	struct snd_soc_tplg_ops *tplg_ops;

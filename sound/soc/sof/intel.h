@@ -383,33 +383,40 @@
 
 #define SKL_ADSPIC_CL_DMA			0x2
 #define SKL_ADSPIS_CL_DMA			0x2
-#define SKL_CL_DMA_SD_INT_DESC_ERR		0x10 /* Descriptor error interrupt */
-#define SKL_CL_DMA_SD_INT_FIFO_ERR		0x08 /* FIFO error interrupt */
-#define SKL_CL_DMA_SD_INT_COMPLETE		0x04 /* Buffer completion interrupt */
+#define HDA_CL_DMA_SD_INT_DESC_ERR		0x10 /* Descriptor error interrupt */
+#define HDA_CL_DMA_SD_INT_FIFO_ERR		0x08 /* FIFO error interrupt */
+#define HDA_CL_DMA_SD_INT_COMPLETE		0x04 /* Buffer completion interrupt */
+#define HDA_CL_DMA_SD_INT_MASK		(HDA_CL_DMA_SD_INT_DESC_ERR|\
+					 HDA_CL_DMA_SD_INT_FIFO_ERR|\
+				         HDA_CL_DMA_SD_INT_COMPLETE)
+#define HDA_SD_CTL_DMA_START			0x02 /* Stream DMA start bit */
 
 /* Intel HD Audio Code Loader DMA Registers */
 
 #define HDA_ADSP_LOADER_BASE		0x80
+#define HDA_ADSP_DPLBASE		0x70
+#define HDA_ADSP_DPUBASE		0x74
+#define HDA_ADSP_DPLBASE_ENABLE		0x1
 
 /* Stream Registers */
-#define SKL_ADSP_REG_CL_SD_CTL			(HDA_ADSP_LOADER_BASE + 0x00)
-#define SKL_ADSP_REG_CL_SD_STS			(HDA_ADSP_LOADER_BASE + 0x03)
-#define SKL_ADSP_REG_CL_SD_LPIB			(HDA_ADSP_LOADER_BASE + 0x04)
-#define SKL_ADSP_REG_CL_SD_CBL			(HDA_ADSP_LOADER_BASE + 0x08)
-#define SKL_ADSP_REG_CL_SD_LVI			(HDA_ADSP_LOADER_BASE + 0x0c)
-#define SKL_ADSP_REG_CL_SD_FIFOW		(HDA_ADSP_LOADER_BASE + 0x0e)
-#define SKL_ADSP_REG_CL_SD_FIFOSIZE		(HDA_ADSP_LOADER_BASE + 0x10)
-#define SKL_ADSP_REG_CL_SD_FORMAT		(HDA_ADSP_LOADER_BASE + 0x12)
-#define SKL_ADSP_REG_CL_SD_FIFOL		(HDA_ADSP_LOADER_BASE + 0x14)
-#define SKL_ADSP_REG_CL_SD_BDLPL		(HDA_ADSP_LOADER_BASE + 0x18)
-#define SKL_ADSP_REG_CL_SD_BDLPU		(HDA_ADSP_LOADER_BASE + 0x1c)
+#define HDA_ADSP_REG_CL_SD_CTL			0x00
+#define HDA_ADSP_REG_CL_SD_STS			0x03
+#define HDA_ADSP_REG_CL_SD_LPIB			0x04
+#define HDA_ADSP_REG_CL_SD_CBL			0x08
+#define HDA_ADSP_REG_CL_SD_LVI			0x0C
+#define HDA_ADSP_REG_CL_SD_FIFOW		0x0E
+#define HDA_ADSP_REG_CL_SD_FIFOSIZE		0x10
+#define HDA_ADSP_REG_CL_SD_FORMAT		0x12
+#define HDA_ADSP_REG_CL_SD_FIFOL		0x14
+#define HDA_ADSP_REG_CL_SD_BDLPL		0x18
+#define HDA_ADSP_REG_CL_SD_BDLPU		0x1C
 
 /* CL: Software Position Based FIFO Capability Registers */
 #define SKL_ADSP_REG_CL_SPBFIFO			(HDA_ADSP_LOADER_BASE + 0x20)
-#define SKL_ADSP_REG_CL_SPBFIFO_SPBFCH		(SKL_ADSP_REG_CL_SPBFIFO + 0x0)
-#define SKL_ADSP_REG_CL_SPBFIFO_SPBFCCTL	(SKL_ADSP_REG_CL_SPBFIFO + 0x4)
-#define SKL_ADSP_REG_CL_SPBFIFO_SPIB		(SKL_ADSP_REG_CL_SPBFIFO + 0x8)
-#define SKL_ADSP_REG_CL_SPBFIFO_MAXFIFOS	(SKL_ADSP_REG_CL_SPBFIFO + 0xc)
+#define HDA_ADSP_REG_CL_SPBFIFO_SPBFCH		0x0
+#define HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL	0x4
+#define HDA_ADSP_REG_CL_SPBFIFO_SPIB		0x8
+#define HDA_ADSP_REG_CL_SPBFIFO_MAXFIFOS	0xc
 
 /* CL: Stream Descriptor x Control */
 
@@ -468,10 +475,8 @@
 			((x << CL_SD_CTL_DIR_SHIFT) & CL_SD_CTL_DIR_MASK)
 
 /* Stream Number */
-#define CL_SD_CTL_STRM_SHIFT		20
-#define CL_SD_CTL_STRM_MASK		(0xf << CL_SD_CTL_STRM_SHIFT)
-#define CL_SD_CTL_STRM(x)		\
-			((x << CL_SD_CTL_STRM_SHIFT) & CL_SD_CTL_STRM_MASK)
+#define HDA_CL_SD_CTL_STREAM_TAG_SHIFT		20
+#define HDA_CL_SD_CTL_STREAM_TAG_MASK		(0xf << HDA_CL_SD_CTL_STREAM_TAG_SHIFT)
 
 /* CL: Stream Descriptor x Status */
 
@@ -550,7 +555,7 @@
 
 /* SST IPC SKL defines */
 #define SKL_WAIT_TIMEOUT		500	/* 500 msec */
-#define SKL_MAX_BUFFER_SIZE		(32 * PAGE_SIZE)
+#define HDA_MAX_BUFFER_SIZE		(32 * PAGE_SIZE)
 
 enum skl_cl_dma_wake_states {
 	SKL_CL_DMA_STATUS_NONE = 0,
