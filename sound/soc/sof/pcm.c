@@ -301,7 +301,6 @@ struct snd_sof_pcm *find_spcm(struct snd_sof_dev *sdev,
 	struct snd_sof_pcm *spcm = NULL;
 
 	list_for_each_entry(spcm, &sdev->pcm_list, list) {
-
 		if (spcm->pcm.dai_id == rtd->dai_link->id)
 			return spcm;
 	}
@@ -319,8 +318,9 @@ static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 
 	spcm = find_spcm(sdev, rtd);
 	if (spcm == NULL) {
-		dev_err(sdev->dev, "error: cant find SOF PCM\n");
-		return -ENODEV;
+		dev_warn(sdev->dev, "warn: cant find PCM with DAI ID %d\n",
+			rtd->dai_link->id);
+		return 0;
 	}
 	rtd->sof = spcm;
 

@@ -79,11 +79,14 @@ static int sof_control_load(struct snd_soc_component *scomp,
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_dobj *dobj = NULL;
 
+	dev_dbg(sdev->dev, "added type %d control %s\n", 
+		hdr->type, hdr->name);
+
 	switch (hdr->ops.info) {
 	case SND_SOC_TPLG_CTL_VOLSW:
 	case SND_SOC_TPLG_CTL_VOLSW_SX:
 	case SND_SOC_TPLG_CTL_VOLSW_XR_SX:
-		sm = kc->private_value;
+		sm = (struct soc_mixer_control *)kc->private_value;
 		dobj = &sm->dobj;
 		break;
 	case SND_SOC_TPLG_CTL_ENUM:
@@ -109,6 +112,9 @@ static int sof_control_load(struct snd_soc_component *scomp,
 static int sof_control_unload(struct snd_soc_component *scomp,
 	struct snd_soc_dobj *dobj)
 {
+	//dev_dbg(sdev->dev, "added type %d control %s\n", 
+	//	hdr->type, hdr->name);
+
 	return 0;
 }
 
@@ -117,6 +123,10 @@ static int sof_widget_load(struct snd_soc_component *scomp,
 	struct snd_soc_dapm_widget *w,
 	struct snd_soc_tplg_dapm_widget *tw)
 {
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+
+	dev_dbg(sdev->dev, "added widget %d %s\n", tw->id, tw->name);
+
 	return 0;
 }
 
@@ -137,6 +147,9 @@ static int sof_dai_load(struct snd_soc_component *scomp,
 	spcm = kzalloc(sizeof(*spcm), GFP_KERNEL);
 	if (spcm == NULL)
 		return -ENOMEM;
+
+	dev_dbg(sdev->dev, "added pcm %d %s to dai %d %s\n", 
+		pcm->pcm_id, pcm->pcm_name, pcm->dai_id, pcm->dai_name);
 
 	spcm->pcm = *pcm;
 	spcm->comp_id = pcm->pcm_id;

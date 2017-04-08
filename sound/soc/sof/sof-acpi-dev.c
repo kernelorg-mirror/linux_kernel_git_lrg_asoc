@@ -274,17 +274,17 @@ static struct sof_dev_desc sof_acpi_haswell_desc = {
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
 	.nocodec_fw_filename = "intel/reef-hsw.ri",
-	.nocodec_tplg_filename = "intel/reef-hsw.tplg"
+	.nocodec_tplg_filename = "intel/reef-hsw-nocodec.tplg"
 };
 #endif
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_BROADWELL)
 static struct snd_sof_machine broadwell_machines[] = {
 	{ "INT343A", "broadwell-audio", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "haswell-pcm-audio",
+		"intel/reef-bdw-rt286.tplg", "haswell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{ "INT33CA", "haswell-audio", "intel/reef-bdw.ri",
-		"intel/reef-bdw.tplg", "haswell-pcm-audio",
+		"intel/reef-bdw-rt5640.tplg", "haswell-pcm-audio",
 		&snd_sof_bdw_ops },
 	{ "RT5677CE", "bdw-rt5677", "intel/reef-bdw.ri",
 		"intel/reef-bdw.tplg", "haswell-pcm-audio",
@@ -299,7 +299,7 @@ static struct sof_dev_desc sof_acpi_broadwell_desc = {
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
 	.nocodec_fw_filename = "intel/reef-bdw.ri",
-	.nocodec_tplg_filename = "intel/reef-bdw.tplg"
+	.nocodec_tplg_filename = "intel/reef-bdw-nocodec.tplg"
 };
 #endif
 
@@ -309,16 +309,16 @@ static int is_byt_cr(struct device *dev, const struct sof_dev_desc **desc);
 
 static struct snd_sof_machine baytrail_machines[] = {
 	{ "10EC5640", "bytcr-rt5640", "intel/reef-byt.ri",
-		"intel/reef-byt.tplg", "sst-mfld-platform",
+		"intel/reef-byt-rt5640.tplg", "sst-mfld-platform",
 		&snd_sof_byt_ops, mfld_new_mach_data, is_byt_cr},
 	{ "10EC5640", "byt-rt5640", "intel/reef-byt.ri",
-		"intel/reef-byt.tplg", "baytrail-pcm-audio",
+		"intel/reef-byt-rt5640.tplg", "baytrail-pcm-audio",
 		&snd_sof_byt_ops, },
 	{ "10EC5651", "bytcr_rt5651", "intel/reef-byt.ri",
-		"intel/reef-byt.tplg", "sst-mfld-platform",
+		"intel/reef-byt-rt5651.tplg", "sst-mfld-platform",
 		&snd_sof_byt_ops, mfld_new_mach_data, is_byt_cr},
 	{ "10EC5651", "byt-rt5651", "intel/reef-byt.ri",
-		"intel/reef-byt.tplg", "baytrail-pcm-audio",
+		"intel/reef-byt-rt5651.tplg", "baytrail-pcm-audio",
 		&snd_sof_byt_ops, },
 	{ "193C9890", "byt-max98090", "intel/reef-byt.ri",
 		"intel/reef-byt.tplg", "baytrail-pcm-audio",
@@ -334,7 +334,7 @@ static struct sof_dev_desc sof_acpi_baytrailcr_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 0,
 	.nocodec_fw_filename = "intel/reef-byt.ri",
-	.nocodec_tplg_filename = "intel/reef-byt.tplg"
+	.nocodec_tplg_filename = "intel/reef-byt-nocodec.tplg"
 };
 
 static struct sof_dev_desc sof_acpi_baytrail_desc = {
@@ -344,7 +344,7 @@ static struct sof_dev_desc sof_acpi_baytrail_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
 	.nocodec_fw_filename = "intel/reef-byt.ri",
-	.nocodec_tplg_filename = "intel/reef-byt.tplg"
+	.nocodec_tplg_filename = "intel/reef-byt-nocodec.tplg"
 };
 
 static int is_byt_cr(struct device *dev, const struct sof_dev_desc **desc)
@@ -413,7 +413,7 @@ static struct sof_dev_desc sof_acpi_cherrytrail_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
 	.nocodec_fw_filename = "intel/reef-cht.ri",
-	.nocodec_tplg_filename = "intel/reef-cht.tplg"
+	.nocodec_tplg_filename = "intel/reef-cht-nocodec.tplg"
 };
 #endif
 
