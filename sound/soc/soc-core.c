@@ -2096,7 +2096,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
 
 	/* check whether any platform is ignore machine FE and using topology */
-	soc_check_tplg_fes(card));
+	soc_check_tplg_fes(card);
 
 	/* bind DAIs */
 	for (i = 0; i < card->num_links; i++) {
@@ -3366,6 +3366,8 @@ static int snd_soc_platform_drv_pcm_new(struct snd_soc_pcm_runtime *rtd)
 
 	if (platform->driver->pcm_new)
 		return platform->driver->pcm_new(rtd);
+
+	return 0;
 }
 
 static void snd_soc_platform_drv_pcm_free(struct snd_pcm *pcm)
