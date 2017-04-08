@@ -391,6 +391,11 @@
 				         HDA_CL_DMA_SD_INT_COMPLETE)
 #define HDA_SD_CTL_DMA_START			0x02 /* Stream DMA start bit */
 
+/* max number of fragments - we may use more if allocating more pages for BDL */
+#define BDL_SIZE		4096
+#define MAX_BDL_ENTRIES	(BDL_SIZE / 16)
+#define MAX_FRAG		32
+
 /* Intel HD Audio Code Loader DMA Registers */
 
 #define HDA_ADSP_LOADER_BASE		0x80
