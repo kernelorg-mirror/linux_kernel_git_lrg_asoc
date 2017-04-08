@@ -258,7 +258,7 @@ static int apl_setup_spib(struct snd_sof_dev *sdev,
 {
 	u32 mask = 0;
 	int stream_tag = stream->stream_tag;
-	dev_dbg(sdev->dev, "setting up spib\n");
+
 	/* enable/disable SPIB for this hdac stream */
 	if(!sdev->bar[APL_SPIB_BAR]) {
 		dev_err(sdev->dev, "Address of SPB capability is NULL\n");
@@ -312,12 +312,14 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 {
 	if(start) {
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
-					1 << (stream->stream_tag -1));
+					1 << (stream->stream_tag - 1));
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
 					 HDA_SD_CTL_DMA_START |\
 					 HDA_CL_DMA_SD_INT_MASK, 
-					 0xffffffff);
+					 HDA_SD_CTL_DMA_START |\
+					 HDA_CL_DMA_SD_INT_MASK);
 		stream->running = true;
+		dev_dbg(sdev->dev, "started stream\n");
 	}				
 	else {
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
@@ -329,6 +331,9 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 					HDA_ADSP_REG_CL_SD_STS,
 					HDA_CL_DMA_SD_INT_MASK); /* to be sure */
 		stream->running = false; 
+
+		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
+					0x0);
 	}
 
 	return 0;
@@ -340,12 +345,8 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	
-	for(i = 0; i < SOF_HDA_PLAYBACK_STREAMS; i++) {
-		if(!hdev->pstream[i].open) {
-			hdev->pstream[i].open = true;
-			stream = &hdev->pstream[i];
-		}
-	}
+	/* Get stream with stream_tag */
+	stream = &hdev->pstream[stream_tag - 1];
 	if (!stream)
 		return -ENODEV;
 
@@ -376,8 +377,6 @@ static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 			return -EINVAL;
 
 		addr = snd_sgbuf_get_addr(dmab, ofs);
-		dev_dbg(sdev->dev, "printing bld[0]\n");
-		dev_dbg(sdev->dev, "bdl 0 is %x\n", bdl[0]);
 
 		/* program the address field of the BDL entry */
 		bdl[0] = cpu_to_le32(lower_32_bits(addr)); 
@@ -421,16 +420,15 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	
 	/* Get an unused stream */
 
-	for(i = 0; i < SOF_HDA_PLAYBACK_STREAMS; i++) {
+	for(i = 1; i < SOF_HDA_PLAYBACK_STREAMS; i++) {
 		if(!hdev->pstream[i].open) {
 			hdev->pstream[i].open = true;
 			stream = &hdev->pstream[i];
+			break;
 		}
 	}
 	if (!stream)
 		return -ENODEV;
-		
-	dev_dbg(sdev->dev, "stream tag is %d\n",stream->stream_tag);
 
 	/* Allocate DMA Buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, NULL, size, dmab);
@@ -439,7 +437,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		dev_err(sdev->dev, "Alloc buffer for base fw failed: %x\n", ret);
 		return ret;
 	}
-	dev_dbg(sdev->dev, "buffer alloc success\n");
+
 	stream->format_val = format;
 	stream->bufsize = size;
 	
@@ -471,18 +469,6 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 				0x0);
 				
 	stream->frags = 0;		
-
-	/* Alloc Memory for Stream BDL */
-	/*TODO: Check why allocation in apl_stream_init does not suffice */ 
-	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, NULL, BDL_SIZE, 
-						&stream->bdl);
-	if(ret < 0) {
-		dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
-		return -ENOMEM;
-	}else {
-		dev_dbg(sdev->dev, "alloc stream success\n");
-	}
-
 	
 	bdl = (u32 *)stream->bdl.area;
 		
@@ -543,51 +529,10 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 					>> 16;
 	else
 		stream->fifo_size = 0;
-	dev_dbg(sdev->dev, "setting up spib\n");
+
 	apl_setup_spib(sdev, stream, 1, size);
-	dev_dbg(sdev->dev, "set up spib\n");
+
 	return stream->stream_tag;
-}
-
-int apl_cldma_new(struct snd_sof_dev *sdev)
-{
-#if 0
-	int ret;
-	u32 *bdl;
-
-	ctx->cl_dev.bufsize = SKL_MAX_BUFFER_SIZE;
-
-
-	/* Allocate firmware buffer*/
-	ret = ctx->dsp_ops.alloc_dma_buf(ctx->dev,
-			&ctx->cl_dev.dmab_data, ctx->cl_dev.bufsize);
-	if (ret < 0) {
-		dev_err(ctx->dev, "Alloc buffer for base fw failed: %x\n", ret);
-		return ret;
-	}
-	/* Setup Code loader BDL */
-	ret = ctx->dsp_ops.alloc_dma_buf(ctx->dev,
-			&ctx->cl_dev.dmab_bdl, PAGE_SIZE);
-	if (ret < 0) {
-		dev_err(ctx->dev, "Alloc buffer for blde failed: %x\n", ret);
-		ctx->dsp_ops.free_dma_buf(ctx->dev, &ctx->cl_dev.dmab_data);
-		return ret;
-	}
-	bdl = (u32 *)ctx->cl_dev.dmab_bdl.area;
-
-	/* Allocate BDLs */
-	ctx->cl_dev.ops.cl_setup_bdle(ctx, &ctx->cl_dev.dmab_data,
-			&bdl, ctx->cl_dev.bufsize, 1);
-	ctx->cl_dev.ops.cl_setup_controller(ctx, &ctx->cl_dev.dmab_bdl,
-			ctx->cl_dev.bufsize, ctx->cl_dev.frags);
-
-	ctx->cl_dev.curr_spib_pos = 0;
-	ctx->cl_dev.dma_buffer_offset = 0;
-	init_waitqueue_head(&ctx->cl_dev.wait_queue);
-
-	return ret;
-#endif
-	return 0;
 }
 
 void apl_cldma_do_irq(struct snd_sof_dev *sdev)
@@ -1099,9 +1044,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 
 	/* create playback streams */
 	for (i = 0; i < num_playback; i++) {
-		stream = kzalloc(sizeof(*stream), GFP_KERNEL);
-		if(!stream)
-			return -ENOMEM;
+		stream = &hdev->pstream[i];
 
 		/* we always have DSP support */
 		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
@@ -1135,11 +1078,9 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_PLAYBACK;
 		
-		memcpy((void *)stream, (void *)&hdev->pstream[i], sizeof(struct snd_sof_hda_stream));
-		
 		/* Alloc Memory for Stream BDL */ 
 		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, NULL, BDL_SIZE, 
-						&hdev->pstream[i].bdl);
+						&stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
 			return -ENOMEM;
@@ -1148,9 +1089,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 
 	/* create capture streams */
 	for (i = num_playback; i < num_total; i++) {
-		stream = kzalloc(sizeof(*stream), GFP_KERNEL);
-		if(!stream)
-			return -ENOMEM;
+		stream = &hdev->cstream[i - num_playback];
 
 		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
 				HDA_PPHC_INTERVAL * i;
@@ -1183,17 +1122,14 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_CAPTURE;
 		
-		memcpy((void *)stream, (void *)&hdev->cstream[i - num_playback], sizeof(struct snd_sof_hda_stream));
-		
 		/* Alloc Memory for Stream BDL */ 
 		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, NULL, BDL_SIZE, 
-					&hdev->cstream[i-num_playback].bdl);
+					&stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
 			return -ENOMEM;
 		}
 	}
-
 	return 0;
 }
 
@@ -1429,7 +1365,6 @@ static int apl_probe(struct snd_sof_dev *sdev)
 			
 	stream_tag = apl_init(sdev, plat_data->fw->data, 
 		plat_data->fw->size);
-	dev_dbg(sdev->dev, "finished APL init with stream tag %d\n",stream_tag);
 				
 	/* Retry Enabling core and ROM load. Retry seemed to help */
 	if (stream_tag <= 0) {
@@ -1446,8 +1381,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 			goto irq_err;
 		}
 	}
-	dev_dbg(sdev->dev, "finished APL init with stream tag %d\n",stream_tag);
-#if 0	
+	
 	/* At this point DSP ROM has been initialized and should be ready for 
 	 code loading and firmware boot */
 	ret = apl_transfer_fw(sdev, stream_tag);
@@ -1455,10 +1389,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	if(ret < 0) {
 		dev_err(sdev->dev, "Load FW failed\n");
 		return ret;
-	} else {
-		dev_dbg(sdev->dev, "Firmware download successful \n");
-	}
-#endif
+	} 
+	
 	return 0;
 
 irq_err:
