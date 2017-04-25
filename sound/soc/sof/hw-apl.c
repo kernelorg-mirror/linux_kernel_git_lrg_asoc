@@ -265,13 +265,13 @@ static int apl_setup_spib(struct snd_sof_dev *sdev,
 		return -1; // TODO: Fix return value
 	}
 	
-	mask |= (1 << (stream_tag -1));
+	mask |= (1 << (stream_tag - 1));
 	
 	/* Enable/Disable SPIB for the stream */
 	snd_sof_dsp_update_bits(sdev, APL_SPIB_BAR,
 				HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL, 
 				mask,
-				enable << (stream_tag -1));
+				enable << (stream_tag - 1));
 				
 	/* set the spib value */			
 	snd_sof_dsp_write(sdev, APL_SPIB_BAR, HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL, value);
@@ -309,8 +309,11 @@ static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
  
 static int apl_trigger(struct snd_sof_dev *sdev, 
 			struct snd_sof_hda_stream *stream, int start)
-{
+{	
+	u32 status;
 	if(start) {
+		status = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
+		dev_dbg(sdev->dev, "SD for stream is %x\n", status);
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
 					1 << (stream->stream_tag - 1));
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
@@ -318,8 +321,9 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 					 HDA_CL_DMA_SD_INT_MASK, 
 					 HDA_SD_CTL_DMA_START |\
 					 HDA_CL_DMA_SD_INT_MASK);
+		status = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
+		dev_dbg(sdev->dev, "SD for stream after trigger is %x\n", status);
 		stream->running = true;
-		dev_dbg(sdev->dev, "started stream\n");
 	}				
 	else {
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
@@ -341,16 +345,19 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 
 static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 {
-	int ret,i;
+	int ret;
+	u32 status;
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	
 	/* Get stream with stream_tag */
-	stream = &hdev->pstream[stream_tag - 1];
+	stream = &hdev->pstream[stream_tag-1];
 	if (!stream)
 		return -ENODEV;
 
 	apl_trigger(sdev, stream, true);
+	status = snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS);
+	dev_dbg(sdev->dev, "status is %x\n",status);
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS, 			SKL_FW_STS_MASK, BXT_ROM_INIT, BXT_BASEFW_TIMEOUT) ;
 
 	apl_trigger(sdev, stream, false);
@@ -413,10 +420,10 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 {
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
+	struct pci_dev *pci = sdev->pci;
 	int ret, timeout = 300, i;
 	u32 val;
 	u32 *bdl;
-	struct pci_dev *pci;
 	
 	/* Get an unused stream */
 
@@ -431,10 +438,10 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		return -ENODEV;
 
 	/* Allocate DMA Buffer */
-	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, NULL, size, dmab);
+	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, &pci->dev, size, dmab);
 
 	if (ret < 0) {
-		dev_err(sdev->dev, "Alloc buffer for base fw failed: %x\n", ret);
+		dev_err(sdev->dev, " Mem alloc buffer for base fw failed: %x\n", ret);
 		return ret;
 	}
 
@@ -448,8 +455,17 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	
 	/*Stream Reset*/
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				0x1, 0);
-
+				0, 0x1);
+	do {
+		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
+		if(val & 0x1)
+			break;
+	}while(--timeout);
+	
+	timeout = 300;
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
+				0, 0x0);
+	
 	/* Wait for hardware to report that stream is out of reset */
 	do {
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
@@ -458,7 +474,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	}while(--timeout);
 	
 	if(stream->posbuf)
-		stream->posbuf = 0;
+		*stream->posbuf = 0;
 	
 	/* Reset BDl Address */
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
@@ -474,13 +490,14 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		
 	if(setup_bdle(sdev, dmab, stream, &bdl, 0, size, 0) < 0) {
 		dev_dbg(sdev->dev, "set up bdle fail\n");
+		goto error;
 	}
 	/* Set up Stream Descriptor for DMA */
 		
 	/* Program Stream Tag */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
 				HDA_CL_SD_CTL_STREAM_TAG_MASK, 
-				stream->stream_tag <<
+				(stream->stream_tag - 1) <<
 				HDA_CL_SD_CTL_STREAM_TAG_SHIFT);
 	
 	/* Program Cyclic Buffer Length */
@@ -507,18 +524,15 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 				upper_32_bits(stream->bdl.addr));
 				
 	/* Enable Position Buffer */
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE, 
-				HDA_ADSP_DPLBASE_ENABLE, 
-				0x1);
-				
+#if 0
+	snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE, 
+				(u32)stream->posbuf.addr | 0x1);
+#endif
+			
 	/* Set Interrupt Enable bits */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				HDA_CL_DMA_SD_INT_DESC_ERR |
-				HDA_CL_DMA_SD_INT_FIFO_ERR |
-				HDA_CL_DMA_SD_INT_COMPLETE,
-				HDA_CL_DMA_SD_INT_DESC_ERR |
-				HDA_CL_DMA_SD_INT_FIFO_ERR |
-				HDA_CL_DMA_SD_INT_COMPLETE);
+				HDA_CL_DMA_SD_INT_MASK,
+				HDA_CL_DMA_SD_INT_MASK);
 
 				
 	/* Read FIFOSIZE */
@@ -533,6 +547,9 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	apl_setup_spib(sdev, stream, 1, size);
 
 	return stream->stream_tag;
+
+error:
+	snd_dma_free_pages(dmab);
 }
 
 void apl_cldma_do_irq(struct snd_sof_dev *sdev)
@@ -1017,6 +1034,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 {
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	struct snd_sof_hda_stream *stream;
+	struct pci_dev *pci = sdev->pci;
 	int i, num_playback, num_capture, num_total,ret;
 	u32 gcap;
 
@@ -1079,7 +1097,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->direction = SNDRV_PCM_STREAM_PLAYBACK;
 		
 		/* Alloc Memory for Stream BDL */ 
-		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, NULL, BDL_SIZE, 
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, BDL_SIZE, 
 						&stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
@@ -1123,7 +1141,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->direction = SNDRV_PCM_STREAM_CAPTURE;
 		
 		/* Alloc Memory for Stream BDL */ 
-		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, NULL, BDL_SIZE, 
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, BDL_SIZE, 
 					&stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
@@ -1271,8 +1289,10 @@ static int apl_probe(struct snd_sof_dev *sdev)
 
 	/* allow 64bit DMA address if supported by H/W */
 	if (!dma_set_mask(&pci->dev, DMA_BIT_MASK(64))) {
+		dev_dbg(&pci->dev, "64 bit\n");
 		dma_set_coherent_mask(&pci->dev, DMA_BIT_MASK(64));
 	} else {
+		dev_dbg(&pci->dev, "32 bit\n");
 		dma_set_mask(&pci->dev, DMA_BIT_MASK(32));
 		dma_set_coherent_mask(&pci->dev, DMA_BIT_MASK(32));
 	}
@@ -1332,7 +1352,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dev_err(&pci->dev, "error: failed to find DSP capability\n");
 		goto irq_err;
 	}
-
+	
 	/* init streams */
 	ret = apl_stream_init(sdev);
 	if (ret < 0) {
@@ -1381,6 +1401,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 			goto irq_err;
 		}
 	}
+	dev_dbg(sdev->dev, "stream tag is %d\n", stream_tag);
 	
 	/* At this point DSP ROM has been initialized and should be ready for 
 	 code loading and firmware boot */
@@ -1388,6 +1409,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	
 	if(ret < 0) {
 		dev_err(sdev->dev, "Load FW failed\n");
+		apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
 		return ret;
 	} 
 	
