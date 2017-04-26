@@ -101,7 +101,7 @@ static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 	int i;
 
 	if (flags & SOF_DBG_REGS) {
-		for (i = 0; i < 0x40; i += 4 ) {
+		for (i = 0; i < 0x120; i += 4 ) {
 			dev_dbg(sdev->dev, "hda 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_HDA_BAR, i));
 		}
@@ -274,7 +274,7 @@ static int apl_setup_spib(struct snd_sof_dev *sdev,
 				enable << (stream_tag - 1));
 				
 	/* set the spib value */			
-	snd_sof_dsp_write(sdev, APL_SPIB_BAR, HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL, value);
+	apl_write(sdev, stream->spib_addr, value);
 	
 	return 0;
 }
@@ -291,7 +291,8 @@ static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
 	
 	/*Reset BDL address*/
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL,
+				stream->
+				sd_offset + HDA_ADSP_REG_CL_SD_BDLPL,
 				0);
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
 				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU,
@@ -312,8 +313,6 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 {	
 	u32 status;
 	if(start) {
-		status = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
-		dev_dbg(sdev->dev, "SD for stream is %x\n", status);
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
 					1 << (stream->stream_tag - 1));
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
@@ -321,8 +320,6 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 					 HDA_CL_DMA_SD_INT_MASK, 
 					 HDA_SD_CTL_DMA_START |\
 					 HDA_CL_DMA_SD_INT_MASK);
-		status = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
-		dev_dbg(sdev->dev, "SD for stream after trigger is %x\n", status);
 		stream->running = true;
 	}				
 	else {
@@ -356,11 +353,10 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 		return -ENODEV;
 
 	apl_trigger(sdev, stream, true);
-	status = snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS);
-	dev_dbg(sdev->dev, "status is %x\n",status);
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS, 			SKL_FW_STS_MASK, BXT_ROM_INIT, BXT_BASEFW_TIMEOUT) ;
-
 	apl_trigger(sdev, stream, false);
+	if(ret < 0)
+		apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
 	apl_dsp_cleanup(sdev, &sdev->dmab, stream);
 
 	return ret;
@@ -436,6 +432,8 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	}
 	if (!stream)
 		return -ENODEV;
+	else
+		dev_dbg(sdev->dev, "stream tag is %d and address is %8.8x and stream offset is %2.2x\n", stream->stream_tag, stream->sd_addr, stream->sd_offset);
 
 	/* Allocate DMA Buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, &pci->dev, size, dmab);
@@ -455,7 +453,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	
 	/*Stream Reset*/
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				0, 0x1);
+				0x1, 0x1);
 	do {
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
 		if(val & 0x1)
@@ -464,7 +462,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	
 	timeout = 300;
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				0, 0x0);
+				0x1, 0x0);
 	
 	/* Wait for hardware to report that stream is out of reset */
 	do {
@@ -483,7 +481,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
 				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU, 
 				0x0);
-				
+	
 	stream->frags = 0;		
 	
 	bdl = (u32 *)stream->bdl.area;
@@ -524,12 +522,15 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 				upper_32_bits(stream->bdl.addr));
 				
 	/* Enable Position Buffer */
-#if 0
-	snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE, 
-				(u32)stream->posbuf.addr | 0x1);
-#endif
+
+	if(!(snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE) &\
+		HDA_ADSP_DPLBASE_ENABLE))
+		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE, 
+			(u32)stream->posbuffer.addr |\
+			HDA_ADSP_DPLBASE_ENABLE);
 			
 	/* Set Interrupt Enable bits */
+
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
 				HDA_CL_DMA_SD_INT_MASK,
 				HDA_CL_DMA_SD_INT_MASK);
@@ -537,10 +538,10 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 				
 	/* Read FIFOSIZE */
 	if(stream->direction == SNDRV_PCM_STREAM_PLAYBACK)
-		stream->fifo_size = snd_sof_dsp_read(sdev, APL_HDA_BAR, 
+		stream->fifo_size = (snd_sof_dsp_read(sdev, APL_HDA_BAR, 
 					stream->sd_offset + 
-					HDA_ADSP_REG_CL_SD_FIFOSIZE) 
-					>> 16;
+					HDA_ADSP_REG_CL_SD_FIFOSIZE)
+					>> 16) + 1;
 	else
 		stream->fifo_size = 0;
 
@@ -1091,7 +1092,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->sd_offset = 0x20 * i + HDA_ADSP_LOADER_BASE;
 		stream->sd_addr = sdev->bar[APL_HDA_BAR] + 
 					stream->sd_offset;
-		stream->stream_tag = i+1;
+		stream->stream_tag = i + 1;
 		stream->open = false;
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_PLAYBACK;
@@ -1101,6 +1102,24 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 						&stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
+			return -ENOMEM;
+		}				
+		
+		/* Allocate memory for the position buffer */
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 8, 
+						&stream->posbuffer);
+		if(ret < 0) {
+			dev_err(sdev->dev, "Failed posbuffer DMA alloc\n");
+			return -ENOMEM;
+		}
+		stream->posbuf = (__le32 *)(stream->posbuffer.area +
+				 (stream->stream_tag - 1) * 8);
+		
+		/*Allocate memory for ring buffer */
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, PAGE_SIZE, 
+						&stream->ringbuffer);
+		if(ret < 0) {
+			dev_err(sdev->dev, "Failed ringbuffer DMA alloc\n");
 			return -ENOMEM;
 		}
 	}
@@ -1135,16 +1154,34 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->sd_addr = sdev->bar[APL_HDA_BAR] + 
 					stream->sd_offset;
 
-		stream->stream_tag = i+1;
+		stream->stream_tag = i + 1;
 		stream->open = false;
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_CAPTURE;
 		
 		/* Alloc Memory for Stream BDL */ 
-		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, BDL_SIZE, 
-					&stream->bdl);
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 
+						BDL_SIZE, &stream->bdl);
 		if(ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
+			return -ENOMEM;
+		}
+		/* Allocate memory for the position buffer */
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 8, 
+						&stream->posbuffer);
+		if(ret < 0) {
+			dev_err(sdev->dev, "Failed posbuffer DMA alloc\n");
+			return -ENOMEM;
+		}
+		stream->posbuf = (__le32 *)(stream->posbuffer.area +
+					(stream->stream_tag - 1) * 8);
+		
+		/*Allocate memory for ring buffer */
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 
+						PAGE_SIZE, 
+						&stream->ringbuffer);
+		if(ret < 0) {
+			dev_err(sdev->dev, "Failed ringbuffer DMA alloc\n");
 			return -ENOMEM;
 		}
 	}
@@ -1246,7 +1283,8 @@ step5:
 		mdelay(1);
 	}
 
-	dev_err(sdev->dev, "error: timeout for ROM init, HIPCIE: 0x%x status 0x%x\n", hipcie, status);
+	dev_err(sdev->dev, "error: timeout for ROM init,\
+		HIPCIE: 0x%x status 0x%x\n", hipcie, status);
 	ret = -EIO;
 	
 err:
@@ -1376,7 +1414,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dev_err(sdev->dev, "Request firmware failed %d\n", ret);
 		goto err;
 	}
-	dev_dbg(sdev->dev," Request firmware success %d \n",plat_data->fw->size);
+	dev_dbg(sdev->dev," Request firmware success %d \n",plat_data->fw->size)
+	;
 	
 
 	/* check for extended manifest */
@@ -1393,10 +1432,13 @@ static int apl_probe(struct snd_sof_dev *sdev)
 					plat_data->fw->size);
 		if (stream_tag <= 0) {
 			dev_err(sdev->dev, "Error code=0x%x: FW status=0x%x\n",
-			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_ERROR_CODE),
-			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS));
+			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_ERROR_CODE)
+			,
+			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS))
+			;
 
-			dev_err(sdev->dev, "Core En/ROM load fail:%d\n", stream_tag);
+			dev_err(sdev->dev, "Core En/ROM load fail:%d\n", 
+				stream_tag);
 			ret = stream_tag;
 			goto irq_err;
 		}
@@ -1409,7 +1451,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	
 	if(ret < 0) {
 		dev_err(sdev->dev, "Load FW failed\n");
-		apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
+		dev_dbg(sdev->dev, "sd is %8.8x\n", 
+			snd_sof_dsp_read(sdev, APL_HDA_BAR, 0xa0));
 		return ret;
 	} 
 	

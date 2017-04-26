@@ -201,7 +201,10 @@ struct snd_sof_hda_stream {
 	bool running;
 	struct snd_dma_buffer bdl;
 	void __iomem *sd_addr;	/* stream descriptor pointer */
-	int sd_offset; /* Stream descriptor offset */
+	int sd_offset; /* Stream descriptor offset */         
+	/* CORB/RIRB and position buffers */
+	struct snd_dma_buffer posbuffer;
+	struct snd_dma_buffer ringbuffer;
 	__le32 *posbuf;		/* position buffer pointer */
 	unsigned int frags;	/* number for period in the play buffer */
 	unsigned int format_val;	/* format value to be set in the
