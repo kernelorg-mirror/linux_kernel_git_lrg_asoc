@@ -24,7 +24,7 @@
  *  This file only manages the core ALSA and ASoC components, all other bespoke
  *  firmware topology data is passed to component drivers for bespoke handling.
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/list.h>
@@ -1646,7 +1646,7 @@ static int soc_tplg_dapm_complete(struct soc_tplg *tplg)
 	*/
 	if (!card || !card->instantiated) {
 		dev_warn(tplg->dev, "ASoC: Parent card not yet available,"
-				"Do not add new widgets now\n");
+			" delay widget card binding\n");
 		return 0;
 	}
 
