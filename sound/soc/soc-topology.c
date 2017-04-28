@@ -1592,11 +1592,14 @@ widget:
 	widget->dobj.widget.kcontrol_type = kcontrol_type;
 	widget->dobj.ops = tplg->ops;
 	widget->dobj.index = tplg->index;
-	kfree(template.sname);
-	kfree(template.name);
+	// template pointer are copied a when creating new widgets and are freed in widget destroy
+	//kfree(template.sname);
+	//kfree(template.name);
 	list_add(&widget->dobj.list, &tplg->comp->dobj_list);
 	return 0;
 
+ready_err:
+	// TODO: free widget
 hdr_err:
 	kfree(template.sname);
 err:
