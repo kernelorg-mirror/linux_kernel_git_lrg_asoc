@@ -79,7 +79,7 @@ static int sof_control_load(struct snd_soc_component *scomp,
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_dobj *dobj = NULL;
 
-	dev_dbg(sdev->dev, "added type %d control %s\n", 
+	dev_dbg(sdev->dev, "tplg: load control type %d name : %s\n", 
 		hdr->type, hdr->name);
 
 	switch (hdr->ops.info) {
@@ -118,14 +118,62 @@ static int sof_control_unload(struct snd_soc_component *scomp,
 	return 0;
 }
 
-/* external widget init - used for any driver specific init */
+static int sof_connect_dai_widget(struct snd_soc_component *scomp,
+	struct snd_soc_dapm_widget *w,
+	struct snd_soc_tplg_dapm_widget *tw)
+{
+	struct snd_soc_card *card = scomp->card;
+	struct snd_soc_pcm_runtime *rtd;
+
+	list_for_each_entry(rtd, &card->rtd_list, list) {
+
+		printk(KERN_ERR " * playback rtd name %s is BE %d\n",
+			rtd->dai_link->name, rtd->dai_link->no_pcm);
+		printk(KERN_ERR " * rtd sname %s wid sname  %s\n",
+			rtd->dai_link->stream_name, w->sname);
+
+		if (!strcmp(rtd->dai_link->stream_name, w->sname)) {
+			switch (w->id) {
+			case snd_soc_dapm_dai_out:
+				rtd->cpu_dai->capture_widget = w;
+				break;
+			case snd_soc_dapm_dai_in:
+				rtd->cpu_dai->playback_widget = w;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
 static int sof_widget_load(struct snd_soc_component *scomp,
+	struct snd_soc_dapm_widget *w,
+	struct snd_soc_tplg_dapm_widget *tw)
+{
+	return 0;
+}
+
+/* external widget init - used for any driver specific init */
+static int sof_widget_ready(struct snd_soc_component *scomp,
 	struct snd_soc_dapm_widget *w,
 	struct snd_soc_tplg_dapm_widget *tw)
 {
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 
-	dev_dbg(sdev->dev, "added widget %d %s\n", tw->id, tw->name);
+	dev_dbg(sdev->dev, "tplg: ready widget id %d name : %s stream %s\n",
+		tw->id, tw->name, tw->sname ? tw->sname : "none");
+
+	/* handle any special case widgets */
+	switch (w->id) {
+	case snd_soc_dapm_dai_in:
+	case snd_soc_dapm_dai_out:
+		sof_connect_dai_widget(scomp, w, tw);
+		break;
+	default:
+		break;
+	}
 
 	return 0;
 }
@@ -148,7 +196,7 @@ static int sof_dai_load(struct snd_soc_component *scomp,
 	if (spcm == NULL)
 		return -ENOMEM;
 
-	dev_dbg(sdev->dev, "added pcm %d %s to dai %d %s\n", 
+	dev_dbg(sdev->dev, "tplg: load pcm %d %s to dai %d %s\n", 
 		pcm->pcm_id, pcm->pcm_name, pcm->dai_id, pcm->dai_name);
 
 	spcm->pcm = *pcm;
@@ -188,6 +236,7 @@ static int sof_link_unload(struct snd_soc_component *scomp,
 /* completion - called at completion of firmware loading */
 static void sof_complete(struct snd_soc_component *scomp)
 {
+	//dev_dbg(
 }
 
 /* manifest - optional to inform component of manifest */
@@ -215,6 +264,7 @@ static struct snd_soc_tplg_ops sof_tplg_ops = {
 
 	/* external widget init - used for any driver specific init */
 	.widget_load	= sof_widget_load,
+	.widget_ready	= sof_widget_ready,
 	.widget_unload	= sof_widget_unload,
 
 	/* FE DAI - used for any driver specific init */

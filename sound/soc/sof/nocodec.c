@@ -25,6 +25,10 @@
 #include <sound/soc.h>
 #include <sound/jack.h>
 
+static const struct snd_soc_dapm_route sof_nocodec_map[] = {
+	{"codec_in1", NULL, "ssp2 Rx" },
+	{"ssp2 Rx", NULL, "HiFi Capture"},
+};
 
 static int sof_nocodec_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
@@ -71,16 +75,18 @@ static int nocodec_rtd_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
+//#error need to create sntream name for dummy dai widget
 /* we just set some BEs - FE provided by topology */
 static struct snd_soc_dai_link sof_nocodec_dais[] = {
 	/* Back End DAI links */
 	{
 		/* SSP0 - Codec */
-		.name = "Codec",
+		.name = "NoCodec",
+		.stream_name = "I2S Audio",
 		.id = 0,
 		.init = nocodec_rtd_init,
 		.cpu_dai_name = "snd-soc-dummy-dai",
-		.platform_name = "sof-platform",
+		.platform_name = "snd-soc-dummy",
 		.no_pcm = 1,
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
@@ -99,7 +105,9 @@ static struct snd_soc_card sof_nocodec_card = {
 	.name = "sof-nocodec",
 	.dai_link = sof_nocodec_dais,
 	.num_links = ARRAY_SIZE(sof_nocodec_dais),
-	.fully_routed = true,
+		.dapm_routes = sof_nocodec_map,
+	.num_dapm_routes = ARRAY_SIZE(sof_nocodec_map),
+//	.fully_routed = true,
 };
 
 static int sof_nocodec_probe(struct platform_device *pdev)
@@ -107,11 +115,18 @@ static int sof_nocodec_probe(struct platform_device *pdev)
 	struct snd_soc_card *card = &sof_nocodec_card;
 
 	card->dev = &pdev->dev;
+
 	return devm_snd_soc_register_card(&pdev->dev, card);
+}
+
+static int sof_nocodec_remove(struct platform_device *pdev)
+{
+	return 0;
 }
 
 static struct platform_driver sof_nocodec_audio = {
 	.probe = sof_nocodec_probe,
+	.remove = sof_nocodec_remove,
 	.driver = {
 		.name = "sof-nocodec",
 		.pm = &snd_soc_pm_ops,

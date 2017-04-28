@@ -217,16 +217,19 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct snd_soc_tplg_stream_caps *caps = 
 		&spcm->pcm.caps[substream->stream];
-	
+
+printk(KERN_ERR "rtd %p %s\n", rtd, rtd->dai_link->name);
+printk(KERN_ERR "sdev %p\n", sdev);
+printk(KERN_ERR "spcm %p\n", spcm);
 	mutex_lock(&spcm->mutex);
 
 	pm_runtime_get_sync(sdev->dev);
 
 	/* set runtime constraints */
-	snd_pcm_hw_constraint_step(substream->runtime, 0,
-		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, PAGE_SIZE);
-	snd_pcm_hw_constraint_step(substream->runtime, 0,
-		SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 256);
+//	snd_pcm_hw_constraint_step(substream->runtime, 0,
+//		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, PAGE_SIZE);
+//	snd_pcm_hw_constraint_step(substream->runtime, 0,
+//		SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 256);
 
 	runtime->hw.info = SNDRV_PCM_INFO_MMAP |
 			  SNDRV_PCM_INFO_MMAP_VALID |
@@ -237,14 +240,15 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 			  SNDRV_PCM_INFO_DRAIN_TRIGGER,
 	runtime->hw.formats = SNDRV_PCM_FMTBIT_S16_LE |
 		SNDRV_PCM_FMTBIT_S24_LE |
-		SNDRV_PCM_FMTBIT_S32_LE,
+		SNDRV_PCM_FMTBIT_S32_LE;
 	runtime->hw.formats = caps->formats;
 	runtime->hw.period_bytes_min = caps->period_size_min;
 	runtime->hw.period_bytes_max = caps->period_size_max;
 	runtime->hw.periods_min = caps->periods_min;
 	runtime->hw.periods_max = caps->periods_max;
 	runtime->hw.buffer_bytes_max = caps->buffer_size_max;
-	
+
+
 	// TODO: this could depend on pipeline.
 	//runtime->hw.fifo_size = hw->fifo_size;
 
@@ -317,6 +321,7 @@ static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	int ret = 0;
 
 	spcm = find_spcm(sdev, rtd);
+printk(KERN_ERR "rtd %p uses spcm %p %s\n", rtd, spcm , rtd->dai_link->name);
 	if (spcm == NULL) {
 		dev_warn(sdev->dev, "warn: cant find PCM with DAI ID %d\n",
 			rtd->dai_link->id);
@@ -325,8 +330,6 @@ static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	rtd->sof = spcm;
 
 	dev_dbg(sdev->dev, "creating new PCM %s\n", spcm->pcm.pcm_name);
-
-	pcm->private_data = spcm;
 
 	/* do we need to allocate playback PCM DMA pages */
 	if (!spcm->pcm.playback)
@@ -338,7 +341,8 @@ static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_min,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_max);
 
-	ret = snd_pcm_lib_preallocate_pages_for_all(pcm,
+	ret = snd_pcm_lib_preallocate_pages(
+		pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream,
 		SNDRV_DMA_TYPE_DEV_SG, sdev->dev,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_min,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_PLAYBACK].buffer_size_max);
@@ -370,7 +374,8 @@ capture:
 		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_min,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_max);
 
-	ret = snd_pcm_lib_preallocate_pages_for_all(pcm,
+	ret = snd_pcm_lib_preallocate_pages(
+		pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream,
 		SNDRV_DMA_TYPE_DEV_SG, sdev->dev,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_min,
 		spcm->pcm.caps[SNDRV_PCM_STREAM_CAPTURE].buffer_size_max);
@@ -407,13 +412,22 @@ capture:
 
 static void sof_pcm_free(struct snd_pcm *pcm)
 {
-	struct snd_sof_pcm *spcm = pcm->private_data;
+#if 0
+	struct snd_sof_pcm *spcm;
+
+	spcm = find_spcm(sdev, rtd);
+	if (spcm == NULL) {
+		dev_warn(sdev->dev, "warn: cant find PCM with DAI ID %d\n",
+			rtd->dai_link->id);
+		return 0;
+	}
 
 	if (spcm->pcm.playback)
 		snd_dma_free_pages(&spcm->page_table[SNDRV_PCM_STREAM_PLAYBACK]);
 
 	if (spcm->pcm.capture)
 		snd_dma_free_pages(&spcm->page_table[SNDRV_PCM_STREAM_CAPTURE]);
+#endif
 }
 
 static int sof_pcm_probe(struct snd_soc_platform *platform)
