@@ -345,6 +345,17 @@ static int soc_tplg_widget_load(struct soc_tplg *tplg,
 	return 0;
 }
 
+/* optionally pass new dynamic widget to component driver. This is mainly for
+ * external widgets where we can assign private data/ops */
+static int soc_tplg_widget_ready(struct soc_tplg *tplg,
+	struct snd_soc_dapm_widget *w, struct snd_soc_tplg_dapm_widget *tplg_w)
+{
+	if (tplg->comp && tplg->ops && tplg->ops->widget_ready)
+		return tplg->ops->widget_ready(tplg->comp, w, tplg_w);
+
+	return 0;
+}
+
 /* pass DAI configurations to component driver for extra initialization */
 static int soc_tplg_dai_load(struct soc_tplg *tplg,
 	struct snd_soc_dai_driver *dai_drv,
@@ -1572,6 +1583,10 @@ widget:
 		ret = -ENOMEM;
 		goto hdr_err;
 	}
+
+	ret = soc_tplg_widget_ready(tplg, widget, w);
+	if (ret < 0)
+		goto ready_err;
 
 	widget->dobj.type = SND_SOC_DOBJ_WIDGET;
 	widget->dobj.widget.kcontrol_type = kcontrol_type;
