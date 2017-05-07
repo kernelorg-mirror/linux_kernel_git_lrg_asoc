@@ -307,19 +307,20 @@ void sof_ipc_drop_all(struct snd_sof_ipc *ipc)
 }
 EXPORT_SYMBOL(sof_ipc_drop_all);
 
-int snd_sof_snd_sof_ipc_msg(struct snd_sof_dev *sdev,
-	uint32_t cmd)
+int sof_ipc_tx_message_wait(struct snd_sof_ipc *ipc, u32 header,
+	void *tx_data, size_t tx_bytes, void *rx_data, size_t rx_bytes)
 {
-
-	return 0;
+	return ipc_tx_message(ipc, header, tx_data, tx_bytes,
+		rx_data, rx_bytes, 1);
 }
+EXPORT_SYMBOL(sof_ipc_tx_message_wait);
 
-int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
-	struct sof_ipc_pcm_params *params)
+int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u32 header,
+	void *tx_data, size_t tx_bytes)
 {
-
-	return 0;
+	return ipc_tx_message(ipc, header, tx_data, tx_bytes, NULL, 0, 0);
 }
+EXPORT_SYMBOL(sof_ipc_tx_message_nowait);
 
 void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 {
@@ -419,21 +420,6 @@ void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev)
 //	schedule_work(&sdev->ipc->kwork);
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_msgs);
-
-int sof_ipc_tx_message_wait(struct snd_sof_ipc *ipc, u64 header,
-	void *tx_data, size_t tx_bytes, void *rx_data, size_t rx_bytes)
-{
-	return ipc_tx_message(ipc, header, tx_data, tx_bytes,
-		rx_data, rx_bytes, 1);
-}
-EXPORT_SYMBOL(sof_ipc_tx_message_wait);
-
-int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u64 header,
-	void *tx_data, size_t tx_bytes)
-{
-	return ipc_tx_message(ipc, header, tx_data, tx_bytes, NULL, 0, 0);
-}
-EXPORT_SYMBOL(sof_ipc_tx_message_nowait);
 
 struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev)
 {

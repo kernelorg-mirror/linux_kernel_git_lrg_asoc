@@ -118,6 +118,7 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct sof_ipc_pcm_params ipc_params;
+	struct sof_ipc_pcm_params_reply ipc_params_reply;
 	int ret;
 
 	/* allocate audio buffer pages */
@@ -141,6 +142,8 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 		ipc_params.buffer.pages = runtime->dma_bytes / PAGE_SIZE;
 
 	/* set IPC PCM parameters */
+	ipc_params.hdr.size = sizeof(ipc_params);
+	ipc_params.hdr.cmd = SOF_IPC_GLB_STREAM_MSG | SOF_IPC_STREAM_PCM_PARAMS;
 	ipc_params.comp_id = spcm->comp_id;
 	ipc_params.buffer.phy_addr = spcm->page_table[substream->stream].addr;
 	ipc_params.buffer.size = runtime->dma_bytes;
@@ -167,26 +170,75 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	/* send IPC to the DSP */
-	return snd_sof_ipc_stream_pcm_params(sdev, &ipc_params);
+ 	ret = sof_ipc_tx_message_wait(sdev->ipc, 
+		ipc_params.hdr.cmd, &ipc_params, sizeof(ipc_params), 
+		&ipc_params_reply, sizeof(ipc_params_reply));
+
+	/* copy offset */
+	spcm->posn_offset[substream->stream] = ipc_params_reply.posn_offset;
+
+	return ret;
 }
 
 static int sof_pcm_hw_free(struct snd_pcm_substream *substream)
 {
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_sof_dev *sdev =
+		snd_soc_platform_get_drvdata(rtd->platform);
+	struct snd_sof_pcm *spcm = rtd->sof;
+	struct sof_ipc_stream stream;
+	int ret;
+
+	stream.hdr.size = sizeof(stream);
+	stream.hdr.cmd = SOF_IPC_GLB_STREAM_MSG | SOF_IPC_STREAM_PCM_FREE;
+	stream.comp_id = spcm->comp_id;
+
+	/* send IPC to the DSP */
+ 	ret = sof_ipc_tx_message_wait(sdev->ipc, 
+		stream.hdr.cmd, &stream, sizeof(stream), NULL, 0);
+
 	snd_pcm_lib_free_pages(substream);
-	return 0;
+	return ret;
 }
 
 static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
-#if 0
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_sof_dev *sdev =
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
-#endif
+	struct sof_ipc_stream stream;
 
-	return 0;
+	stream.hdr.size = sizeof(stream);
+	stream.hdr.cmd = SOF_IPC_GLB_STREAM_MSG;
+	stream.comp_id = spcm->comp_id;
+
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+		stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_START;
+		break;
+	case SNDRV_PCM_TRIGGER_RESUME:
+		//stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_START;
+		break;
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_RELEASE;
+		break;
+	case SNDRV_PCM_TRIGGER_STOP:
+		stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_STOP;
+		break;
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+		//stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_START;
+		break;		
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		stream.hdr.cmd |= SOF_IPC_STREAM_TRIG_PAUSE;
+		break;
+	default:
+		break;
+	}
+
+	/* send IPC to the DSP */
+ 	return sof_ipc_tx_message_nowait(sdev->ipc, stream.hdr.cmd, &stream,
+		sizeof(stream));
 }
 
 static snd_pcm_uframes_t sof_pcm_pointer(struct snd_pcm_substream *substream)
@@ -218,9 +270,6 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_soc_tplg_stream_caps *caps = 
 		&spcm->pcm.caps[substream->stream];
 
-printk(KERN_ERR "rtd %p %s\n", rtd, rtd->dai_link->name);
-printk(KERN_ERR "sdev %p\n", sdev);
-printk(KERN_ERR "spcm %p\n", spcm);
 	mutex_lock(&spcm->mutex);
 
 	pm_runtime_get_sync(sdev->dev);
@@ -259,33 +308,15 @@ printk(KERN_ERR "spcm %p\n", spcm);
 static int sof_pcm_close(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	//struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_sof_dev *sdev =
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
-	int ret = 0;
 
 	mutex_lock(&spcm->mutex);
-#if 0
-	ret = sst_sof_stream_reset(hsw, pcm_data->stream);
-	if (ret < 0) {
-		dev_dbg(rtd->dev, "error: reset stream failed %d\n", ret);
-		goto out;
-	}
-
-	ret = sst_sof_stream_free(hsw, pcm_data->stream);
-	if (ret < 0) {
-		dev_dbg(rtd->dev, "error: free stream failed %d\n", ret);
-		goto out;
-	}
-
-
-out:
-#endif
 	pm_runtime_mark_last_busy(sdev->dev);
 	pm_runtime_put_autosuspend(sdev->dev);
 	mutex_unlock(&spcm->mutex);
-	return ret;
+	return 0;
 }
 
 static struct snd_pcm_ops sof_pcm_ops = {
@@ -321,7 +352,7 @@ static int sof_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	int ret = 0;
 
 	spcm = find_spcm(sdev, rtd);
-printk(KERN_ERR "rtd %p uses spcm %p %s\n", rtd, spcm , rtd->dai_link->name);
+
 	if (spcm == NULL) {
 		dev_warn(sdev->dev, "warn: cant find PCM with DAI ID %d\n",
 			rtd->dai_link->id);

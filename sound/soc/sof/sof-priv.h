@@ -169,6 +169,9 @@ struct snd_sof_pcm {
 	struct snd_soc_tplg_pcm pcm;
 	struct snd_dma_buffer page_table[2];	/* playback and capture */
 
+	/* offset to mmaped sof_ipc_stream_posn if used */
+	uint32_t posn_offset[2];
+
 	struct mutex mutex;
 	struct list_head list;	/* list in snd_sof_dev */
 };
@@ -318,6 +321,10 @@ int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
 	struct sof_ipc_pcm_params *params);
 int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, void __iomem *inbox,
 		size_t inbox_size, void __iomem *outbox, size_t outbox_size);
+int sof_ipc_tx_message_wait(struct snd_sof_ipc *ipc, u32 header,
+	void *tx_data, size_t tx_bytes, void *rx_data, size_t rx_bytes);
+int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u32 header,
+	void *tx_data, size_t tx_bytes);
 
 /*
  * Topology.
