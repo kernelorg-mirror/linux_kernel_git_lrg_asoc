@@ -168,9 +168,10 @@ static u64 apl_read64(struct snd_sof_dev *sdev, void __iomem *addr)
  * Memory copy.
  */
 
-static void apl_block_write(struct snd_sof_dev *sdev,
-	volatile void __iomem *dest, const void *src, size_t size)
+static void apl_block_write(struct snd_sof_dev *sdev, u32 offset, void *src,
+	size_t size)
 {
+	volatile void __iomem *dest = sdev->bar[sdev->mmio_bar] + offset;
 	u32 tmp = 0;
 	int i, m, n;
 	const u8 *src_byte = src;
@@ -188,13 +189,12 @@ static void apl_block_write(struct snd_sof_dev *sdev,
 	}
 }
 
-static void apl_block_read(struct snd_sof_dev *sdev, void *dest,
-	const volatile void __iomem *src, size_t size)
+static void apl_block_read(struct snd_sof_dev *sdev, u32 offset, void *dest,
+	size_t size)
 {
+	volatile void __iomem *src = sdev->bar[sdev->mmio_bar] + offset;
 	memcpy_fromio(dest, src, size);
 }
-
-
 /*
  * IPC Mailbox IO
  */

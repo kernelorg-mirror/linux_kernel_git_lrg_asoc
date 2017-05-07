@@ -173,17 +173,17 @@ static inline u64 snd_sof_dsp_read64(struct snd_sof_dev *sdev, u32 bar,
 
 /* block IO */
 static inline void snd_sof_dsp_block_read(struct snd_sof_dev *sdev,
-	void *dest, void __iomem *src, size_t bytes)
+	u32 offset, void *dest, size_t bytes)
 {
 	if (sdev->ops->block_read)
-		sdev->ops->block_read(sdev, dest, src, bytes);
+		sdev->ops->block_read(sdev, offset, dest, bytes);
 }
 
 static inline void snd_sof_dsp_block_write(struct snd_sof_dev *sdev,
-	void __iomem *dest, void *src, size_t bytes)
+	u32 offset, void *src, size_t bytes)
 {
 	if (sdev->ops->block_write)
-		sdev->ops->block_write(sdev, dest, src, bytes);
+		sdev->ops->block_write(sdev, offset, src, bytes);
 }
 
 /* mailbox */

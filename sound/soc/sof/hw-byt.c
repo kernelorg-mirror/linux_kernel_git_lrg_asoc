@@ -218,9 +218,10 @@ static u64 byt_read64(struct snd_sof_dev *sdev, void __iomem *addr)
  * Memory copy.
  */
 
-static void byt_block_write(struct snd_sof_dev *sdev,
-	volatile void __iomem *dest, const void *src, size_t size)
+static void byt_block_write(struct snd_sof_dev *sdev, u32 offset, void *src,
+	size_t size)
 {
+	volatile void __iomem *dest = sdev->bar[sdev->mmio_bar] + offset;
 	u32 tmp = 0;
 	int i, m, n;
 	const u8 *src_byte = src;
@@ -238,9 +239,10 @@ static void byt_block_write(struct snd_sof_dev *sdev,
 	}
 }
 
-static void byt_block_read(struct snd_sof_dev *sdev, void *dest,
-	const volatile void __iomem *src, size_t size)
+static void byt_block_read(struct snd_sof_dev *sdev, u32 offset, void *dest,
+	size_t size)
 {
+	volatile void __iomem *src = sdev->bar[sdev->mmio_bar] + offset;
 	memcpy_fromio(dest, src, size);
 }
 
@@ -260,8 +262,7 @@ static int byt_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 		msg_id, offset);
 
 	/* copy data from the DSP FW ready offset */
-	byt_block_read(sdev, fw_ready, sdev->bar[BYT_DSP_BAR] + offset,
-		sizeof(*fw_ready));
+	byt_block_read(sdev, offset, fw_ready, sizeof(*fw_ready));
 
 	snd_sof_dsp_mailbox_init(sdev, fw_ready->inbox_offset,
 		fw_ready->inbox_size, fw_ready->outbox_offset,

@@ -76,7 +76,7 @@ int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 {
 	struct snd_sof_blk_hdr *block;
 	int count;
-	void __iomem *mem;
+	u32 offset;
 
 	dev_dbg(sdev->dev, "new module size 0x%x blocks 0x%x type 0x%x\n",
 		module->size, module->num_blocks, module->type);
@@ -100,7 +100,7 @@ int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 			continue;	/* not handled atm */
 		case SOF_BLK_TEXT:
 		case SOF_BLK_DATA:
-			mem = sdev->bar[sdev->cl_bar] + block->offset;
+			offset = block->offset;
 			break;
 		default:
 			dev_err(sdev->dev, "error: bad type 0x%x for block 0x%x\n",
@@ -108,15 +108,12 @@ int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,
 			return -EINVAL;
 		}
 
-
 		dev_dbg(sdev->dev, "block %d type 0x%x "
-			"size 0x%x ==> ram %p offset 0x%x\n",
-			count, block->type, block->size, mem,
-			block->offset);
+			"size 0x%x ==>  offset 0x%x\n",
+			count, block->type, block->size, offset);
 
-
-		snd_sof_dsp_block_write(sdev, mem, (void*) block + sizeof(*block),
-			block->size);
+		snd_sof_dsp_block_write(sdev, offset, 
+			(void*)block + sizeof(*block), block->size);
 
 		/* next block */
 		block = (void *)block + sizeof(*block) + block->size;
