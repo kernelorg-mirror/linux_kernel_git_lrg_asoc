@@ -66,6 +66,9 @@
  * G is global cmd type (4 bits)
  * C is command type (12 bits)
  * I is the ID number (16 bits) - monotonic and overflows
+ *
+ * This is sent at the start of the IPM message in the mailbox. Messages should
+ * not be sent in the doorbell (special exceptions for firmware .
  */
 
 /* Global Message - Generic */
@@ -73,23 +76,14 @@
 #define SOF_GLB_TYPE_MASK			(0xf << SOF_GLB_TYPE_SHIFT)
 #define SOF_GLB_TYPE(x)				(x << SOF_GLB_TYPE_SHIFT)
 
-/* Global Message - Reply */
-#define SOF_GLB_REPLY_SHIFT			0
-#define SOF_GLB_REPLY_MASK			(0x1f << SOF_GLB_REPLY_SHIFT)
-#define SOF_GLB_REPLY_TYPE(x)			(x << SOF_GLB_REPLY_TYPE_SHIFT)
-
 /* Command Message - Generic */
 #define SOF_CMD_TYPE_SHIFT			16
 #define SOF_CMD_TYPE_MASK			(0xfff << SOF_CMD_TYPE_SHIFT)
 #define SOF_CMD_TYPE(x)				(x << SOF_CMD_TYPE_SHIFT)
 
-/* Firmware Ready Message */
-#define SOF_FW_READY				(0x1 << 29)
-#define IPC_INTL_STATUS_MASK			(0x3 << 30)
-
 
 /* Global Message Types */
-#define SOF_IPC_GLB_NONE			SOF_GLB_TYPE(0x0)
+#define SOF_IPC_GLB_REPLY			SOF_GLB_TYPE(0x0)
 #define SOF_IPC_GLB_COMPOUND			SOF_GLB_TYPE(0x1)
 #define SOF_IPC_GLB_TPLG_MSG			SOF_GLB_TYPE(0x2)
 #define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x3)
@@ -98,7 +92,15 @@
 #define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x6)
 #define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x7)
 
-/* DSP Command Message Types */
+/*
+ * DSP Command Message Types
+ */
+
+/* reply - error details in mailbox reply */
+#define SOF_IPC_REPLY_SUCCESS			SOF_CMD_TYPE(0x000)
+#define SOF_IPC_REPLY_ERROR			SOF_CMD_TYPE(0x001)
+
+/* topology */
 #define SOF_IPC_TPLG_COMP_NEW			SOF_CMD_TYPE(0x000)
 #define SOF_IPC_TPLG_COMP_FREE			SOF_CMD_TYPE(0x001)
 #define SOF_IPC_TPLG_COMP_CONNECT		SOF_CMD_TYPE(0x002)
@@ -108,12 +110,16 @@
 #define SOF_IPC_TPLG_PIPE_COMPLETE		SOF_CMD_TYPE(0x013)
 #define SOF_IPC_TPLG_BUFFER_NEW			SOF_CMD_TYPE(0x020)
 #define SOF_IPC_TPLG_BUFFER_FREE		SOF_CMD_TYPE(0x021)
+
+/* PM */
 #define SOF_IPC_PM_CTX_SAVE			SOF_CMD_TYPE(0x030)
 #define SOF_IPC_PM_CTX_RESTORE			SOF_CMD_TYPE(0x031)
 #define SOF_IPC_PM_CTX_SIZE			SOF_CMD_TYPE(0x032)
 #define SOF_IPC_PM_CLK_SET			SOF_CMD_TYPE(0x033)
 #define SOF_IPC_PM_CLK_GET			SOF_CMD_TYPE(0x034)
 #define SOF_IPC_PM_CLK_REQ			SOF_CMD_TYPE(0x035)
+
+/* component */
 #define SOF_IPC_COMP_SET_VOLUME			SOF_CMD_TYPE(0x040)
 #define SOF_IPC_COMP_GET_VOLUME			SOF_CMD_TYPE(0x041)
 #define SOF_IPC_COMP_SET_MIXER			SOF_CMD_TYPE(0x042)
@@ -122,6 +128,8 @@
 #define SOF_IPC_COMP_GET_MUX			SOF_CMD_TYPE(0x045)
 #define SOF_IPC_COMP_SET_SRC			SOF_CMD_TYPE(0x046)
 #define SOF_IPC_COMP_GET_SRC			SOF_CMD_TYPE(0x047)
+
+/* stream */
 #define SOF_IPC_STREAM_PCM_PARAMS		SOF_CMD_TYPE(0x080)
 #define SOF_IPC_STREAM_PCM_FREE			SOF_CMD_TYPE(0x081)
 #define SOF_IPC_STREAM_TRIG_START		SOF_CMD_TYPE(0x082)
@@ -130,18 +138,29 @@
 #define SOF_IPC_STREAM_TRIG_RELEASE		SOF_CMD_TYPE(0x085)
 #define SOF_IPC_STREAM_TRIG_DRAIN		SOF_CMD_TYPE(0x086)
 #define SOF_IPC_STREAM_TRIG_XRUN		SOF_CMD_TYPE(0x087)
+#define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x0b0)
+#define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x0b1)
+
+/* DAI */
 #define SOF_IPC_DAI_SSP_CONFIG			SOF_CMD_TYPE(0x090)
 #define SOF_IPC_DAI_HDA_CONFIG			SOF_CMD_TYPE(0x091)
 #define SOF_IPC_DAI_DMIC_CONFIG			SOF_CMD_TYPE(0x092)
 #define SOF_IPC_DAI_LOOPBACK			SOF_CMD_TYPE(0x093)
-#define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x0b0)
-#define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x0b1)
 
 /* Host Command Message Types */
 #define SOF_IPC_HOST_POSN			SOF_CMD_TYPE(0x000)
 
-/* get message id */
+/* Get message component id */
 #define SOF_IPC_MESSAGE_ID(x)			(x & 0xffff)
+
+/*
+ * Firmware ready message
+ */
+/* Firmware Ready Message */
+#define SOF_FW_READY				(0x1 << 29)
+
+// TODO: remove
+#define IPC_INTL_STATUS_MASK			(0x3 << 30)
 
 /*
  * Command Header - Header for all IPC. Identifies IPC message.

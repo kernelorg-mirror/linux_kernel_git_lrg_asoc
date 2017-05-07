@@ -141,6 +141,7 @@ struct snd_sof_dsp_ops {
 	/* FW loading */
 	int (*load_module)(struct snd_sof_dev *sof_dev,
 		struct snd_sof_mod_hdr *hdr);
+	int (*fw_ready)(struct snd_sof_dev *sdev, u32 msg_id);
 
 };
 
@@ -265,6 +266,7 @@ struct snd_sof_dev {
 	/* firmware loader */
 	int cl_bar;
 	struct snd_dma_buffer dmab;
+	struct sof_ipc_fw_ready fw_ready;
 
 	/* topology */
 	struct snd_soc_tplg_ops *tplg_ops;
@@ -314,6 +316,8 @@ void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id);
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev);
 int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
 	struct sof_ipc_pcm_params *params);
+int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, void __iomem *inbox,
+		size_t inbox_size, void __iomem *outbox, size_t outbox_size);
 
 /*
  * Topology.

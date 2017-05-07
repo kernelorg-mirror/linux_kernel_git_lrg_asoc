@@ -323,58 +323,71 @@ int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
 
 void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 {
+	struct snd_sof_ipc_msg *msg;
+	uint32_t reply = msg_id & SOF_CMD_TYPE_MASK;
+
+	msg = sof_ipc_reply_find_msg(sdev->ipc, msg_id);
+	if (msg == NULL) {
+		dev_err(sdev->dev, "error: can't find message header 0x%x",
+			msg_id);
+		return;
+	}
+
+	switch (reply) {
+	case SOF_IPC_REPLY_SUCCESS:
+		break;
+	case SOF_IPC_REPLY_ERROR:
+	default:
+		break;
+	}
+
+	/* wake up and return the error if we have waiters on this message ? */
+	list_del(&msg->list);
+	sof_ipc_tx_msg_reply_complete(sdev->ipc, msg);
+
+	//return 1;
 
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_reply);
 
-
-
-static void sof_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
+int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, void __iomem *inbox,
+		size_t inbox_size, void __iomem *outbox, size_t outbox_size)
 {
-#if 0
-	struct snd_sof_ipc_fw_ready fw_ready;
-	u32 offset;
-	int i;
-
-	/* mailbox must be on 4k boundary */
-	offset = (header & 0x0000FFFF) << 12;
-
-	dev_dbg(hsw->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
-		header, offset);
-
-	/* copy data from the DSP FW ready offset */
-	sof_dsp_read(hsw->dsp, &fw_ready, offset, sizeof(fw_ready));
-
-	sof_dsp_mailbox_init(hsw->dsp, fw_ready.inbox_offset,
-		fw_ready.inbox_size, fw_ready.outbox_offset,
-		fw_ready.outbox_size);
-
-
-	dev_dbg(hsw->dev, " mailbox upstream 0x%x - size 0x%x\n",
-		fw_ready.inbox_offset, fw_ready.inbox_size);
-	dev_dbg(hsw->dev, " mailbox downstream 0x%x - size 0x%x\n",
-		fw_ready.outbox_offset, fw_ready.outbox_size);
-	if (fw_ready.fw_info_size < sizeof(fw_ready.fw_info)) {
-		fw_ready.fw_info[fw_ready.fw_info_size] = 0;
-		dev_dbg(hsw->dev, " Firmware info: %s \n", fw_ready.fw_info);
-
-		/* log the FW version info got from the mailbox here. */
-		memcpy(fw_info, fw_ready.fw_info, fw_ready.fw_info_size);
-		pinfo = &fw_info[0];
-		for (i = 0; i < ARRAY_SIZE(tmp); i++)
-			tmp[i] = strsep(&pinfo, " ");
-		dev_info(hsw->dev, "FW loaded, mailbox readback FW info: type %s, - "
-			"version: %s.%s, build %s, source commit id: %s\n",
-			tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]);
-	}
-#endif
+	
+	return 0;
 }
+EXPORT_SYMBOL(snd_sof_dsp_mailbox_init);
 
+static void sof_ipc_notify_reply(struct snd_sof_dev *sdev, u32 msg_id)
+{
+	uint32_t reply = msg_id & SOF_CMD_TYPE_MASK;
+
+	switch (reply) {
+	case SOF_IPC_REPLY_SUCCESS:
+		break;
+	case SOF_IPC_REPLY_ERROR:
+	default:
+		break;
+	}
+
+}
 
 void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 {
+	uint32_t cmd;
+	int err = -EINVAL;
+
 	/* first check for FW boot completion as it's special case */
-	if (!sdev->boot_complete && msg_id & SOF_FW_READY) {
+	if (!sdev->boot_complete) {
+		if (sdev->ops->fw_ready)
+			err = sdev->ops->fw_ready(sdev, msg_id);
+		if (err < 0) {
+			dev_err(sdev->dev, "DSP firmware boot timeout %d\n",
+				err);
+			return;
+		}
+
+		/* firware boot completed OK */	
 		sdev->boot_complete = true;
 		dev_dbg(sdev->dev, "booting DSP firmware completed\n");
 		wake_up(&sdev->boot_wait);
@@ -382,6 +395,22 @@ void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 	}
 
 	/* now check for regular notifications */
+	cmd = msg_id & SOF_GLB_TYPE_MASK;
+	switch (cmd) {
+	case SOF_IPC_GLB_REPLY:
+		sof_ipc_notify_reply(sdev, msg_id);
+		break;
+	case SOF_IPC_GLB_COMPOUND:
+	case SOF_IPC_GLB_TPLG_MSG:
+	case SOF_IPC_GLB_PM_MSG:
+	case SOF_IPC_GLB_COMP_MSG:
+	case SOF_IPC_GLB_STREAM_MSG:
+	case SOF_IPC_GLB_DAI_MSG:
+	case SOF_IPC_GLB_HOST_MSG:
+	default:
+		dev_err(sdev->dev, "unknown DSP notification 0x%x\n", cmd);
+		break;
+	}
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_notification);
 
@@ -460,159 +489,6 @@ void snd_sof_ipc_free(struct snd_sof_dev *sdev)
 EXPORT_SYMBOL(snd_sof_ipc_free);
 
 #if 0
-
-
-static int hsw_process_reply(struct sof_hsw *hsw, u32 header)
-{
-	struct snd_sof_ipc_msg *msg;
-	u32 reply = msg_get_global_reply(header);
-
-	trace_ipc_reply("processing -->", header);
-
-	msg = sof_ipc_reply_find_msg(&hsw->ipc, header);
-	if (msg == NULL) {
-		trace_ipc_error("error: can't find message header", header);
-		return -EIO;
-	}
-
-	/* first process the header */
-	switch (reply) {
-	case IPC_GLB_REPLY_PENDING:
-		trace_ipc_pending_reply("received", header);
-		msg->pending = true;
-		hsw->ipc.pending = true;
-		return 1;
-	case IPC_GLB_REPLY_SUCCESS:
-		if (msg->pending) {
-			trace_ipc_pending_reply("completed", header);
-			sof_dsp_inbox_read(hsw->dsp, msg->rx_data,
-				msg->rx_size);
-			hsw->ipc.pending = false;
-		} else {
-			/* copy data from the DSP */
-			sof_dsp_inbox_read(hsw->dsp, msg->rx_data,
-				msg->rx_size);
-		}
-		break;
-	/* these will be rare - but useful for debug */
-	case IPC_GLB_REPLY_UNKNOWN_MESSAGE_TYPE:
-		trace_ipc_error("error: unknown message type", header);
-		msg->errno = -EBADMSG;
-		break;
-	case IPC_GLB_REPLY_OUT_OF_RESOURCES:
-		trace_ipc_error("error: out of resources", header);
-		msg->errno = -ENOMEM;
-		break;
-	case IPC_GLB_REPLY_BUSY:
-		trace_ipc_error("error: reply busy", header);
-		msg->errno = -EBUSY;
-		break;
-	case IPC_GLB_REPLY_FAILURE:
-		trace_ipc_error("error: reply failure", header);
-		msg->errno = -EINVAL;
-		break;
-	case IPC_GLB_REPLY_STAGE_UNINITIALIZED:
-		trace_ipc_error("error: stage uninitialized", header);
-		msg->errno = -EINVAL;
-		break;
-	case IPC_GLB_REPLY_NOT_FOUND:
-		trace_ipc_error("error: reply not found", header);
-		msg->errno = -EINVAL;
-		break;
-	case IPC_GLB_REPLY_SOURCE_NOT_STARTED:
-		trace_ipc_error("error: source not started", header);
-		msg->errno = -EINVAL;
-		break;
-	case IPC_GLB_REPLY_INVALID_REQUEST:
-		trace_ipc_error("error: invalid request", header);
-		msg->errno = -EINVAL;
-		break;
-	case IPC_GLB_REPLY_ERROR_INVALID_PARAM:
-		trace_ipc_error("error: invalid parameter", header);
-		msg->errno = -EINVAL;
-		break;
-	default:
-		trace_ipc_error("error: unknown reply", header);
-		msg->errno = -EINVAL;
-		break;
-	}
-
-	/* update any stream states */
-	if (msg_get_global_type(header) == IPC_GLB_STREAM_MESSAGE)
-		hsw_stream_update(hsw, msg);
-
-	/* wake up and return the error if we have waiters on this message ? */
-	list_del(&msg->list);
-	sof_ipc_tx_msg_reply_complete(&hsw->ipc, msg);
-
-	return 1;
-}
-
-
-static int hsw_process_notification(struct sof_hsw *hsw, u64 header)
-{
-	u32 type;
-	int handled = 1;
-
-	/* upper 32 bits not used atm */
-	type = msg_get_global_type(header);
-
-	trace_ipc_request("processing -->", header);
-
-	/* FW Ready is a special case */
-	if (!hsw->boot_complete && header & IPC_FW_READY) {
-		hsw_fw_ready(hsw, header);
-		return handled;
-	}
-
-	switch (type) {
-	case IPC_GLB_GET_FW_VERSION:
-	case IPC_GLB_ALLOCATE_STREAM:
-	case IPC_GLB_FREE_STREAM:
-	case IPC_GLB_GET_FW_CAPABILITIES:
-	case IPC_GLB_REQUEST_DUMP:
-	case IPC_GLB_GET_DEVICE_FORMATS:
-	case IPC_GLB_SET_DEVICE_FORMATS:
-	case IPC_GLB_ENTER_DX_STATE:
-	case IPC_GLB_GET_MIXER_STREAM_INFO:
-	case IPC_GLB_MAX_IPC_MESSAGE_TYPE:
-	case IPC_GLB_RESTORE_CONTEXT:
-	case IPC_GLB_SHORT_REPLY:
-		dev_err(hsw->dev, "error: message type %d header 0x%16llx\n",
-				type, header);
-		break;
-	case IPC_GLB_STREAM_MESSAGE:
-		handled = hsw_stream_message(hsw, header);
-		break;
-	case IPC_GLB_DEBUG_LOG_MESSAGE:
-		handled = hsw_log_message(hsw, header);
-		break;
-	case IPC_GLB_MODULE_OPERATION:
-		handled = hsw_module_message(hsw, header);
-		break;
-	default:
-		dev_err(hsw->dev, "error: unexpected type %d hdr 0x%16llx\n",
-			type, header);
-		break;
-	}
-
-	return handled;
-}
-
-int sof_hsw_fw_get_version(struct sof_hsw *hsw,
-	struct sof_hsw_ipc_fw_version *version)
-{
-	int ret;
-
-	ret = sof_ipc_tx_message_wait(&hsw->ipc,
-		IPC_GLB_TYPE(IPC_GLB_GET_FW_VERSION),
-		NULL, 0, version, sizeof(*version));
-	if (ret < 0)
-		dev_err(hsw->dev, "error: get version failed\n");
-
-	return ret;
-}
-
 
 int sof_hsw_dsp_load(struct sof_hsw *hsw)
 {

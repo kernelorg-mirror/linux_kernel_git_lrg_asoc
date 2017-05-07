@@ -113,6 +113,66 @@ static const struct snd_sof_debugfs_map bdw_debugfs[] = {
 	{"mbox", BDW_DSP_BAR, MBOX_OFFSET, MBOX_SIZE},
 };
 
+/*
+ * Memory copy.
+ */
+
+/* write has to deal with copying non 32 bit sized data */
+static void bdw_block_write(struct snd_sof_dev *sdev,
+	volatile void __iomem *dest, const void *src, size_t size)
+{
+	u32 tmp = 0;
+	int i, m, n;
+	const u8 *src_byte = src;
+
+	m = size / 4;
+	n = size % 4;
+
+	/* __iowrite32_copy use 32bit size values so divide by 4 */
+	__iowrite32_copy((void *)dest, src, m);
+
+	if (n) {
+		for (i = 0; i < n; i++)
+			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
+		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
+	}
+}
+
+static void bdw_block_read(struct snd_sof_dev *sdev, void *dest,
+	const volatile void __iomem *src, size_t size)
+{
+	memcpy_fromio(dest, src, size);
+}
+
+/*
+ * Register IO
+ */
+
+static void bdw_write(struct snd_sof_dev *sdev, void __iomem *addr,
+	u32 value)
+{
+	writel(value, addr);
+}
+
+static u32 bdw_read(struct snd_sof_dev *sdev, void __iomem *addr)
+{
+	return readl(addr);
+}
+
+static void bdw_write64(struct snd_sof_dev *sdev, void __iomem *addr,
+	u64 value)
+{
+	memcpy_toio(addr, &value, sizeof(value));
+}
+
+static u64 bdw_read64(struct snd_sof_dev *sdev, void __iomem *addr)
+{
+	u64 val;
+
+	memcpy_fromio(&val, addr, sizeof(val));
+	return val;
+}
+
 /* 
  * DSP Control.
  */
@@ -376,6 +436,40 @@ static irqreturn_t bdw_irq_thread(int irq, void *context)
 	return IRQ_HANDLED;
 }
 
+/*
+ * IPC Firmware ready.
+ */
+static int bdw_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
+{
+	struct sof_ipc_fw_ready *fw_ready = &sdev->fw_ready;
+	struct sof_ipc_fw_version *v = &fw_ready->version;
+	u32 offset;
+
+	/* mailbox must be on 4k boundary */
+	offset = (msg_id & 0x0000FFFF) << 12;
+
+	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+		msg_id, offset);
+
+	/* copy data from the DSP FW ready offset */
+	bdw_block_read(sdev, fw_ready, sdev->bar[BDW_DSP_BAR] + offset,
+		sizeof(*fw_ready));
+
+	snd_sof_dsp_mailbox_init(sdev, 
+		sdev->bar[BDW_DSP_BAR] + fw_ready->inbox_offset,
+		fw_ready->inbox_size, 
+		sdev->bar[BDW_DSP_BAR] + fw_ready->outbox_offset,
+		fw_ready->outbox_size);
+
+	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
+		fw_ready->inbox_offset, fw_ready->inbox_size);
+	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
+		fw_ready->outbox_offset, fw_ready->outbox_size);
+	
+	dev_info(sdev->dev, " Firmware info: vesion %d:%d build %d on %s:%s\n", 		v->major, v->minor, v->build, v->date, v->time);
+
+	return 0;
+}
 
 /*
  * IPC Mailbox IO
@@ -403,66 +497,6 @@ static int bdw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 	snd_sof_dsp_write64(sdev, BDW_DSP_BAR, SHIM_IPCX, cmd);
 
 	return 0;
-}
-
-/*
- * Memory copy.
- */
-
-/* write has to deal with copying non 32 bit sized data */
-static void bdw_block_write(struct snd_sof_dev *sdev,
-	volatile void __iomem *dest, const void *src, size_t size)
-{
-	u32 tmp = 0;
-	int i, m, n;
-	const u8 *src_byte = src;
-
-	m = size / 4;
-	n = size % 4;
-
-	/* __iowrite32_copy use 32bit size values so divide by 4 */
-	__iowrite32_copy((void *)dest, src, m);
-
-	if (n) {
-		for (i = 0; i < n; i++)
-			tmp |= (u32)*(src_byte + m * 4 + i) << (i * 8);
-		__iowrite32_copy((void *)(dest + m * 4), &tmp, 1);
-	}
-}
-
-static void bdw_block_read(struct snd_sof_dev *sdev, void *dest,
-	const volatile void __iomem *src, size_t size)
-{
-	memcpy_fromio(dest, src, size);
-}
-
-/*
- * Register IO
- */
-
-static void bdw_write(struct snd_sof_dev *sdev, void __iomem *addr,
-	u32 value)
-{
-	writel(value, addr);
-}
-
-static u32 bdw_read(struct snd_sof_dev *sdev, void __iomem *addr)
-{
-	return readl(addr);
-}
-
-static void bdw_write64(struct snd_sof_dev *sdev, void __iomem *addr,
-	u64 value)
-{
-	memcpy_toio(addr, &value, sizeof(value));
-}
-
-static u64 bdw_read64(struct snd_sof_dev *sdev, void __iomem *addr)
-{
-	u64 val;
-
-	memcpy_fromio(&val, addr, sizeof(val));
-	return val;
 }
 
 /*
@@ -602,7 +636,8 @@ struct snd_sof_dsp_ops snd_sof_bdw_ops = {
 	.mailbox_write  = bdw_mailbox_write,
 
 	/* ipc */
-	.tx_msg     = bdw_tx_msg,
+	.tx_msg     	= bdw_tx_msg,
+	.fw_ready	= bdw_fw_ready,
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */

@@ -568,6 +568,40 @@ void apl_cldma_do_irq(struct snd_sof_dev *sdev)
 	//wake_up(&ctx->cl_dev.wait_queue);
 }
 
+/*
+ * IPC Firmware ready.
+ */
+static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
+{
+	struct sof_ipc_fw_ready *fw_ready = &sdev->fw_ready;
+	struct sof_ipc_fw_version *v = &fw_ready->version;
+	u32 offset;
+
+	/* mailbox must be on 4k boundary */
+	offset = (msg_id & 0x0000FFFF) << 12;
+
+	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+		msg_id, offset);
+
+	/* copy data from the DSP FW ready offset */
+	apl_block_read(sdev, fw_ready, sdev->bar[APL_DSP_BAR] + offset,
+		sizeof(*fw_ready));
+
+	snd_sof_dsp_mailbox_init(sdev, 
+		sdev->bar[APL_DSP_BAR] + fw_ready->inbox_offset,
+		fw_ready->inbox_size, 
+		sdev->bar[APL_DSP_BAR] + fw_ready->outbox_offset,
+		fw_ready->outbox_size);
+
+	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
+		fw_ready->inbox_offset, fw_ready->inbox_size);
+	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
+		fw_ready->outbox_offset, fw_ready->outbox_size);
+	
+	dev_info(sdev->dev, " Firmware info: vesion %d:%d build %d on %s:%s\n", 		v->major, v->minor, v->build, v->date, v->time);
+
+	return 0;
+}
 
 /*
  * IPC Doorbell IRQ handler and thread.
@@ -1517,6 +1551,7 @@ struct snd_sof_dsp_ops snd_sof_bxt_ops = {
 
 	/* ipc */
 	.tx_msg		= apl_tx_msg,
+	.fw_ready	= apl_fw_ready,
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */
@@ -1558,6 +1593,7 @@ struct snd_sof_dsp_ops snd_sof_apl_ops = {
 
 	/* ipc */
 	.tx_msg		= apl_tx_msg,
+	.fw_ready	= apl_fw_ready,
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */

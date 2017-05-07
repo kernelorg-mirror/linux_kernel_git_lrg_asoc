@@ -54,7 +54,7 @@
  */
 
 /*
- * Hardware interface for audio DSP on Byatrail, Braswell and Cherrytrail.
+ * Hardware interface for audio DSP on Baytrail, Braswell and Cherrytrail.
  */
 
 #define DEBUG
@@ -67,7 +67,7 @@
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
-#include <trace/events/hswadsp.h>
+//#include <trace/events/sofadsp.h>
 #include <linux/device.h>
 #include <sound/sof.h>
 #include <uapi/sound/sof-fw.h>
@@ -242,6 +242,41 @@ static void byt_block_read(struct snd_sof_dev *sdev, void *dest,
 	const volatile void __iomem *src, size_t size)
 {
 	memcpy_fromio(dest, src, size);
+}
+
+/*
+ * IPC Firmware ready.
+ */
+static int byt_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
+{
+	struct sof_ipc_fw_ready *fw_ready = &sdev->fw_ready;
+	struct sof_ipc_fw_version *v = &fw_ready->version;
+	u32 offset;
+
+	/* mailbox must be on 4k boundary */
+	offset = (msg_id & 0x0000FFFF) << 12;
+
+	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+		msg_id, offset);
+
+	/* copy data from the DSP FW ready offset */
+	byt_block_read(sdev, fw_ready, sdev->bar[BYT_DSP_BAR] + offset,
+		sizeof(*fw_ready));
+
+	snd_sof_dsp_mailbox_init(sdev, 
+		sdev->bar[BYT_DSP_BAR] + fw_ready->inbox_offset,
+		fw_ready->inbox_size, 
+		sdev->bar[BYT_DSP_BAR] + fw_ready->outbox_offset,
+		fw_ready->outbox_size);
+
+	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
+		fw_ready->inbox_offset, fw_ready->inbox_size);
+	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
+		fw_ready->outbox_offset, fw_ready->outbox_size);
+	
+	dev_info(sdev->dev, " Firmware info: vesion %d:%d build %d on %s:%s\n", 		v->major, v->minor, v->build, v->date, v->time);
+
+	return 0;
 }
 
 /*
@@ -690,6 +725,7 @@ struct snd_sof_dsp_ops snd_sof_byt_ops = {
 
 	/* ipc */
 	.tx_msg		= byt_tx_msg,
+	.fw_ready	= byt_fw_ready,
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */
@@ -733,6 +769,7 @@ struct snd_sof_dsp_ops snd_sof_cht_ops = {
 
 	/* ipc */
 	.tx_msg		= byt_tx_msg,
+	.fw_ready	= byt_fw_ready,
 	//int (*rx_msg)(struct snd_sof_dev *sof_dev, struct sof_ipc_msg *msg);
 
 	/* debug */
