@@ -139,6 +139,7 @@
 #define SOF_IPC_STREAM_TRIG_RELEASE		SOF_CMD_TYPE(0x007)
 #define SOF_IPC_STREAM_TRIG_DRAIN		SOF_CMD_TYPE(0x008)
 #define SOF_IPC_STREAM_TRIG_XRUN		SOF_CMD_TYPE(0x009)
+#define SOF_IPC_STREAM_POSITION			SOF_CMD_TYPE(0x00a)
 #define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x010)
 #define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x011)
 
@@ -389,8 +390,8 @@ struct sof_ipc_stream {
 struct sof_ipc_stream_posn {
 	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
-	uint32_t host_posn;
-	uint32_t dai_posn;
+	uint32_t host_posn;	/* in frames */
+	uint32_t dai_posn;	/* in frames */
 	uint64_t timestamp;
 }  __attribute__((packed));
 

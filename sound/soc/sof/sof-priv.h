@@ -124,9 +124,9 @@ struct snd_sof_dsp_ops {
 	irqreturn_t (*irq_thread)(int irq, void *context);
 
 	/* mailbox */
-	void (*mailbox_read)(struct snd_sof_dev *sof_dev, void *dest,
+	void (*mailbox_read)(struct snd_sof_dev *sof_dev, u32 offset,
 		void __iomem *addr, size_t bytes);
-	void (*mailbox_write)(struct snd_sof_dev *sof_dev, void *src,
+	void (*mailbox_write)(struct snd_sof_dev *sof_dev, u32 offset,
 		void __iomem *addr, size_t bytes);
 
 	/* ipc */
@@ -160,7 +160,7 @@ struct snd_sof_debugfs_map {
 };
 
 struct snd_sof_mailbox {
-	void __iomem *base;
+	u32 offset;
 	size_t size;
 };
 
@@ -263,6 +263,8 @@ struct snd_sof_dev {
 
 	/* memory bases for mmaped DSPs - set by dsp_init() */
 	void __iomem *bar[SND_SOF_BARS];		/* DSP base address */
+	int mmio_bar;
+	int mailbox_bar;
 
 	struct dentry *debugfs_root;
 
@@ -319,12 +321,19 @@ void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id);
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev);
 int snd_sof_ipc_stream_pcm_params(struct snd_sof_dev *sdev,
 	struct sof_ipc_pcm_params *params);
-int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, void __iomem *inbox,
-		size_t inbox_size, void __iomem *outbox, size_t outbox_size);
+int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, u32 inbox,
+		size_t inbox_size, u32 outbox, size_t outbox_size);
 int sof_ipc_tx_message_wait(struct snd_sof_ipc *ipc, u32 header,
 	void *tx_data, size_t tx_bytes, void *rx_data, size_t rx_bytes);
 int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u32 header,
 	void *tx_data, size_t tx_bytes);
+
+/*
+ * Stream
+ */
+void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev, struct snd_sof_pcm *pcm,
+	struct snd_pcm_substream *substream,
+	snd_pcm_uframes_t *host, snd_pcm_uframes_t *dai);
 
 /*
  * Topology.

@@ -188,17 +188,17 @@ static inline void snd_sof_dsp_block_write(struct snd_sof_dev *sdev,
 
 /* mailbox */
 static inline void snd_sof_dsp_mailbox_read(struct snd_sof_dev *sdev,
-	void __iomem *addr, void *message, size_t bytes)
+	u32 offset, void *message, size_t bytes)
 {
 	if (sdev->ops->mailbox_read)
-		sdev->ops->mailbox_read(sdev, addr, message, bytes);
+		sdev->ops->mailbox_read(sdev, offset, message, bytes);
 }
 
 static inline void snd_sof_dsp_mailbox_write(struct snd_sof_dev *sdev,
-	void __iomem *addr, void *message, size_t bytes)
+	u32 offset, void *message, size_t bytes)
 {
 	if (sdev->ops->mailbox_write)
-		sdev->ops->mailbox_write(sdev, addr, message, bytes);
+		sdev->ops->mailbox_write(sdev, offset, message, bytes);
 }
 
 /* ipc */

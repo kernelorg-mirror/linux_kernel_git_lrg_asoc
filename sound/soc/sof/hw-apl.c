@@ -199,15 +199,19 @@ static void apl_block_read(struct snd_sof_dev *sdev, void *dest,
  * IPC Mailbox IO
  */
 
-static void apl_mailbox_write(struct snd_sof_dev *sdev, void *message,
-	void __iomem *dest, size_t bytes)
+static void apl_mailbox_write(struct snd_sof_dev *sdev, u32 offset,
+	void *message, size_t bytes)
 {
+	void __iomem *dest = sdev->bar[sdev->mailbox_bar] + offset;
+
 	memcpy_toio(dest, message, bytes);
 }
 
-static void apl_mailbox_read(struct snd_sof_dev *sdev, void *message,
-	void __iomem *src, size_t bytes)
+static void apl_mailbox_read(struct snd_sof_dev *sdev, u32 offset,
+	void *message, size_t bytes)
 {
+	void __iomem *src = sdev->bar[sdev->mailbox_bar] + offset;
+
 	memcpy_fromio(message, src, bytes);
 }
 
@@ -1355,6 +1359,10 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		ret = -ENXIO;
 		goto err;
 	}
+
+	/* TODO: add base offsets for each SRAM window */ 
+	sdev->mmio_bar = APL_DSP_BAR;
+	sdev->mailbox_bar = APL_DSP_BAR;
 
 	pci_set_master(pci);
 	synchronize_irq(pci->irq);

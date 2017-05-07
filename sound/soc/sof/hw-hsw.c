@@ -458,10 +458,8 @@ static int hsw_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	hsw_block_read(sdev, fw_ready, sdev->bar[HSW_DSP_BAR] + offset,
 		sizeof(*fw_ready));
 
-	snd_sof_dsp_mailbox_init(sdev, 
-		sdev->bar[HSW_DSP_BAR] + fw_ready->inbox_offset,
-		fw_ready->inbox_size, 
-		sdev->bar[HSW_DSP_BAR] + fw_ready->outbox_offset,
+	snd_sof_dsp_mailbox_init(sdev, fw_ready->inbox_offset,
+		fw_ready->inbox_size, fw_ready->outbox_offset,
 		fw_ready->outbox_size);
 
 	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
@@ -478,15 +476,19 @@ static int hsw_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
  * IPC Mailbox IO
  */
 
-static void hsw_mailbox_write(struct snd_sof_dev *sdev, void *message,
-	void __iomem *dest, size_t bytes)
+static void hsw_mailbox_write(struct snd_sof_dev *sdev, u32 offset,
+	void *message, size_t bytes)
 {
+	void __iomem *dest = sdev->bar[sdev->mailbox_bar] + offset;
+
 	memcpy_toio(dest, message, bytes);
 }
 
-static void hsw_mailbox_read(struct snd_sof_dev *sdev, void *message,
-	void __iomem *src, size_t bytes)
+static void hsw_mailbox_read(struct snd_sof_dev *sdev, u32 offset,
+	void *message, size_t bytes)
 {
+	void __iomem *src = sdev->bar[sdev->mailbox_bar] + offset;
+
 	memcpy_fromio(message, src, bytes);
 }
 
@@ -495,7 +497,7 @@ static int hsw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 	u64 cmd = msg->header;
 
 	/* send the message */
-	hsw_mailbox_write(sdev, sdev->outbox.base, msg->msg_data, 
+	hsw_mailbox_write(sdev, sdev->outbox.offset, msg->msg_data, 
 		msg->msg_size);
 	snd_sof_dsp_write64(sdev, HSW_DSP_BAR, SHIM_IPCX, cmd);
 
@@ -536,6 +538,10 @@ static int hsw_probe(struct snd_sof_dev *sdev)
 		return -ENODEV;
 	}
 	dev_dbg(sdev->dev, "LPE VADDR %p\n", sdev->bar[HSW_DSP_BAR]);
+
+	/* TODO: add offsets */
+	sdev->mmio_bar = HSW_DSP_BAR;
+	sdev->mailbox_bar = HSW_DSP_BAR;
 
 	/* PCI base */
 	mmio = platform_get_resource(pdev, IORESOURCE_MEM,

@@ -351,10 +351,13 @@ void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_reply);
 
-int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, void __iomem *inbox,
-		size_t inbox_size, void __iomem *outbox, size_t outbox_size)
+int snd_sof_dsp_mailbox_init(struct snd_sof_dev *sdev, u32 inbox,
+		size_t inbox_size, u32 outbox, size_t outbox_size)
 {
-	
+	sdev->inbox.offset = inbox;
+	sdev->inbox.size = inbox_size;
+	sdev->outbox.offset = outbox;
+	sdev->outbox.size = outbox_size;
 	return 0;
 }
 EXPORT_SYMBOL(snd_sof_dsp_mailbox_init);
@@ -473,6 +476,46 @@ void snd_sof_ipc_free(struct snd_sof_dev *sdev)
 	cancel_work_sync(&sdev->ipc->kwork);
 }
 EXPORT_SYMBOL(snd_sof_ipc_free);
+
+void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
+	struct snd_sof_pcm *spcm, struct snd_pcm_substream *substream,
+	snd_pcm_uframes_t *host, snd_pcm_uframes_t *dai)
+{
+	struct sof_ipc_stream_posn posn;
+	struct sof_ipc_stream stream;
+	int err;
+
+	/* read firmware byte counters */
+	if (spcm->posn_offset[substream->stream] != 0) {
+
+		/* we can read position via mmaped region */
+		snd_sof_dsp_block_read(sdev, &posn, sdev->bar[sdev->mmio_bar] + 
+			spcm->posn_offset[substream->stream],
+			sizeof(posn));
+
+	} else {
+		/* read position via slower IPC */
+		stream.hdr.size = sizeof(stream);
+		stream.hdr.cmd =
+			SOF_IPC_GLB_STREAM_MSG | SOF_IPC_STREAM_POSITION;
+		stream.comp_id = spcm->comp_id;
+
+		/* send IPC to the DSP */
+ 		err = sof_ipc_tx_message_wait(sdev->ipc, 
+			stream.hdr.cmd, &stream, sizeof(stream), 
+			&posn, sizeof(posn));
+		if (err < 0) {
+			dev_err(sdev->dev, "error: faild to get stream %d position\n",
+				stream.comp_id);
+			return;
+		}
+
+	}
+
+	*host = posn.host_posn;
+	*dai = posn.dai_posn;
+}
+EXPORT_SYMBOL(snd_sof_ipc_stream_posn);
 
 #if 0
 

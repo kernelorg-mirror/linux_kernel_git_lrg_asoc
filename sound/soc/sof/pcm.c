@@ -246,17 +246,15 @@ static snd_pcm_uframes_t sof_pcm_pointer(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_sof_dev *sdev =
 		snd_soc_platform_get_drvdata(rtd->platform);
-	//struct snd_sof_pcm *spcm = rtd->sof;
-	snd_pcm_uframes_t offset;
-	uint64_t ppos;
+	struct snd_sof_pcm *spcm = rtd->sof;
+	snd_pcm_uframes_t host, dai;
 
-	offset = 0;//snd_sof_ipc_pcm_stream_posn(sdev, spcm);
+	snd_sof_ipc_stream_posn(sdev, spcm, substream, &host, &dai);
 
-	ppos = 0;//sst_sof_get_dsp_presentation_position(hsw, pcm_data->stream);
+	dev_vdbg(sdev->dev, "PCM: DMA position %lu DAI position %lu\n",
+		host, dai);
 
-	dev_vdbg(sdev->dev, "PCM: DMA pointer %lu bytes, pos %llu\n",
-		offset, ppos);
-	return offset;
+	return host;
 }
 
 
@@ -274,12 +272,13 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 
 	pm_runtime_get_sync(sdev->dev);
 
-	/* set runtime constraints */
-//	snd_pcm_hw_constraint_step(substream->runtime, 0,
-//		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, PAGE_SIZE);
-//	snd_pcm_hw_constraint_step(substream->runtime, 0,
-//		SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 256);
-
+	/* TODO: get from topology - set runtime constraints */
+#if 0
+	snd_pcm_hw_constraint_step(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, PAGE_SIZE);
+	snd_pcm_hw_constraint_step(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 256);
+#endif
 	runtime->hw.info = SNDRV_PCM_INFO_MMAP |
 			  SNDRV_PCM_INFO_MMAP_VALID |
 			  SNDRV_PCM_INFO_INTERLEAVED |
@@ -429,7 +428,7 @@ capture:
 		return ret;
 	}
 
-// assign channel maps
+	/* TODO: assign channel maps from topology */
 #if 0
 	int snd_pcm_add_chmap_ctls(struct snd_pcm *pcm, int stream,
 			   const struct snd_pcm_chmap_elem *chmap,
