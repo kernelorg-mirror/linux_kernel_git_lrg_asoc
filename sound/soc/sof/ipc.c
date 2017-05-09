@@ -478,7 +478,7 @@ void snd_sof_ipc_free(struct snd_sof_dev *sdev)
 EXPORT_SYMBOL(snd_sof_ipc_free);
 
 void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
-	struct snd_sof_pcm *spcm, struct snd_pcm_substream *substream,
+	struct snd_sof_pcm *spcm, int direction,
 	snd_pcm_uframes_t *host, snd_pcm_uframes_t *dai)
 {
 	struct sof_ipc_stream_posn posn;
@@ -486,12 +486,11 @@ void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
 	int err;
 
 	/* read firmware byte counters */
-	if (spcm->posn_offset[substream->stream] != 0) {
+	if (spcm->posn_offset[direction] != 0) {
 
 		/* we can read position via mmaped region */
-		snd_sof_dsp_block_read(sdev, &posn, sdev->bar[sdev->mmio_bar] + 
-			spcm->posn_offset[substream->stream],
-			sizeof(posn));
+		snd_sof_dsp_block_read(sdev, spcm->posn_offset[direction],
+			&posn, sizeof(posn));
 
 	} else {
 		/* read position via slower IPC */

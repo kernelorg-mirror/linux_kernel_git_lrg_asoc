@@ -389,7 +389,7 @@ static void byt_notify(struct snd_sof_dev *dsp)
 		SHIM_BYT_IPCD_BUSY | SHIM_BYT_IPCD_DONE,
 		SHIM_BYT_IPCD_DONE);
 }
-#endif
+
 
 static bool byt_is_dsp_busy(struct snd_sof_dev *sdev)
 {
@@ -398,7 +398,7 @@ static bool byt_is_dsp_busy(struct snd_sof_dev *sdev)
 	ipcx = snd_sof_dsp_read64(sdev, BYT_DSP_BAR, SHIM_IPCX);
 	return (ipcx & (SHIM_BYT_IPCX_BUSY | SHIM_BYT_IPCX_DONE));
 }
-
+#endif
 
 static int byt_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 {

@@ -140,7 +140,7 @@ static int sof_pci_probe(struct pci_dev *pci,
 	struct device *dev = &pci->dev;
 	const struct sof_dev_desc *desc =
 		(const struct sof_dev_desc*)pci_id->driver_data;
-	struct snd_sof_machine *mach;
+	const struct snd_sof_machine *mach;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_pci_priv *priv;
 	int ret = 0;
@@ -168,17 +168,20 @@ static int sof_pci_probe(struct pci_dev *pci,
 	/* find machine */
 	mach = find_machine(desc->machines);
 	if (mach == NULL) {
+		struct snd_sof_machine *m;
+
 		dev_err(dev, "No matching ASoC machine driver found - using nocodec\n");
 		sof_pdata->drv_name = "sof-nocodec";
-		mach = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
-		if (mach == NULL)
+		m = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
+		if (m == NULL)
 			return -ENOMEM;
 
-		mach->drv_name = "sof-nocodec";
-		mach->fw_filename = desc->nocodec_fw_filename;
-		mach->tplg_filename = desc->nocodec_tplg_filename;
-		mach->ops = desc->machines[0].ops;
-		mach->asoc_plat_name = "sof-platform";
+		m->drv_name = "sof-nocodec";
+		m->fw_filename = desc->nocodec_fw_filename;
+		m->tplg_filename = desc->nocodec_tplg_filename;
+		m->ops = desc->machines[0].ops;
+		m->asoc_plat_name = "sof-platform";
+		mach = m;
 	}
 
 	sof_pdata->id = pci_id->device;

@@ -175,7 +175,7 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	const struct acpi_device_id *id;
 	struct device *dev = &pdev->dev;
 	const struct sof_dev_desc *desc;
-	struct snd_sof_machine *mach;
+	const struct snd_sof_machine *mach;
 	struct snd_sof_pdata *sof_pdata;
 	struct sof_acpi_priv *priv;
 	int ret = 0;
@@ -198,18 +198,20 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	/* find machine */
 	mach = find_machine(dev, desc->machines, &desc);
 	if (mach == NULL) {
+		struct snd_sof_machine *m;
 		/* dont bind to any particular codec, just initialse the DSP */
 		dev_err(dev, "No matching ASoC machine driver found - using nocodec\n");
 		sof_pdata->drv_name = "sof-nocodec";
-		mach = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
-		if (mach == NULL)
+		m = devm_kzalloc(dev, sizeof(*mach), GFP_KERNEL);
+		if (m == NULL)
 			return -ENOMEM;
 
-		mach->drv_name = "sof-nocodec";
-		mach->fw_filename = desc->nocodec_fw_filename;
-		mach->tplg_filename = desc->nocodec_tplg_filename;
-		mach->ops = desc->machines[0].ops;
-		mach->asoc_plat_name = "sof-platform";/// used ???
+		m->drv_name = "sof-nocodec";
+		m->fw_filename = desc->nocodec_fw_filename;
+		m->tplg_filename = desc->nocodec_tplg_filename;
+		m->ops = desc->machines[0].ops;
+		m->asoc_plat_name = "sof-platform";/// used ???
+		mach = m;
 	}
 
 	//sof_pdata->id = acpi_id->device;

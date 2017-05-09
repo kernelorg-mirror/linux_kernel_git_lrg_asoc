@@ -1,5 +1,5 @@
 snd-sof-objs := core.o ops.o loader.o ipc.o pcm.o pm.o debug.o topology.o\
-		control.o stream.o trace.o
+		control.o stream.o trace.o compressed.o
 snd-sof-intel-byt-objs := hw-byt.o
 snd-sof-intel-hsw-objs := hw-hsw.o
 snd-sof-intel-bdw-objs := hw-bdw.o

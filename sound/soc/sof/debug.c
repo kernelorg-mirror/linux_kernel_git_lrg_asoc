@@ -101,7 +101,7 @@ static ssize_t sof_dfsentry_read(struct file *file, char __user *buffer,
 		return -ENOMEM;
 
 	pm_runtime_get(sdev->dev);
-	snd_sof_dsp_block_read(sdev, buf, dfse->buf + pos, size);
+	snd_sof_dsp_block_read(sdev, pos, buf, size);
 	pm_runtime_put(sdev->dev);
 
 	ret = copy_to_user(buffer, buf, count);

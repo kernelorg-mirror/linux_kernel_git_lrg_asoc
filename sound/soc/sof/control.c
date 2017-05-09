@@ -72,7 +72,7 @@ int snd_sof_volume_get(struct snd_kcontrol *kcontrol,
 	struct soc_mixer_control *sm =
 		(struct soc_mixer_control *)kcontrol->private_value;
 	struct snd_sof_dev *sdev = sm->dobj.private;
-	unsigned int volume = 0;
+//	unsigned int volume = 0;
 
 	pm_runtime_get_sync(sdev->dev);
 #if 0
@@ -93,7 +93,7 @@ int snd_sof_volume_put(struct snd_kcontrol *kcontrol,
 	struct soc_mixer_control *sm =
 		(struct soc_mixer_control *)kcontrol->private_value;
 	struct snd_sof_dev *sdev = sm->dobj.private;
-	unsigned int volume = 0;
+//	unsigned int volume = 0;
 
 	pm_runtime_get_sync(sdev->dev);
 #if 0

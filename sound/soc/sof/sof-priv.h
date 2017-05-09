@@ -67,6 +67,7 @@
 #include <uapi/sound/sof-ipc.h>
 #include <uapi/sound/sof-fw.h>
 #include <uapi/sound/asoc.h>
+#include <sound/compress_driver.h>
 
 /* debug flags */
 #define SOF_DBG_REGS	(1 << 1)
@@ -331,8 +332,8 @@ int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u32 header,
 /*
  * Stream
  */
-void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev, struct snd_sof_pcm *pcm,
-	struct snd_pcm_substream *substream,
+void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
+	struct snd_sof_pcm *spcm, int direction,
 	snd_pcm_uframes_t *host, snd_pcm_uframes_t *dai);
 
 /*
@@ -360,6 +361,7 @@ extern struct snd_sof_dsp_ops snd_sof_cht_ops;
 extern struct snd_sof_dsp_ops snd_sof_hsw_ops;
 extern struct snd_sof_dsp_ops snd_sof_bdw_ops;
 extern struct snd_sof_dsp_ops snd_sof_bxt_ops;
+extern struct snd_compr_ops sof_compressed_ops;
 
 /*
  * ASoC components.

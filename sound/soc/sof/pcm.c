@@ -249,7 +249,7 @@ static snd_pcm_uframes_t sof_pcm_pointer(struct snd_pcm_substream *substream)
 	struct snd_sof_pcm *spcm = rtd->sof;
 	snd_pcm_uframes_t host, dai;
 
-	snd_sof_ipc_stream_posn(sdev, spcm, substream, &host, &dai);
+	snd_sof_ipc_stream_posn(sdev, spcm, substream->stream, &host, &dai);
 
 	dev_vdbg(sdev->dev, "PCM: DMA position %lu DAI position %lu\n",
 		host, dai);
@@ -505,6 +505,7 @@ void snd_sof_new_platform_drv(struct snd_sof_dev *sdev)
 	pd->probe = sof_pcm_probe;
 	pd->remove = sof_pcm_remove;
 	pd->ops	= &sof_pcm_ops;
+	pd->compr_ops = &sof_compressed_ops;
 	pd->pcm_new = sof_pcm_new;
 	pd->pcm_free = sof_pcm_free;
 	pd->ignore_machine = plat_data->machine->drv_name;

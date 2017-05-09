@@ -342,7 +342,7 @@ static void bdw_notify(struct sst_dsp *dsp)
 	sst_dsp_shim_update_bits(dsp, SST_IPCD,
 		SST_IPCD_BUSY | SST_IPCD_DONE, SST_IPCD_DONE);
 }
-#endif
+
 
 static bool bdw_is_dsp_busy(struct snd_sof_dev *sdev)
 {
@@ -351,7 +351,7 @@ static bool bdw_is_dsp_busy(struct snd_sof_dev *sdev)
 	ipcx = snd_sof_dsp_read64(sdev, BDW_DSP_BAR, SHIM_IPCX);
 	return (ipcx & (SHIM_IPCX_BUSY | SHIM_IPCX_DONE));
 }
-
+#endif
 
 /*
  * IPC Doorbell IRQ handler and thread.
