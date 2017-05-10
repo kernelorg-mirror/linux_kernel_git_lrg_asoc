@@ -166,6 +166,7 @@ struct snd_sof_mailbox {
 };
 
 struct snd_sof_pcm {
+	struct snd_sof_dev *sdev;
 	int comp_id;
 	struct snd_soc_tplg_pcm pcm;
 	struct snd_dma_buffer page_table[2];	/* playback and capture */
@@ -174,7 +175,18 @@ struct snd_sof_pcm {
 	uint32_t posn_offset[2];
 
 	struct mutex mutex;
-	struct list_head list;	/* list in snd_sof_dev */
+	struct list_head list;	/* list in sdev pcm list */
+};
+
+struct snd_sof_control {
+	struct snd_sof_dev *sdev;
+	int comp_id;
+	int num_channels;
+	uint32_t readback_offset; /* offset to mmaped data if used */
+	struct sof_ipc_ctrl_chan values[SOF_IPC_MAX_CHANNELS];
+
+	struct mutex mutex;
+	struct list_head list;	/* list in sdev control list */
 };
 
 struct snd_sof_ipc_msg {
@@ -312,7 +324,7 @@ void snd_sof_fw_unload(struct snd_sof_dev *sdev);
 
 
 /*
- * IPC APIs.
+ * IPC low level APIs.
  */
 
 struct snd_sof_ipc *snd_sof_ipc_init(struct snd_sof_dev *sdev);
@@ -330,11 +342,23 @@ int sof_ipc_tx_message_nowait(struct snd_sof_ipc *ipc, u32 header,
 	void *tx_data, size_t tx_bytes);
 
 /*
- * Stream
+ * Stream IPC
  */
 void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
 	struct snd_sof_pcm *spcm, int direction,
 	snd_pcm_uframes_t *host, snd_pcm_uframes_t *dai);
+
+/*
+ * Mixer IPC
+ */
+int snd_sof_ipc_put_mixer(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol);
+int snd_sof_ipc_get_mixer(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol);
+int snd_sof_ipc_put_mixer_chan(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol, int chan, long value);
+long snd_sof_ipc_get_mixer_chan(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol, int chan);
 
 /*
  * Topology.

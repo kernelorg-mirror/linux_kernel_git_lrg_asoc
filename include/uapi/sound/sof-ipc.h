@@ -164,6 +164,12 @@
 // TODO: remove
 #define IPC_INTL_STATUS_MASK			(0x3 << 30)
 
+
+/*
+ * Firmware Constants
+ */
+#define SOF_IPC_MAX_CHANNELS			8
+
 /*
  * Command Header - Header for all IPC. Identifies IPC message.
  * The size can be greater than the structure size and that means there is
@@ -408,9 +414,14 @@ struct sof_ipc_ctrl_values {
 	struct sof_ipc_hdr hdr;
 	uint32_t comp_id;
 	uint32_t num_values;
-	struct sof_ipc_ctrl_chan values[];
+	struct sof_ipc_ctrl_chan values[SOF_IPC_MAX_CHANNELS];
 } __attribute__((packed));
 
+struct sof_ipc_ctrl_get_values {
+	struct sof_ipc_hdr hdr;
+	uint32_t comp_id;
+	uint32_t num_values;
+} __attribute__((packed));
 
 /*
  * Component Buffers

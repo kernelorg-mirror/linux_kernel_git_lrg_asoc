@@ -504,7 +504,7 @@ void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
 			stream.hdr.cmd, &stream, sizeof(stream), 
 			&posn, sizeof(posn));
 		if (err < 0) {
-			dev_err(sdev->dev, "error: faild to get stream %d position\n",
+			dev_err(sdev->dev, "error: failed to get stream %d position\n",
 				stream.comp_id);
 			return;
 		}
@@ -515,6 +515,106 @@ void snd_sof_ipc_stream_posn(struct snd_sof_dev *sdev,
 	*dai = posn.dai_posn;
 }
 EXPORT_SYMBOL(snd_sof_ipc_stream_posn);
+
+int snd_sof_ipc_put_mixer(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol)
+{
+	struct snd_sof_dev *sdev = ipc->sdev;
+	struct sof_ipc_ctrl_values values;
+	int err;
+
+	/* write firmware byte counters */
+	if (scontrol->readback_offset != 0) {
+
+		/* we can read value header via mmaped region */
+		snd_sof_dsp_block_write(sdev, scontrol->readback_offset,
+			scontrol->values, sizeof(scontrol->values));
+
+	} else {
+		/* read position via slower IPC */
+		values.hdr.size = sizeof(values);
+		values.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_COMP_SET_VOLUME;
+		values.comp_id = scontrol->comp_id;
+		values.num_values = scontrol->num_channels;
+
+		/* now copy the values */
+		memcpy(values.values, scontrol->values,
+			sizeof(scontrol->values));
+
+		/* send IPC to the DSP */
+ 		err = sof_ipc_tx_message_wait(sdev->ipc, 
+			values.hdr.cmd, &values, sizeof(values), NULL, 0);
+		if (err < 0) {
+			dev_err(sdev->dev, "error: failed to set control %d values\n",
+				values.comp_id);
+			return err;
+		}
+
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(snd_sof_ipc_put_mixer);
+
+int snd_sof_ipc_get_mixer(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol)
+{
+	struct snd_sof_dev *sdev = ipc->sdev;
+	struct sof_ipc_ctrl_values values;
+	struct sof_ipc_ctrl_get_values get;
+	int err;
+
+	/* read firmware byte counters */
+	if (scontrol->readback_offset != 0) {
+
+		/* we can read values via mmaped region */
+		snd_sof_dsp_block_read(sdev, scontrol->readback_offset,
+			scontrol->values, sizeof(scontrol->values));
+
+	} else {
+		/* read position via slower IPC */
+		get.hdr.size = sizeof(values);
+		get.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_COMP_GET_VOLUME;
+		get.comp_id = scontrol->comp_id;
+
+		/* send IPC to the DSP */
+ 		err = sof_ipc_tx_message_wait(sdev->ipc, 
+			get.hdr.cmd, &get, sizeof(get), 
+			&values, sizeof(values));
+		if (err < 0) {
+			dev_err(sdev->dev, "error: faild to get control %d values\n",
+				values.comp_id);
+			return err;
+		}
+
+		/* copy to local values */
+		memcpy(scontrol->values, values.values,
+			sizeof(scontrol->values));
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(snd_sof_ipc_get_mixer);
+
+int snd_sof_ipc_put_mixer_chan(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol, int chan, long value)
+{
+	if (chan >= SOF_IPC_MAX_CHANNELS)
+		return -EINVAL;
+
+	scontrol->values[chan].value = value;
+	return 0;
+}
+EXPORT_SYMBOL(snd_sof_ipc_put_mixer_chan);
+
+long snd_sof_ipc_get_mixer_chan(struct snd_sof_ipc *ipc,
+	struct snd_sof_control *scontrol, int chan)
+{
+	if (chan >= SOF_IPC_MAX_CHANNELS)
+		return 0;
+	return scontrol->values[chan].value;
+}
+EXPORT_SYMBOL(snd_sof_ipc_get_mixer_chan);
 
 #if 0
 

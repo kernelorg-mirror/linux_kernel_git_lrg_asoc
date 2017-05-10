@@ -71,6 +71,46 @@
 #include <uapi/sound/sof-ipc.h>
 #include "sof-priv.h"
 
+
+static int sof_control_load_volume(struct snd_soc_component *scomp,
+	struct snd_sof_control *scontrol, struct snd_kcontrol_new *kc,
+	struct snd_soc_tplg_ctl_hdr *hdr, struct sof_ipc_comp_reply *r)
+{
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct snd_soc_tplg_mixer_control *mc =
+		(struct snd_soc_tplg_mixer_control *)hdr;
+	struct sof_ipc_comp_volume v;
+	int i;
+
+	/* validate topology data */
+	if (mc->num_channels >= SND_SOC_TPLG_MAX_CHAN)
+		return -EINVAL;
+
+	/* init the volume control IPC */
+	v.hdr.size = sizeof(v);
+	v.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_TPLG_COMP_NEW;
+	v.comp.id = scontrol->comp_id = mc->channel[0].reg;
+	v.comp.size = sizeof(v.comp);
+	v.comp.type = SOF_COMP_VOLUME;
+	v.pcm.format = 0;
+	v.pcm.frames = 0;
+	v.pcm.channels = 0;
+	v.channels = scontrol->num_channels = mc->num_channels;
+	v.min_value = mc->min;
+	v.max_value = mc->max;
+	// TODO: TLV
+	//v.step_size = 
+
+	/* configure channel IDs */
+	for (i = 0; i < mc->num_channels; i++) {
+		v.pcm.chmap[i] = mc->channel[i].id;
+	}
+
+	/* send IPC to the DSP */
+ 	return sof_ipc_tx_message_wait(sdev->ipc, 
+		v.hdr.cmd, &v, sizeof(v), r, sizeof(*r));
+}
+
 /* external kcontrol init - used for any driver specific init */
 static int sof_control_load(struct snd_soc_component *scomp,
 	struct snd_kcontrol_new *kc, struct snd_soc_tplg_ctl_hdr *hdr)
@@ -78,9 +118,19 @@ static int sof_control_load(struct snd_soc_component *scomp,
 	struct soc_mixer_control *sm;
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_dobj *dobj = NULL;
+	struct snd_sof_control *scontrol;
+	struct sof_ipc_comp_reply r;
+	int ret = -EINVAL;
 
 	dev_dbg(sdev->dev, "tplg: load control type %d name : %s\n", 
 		hdr->type, hdr->name);
+
+	scontrol = kzalloc(sizeof(*scontrol), GFP_KERNEL);
+	if (scontrol == NULL)
+		return -ENOMEM;
+
+	scontrol->sdev = sdev;
+	mutex_init(&scontrol->mutex);
 
 	switch (hdr->ops.info) {
 	case SND_SOC_TPLG_CTL_VOLSW:
@@ -88,6 +138,7 @@ static int sof_control_load(struct snd_soc_component *scomp,
 	case SND_SOC_TPLG_CTL_VOLSW_XR_SX:
 		sm = (struct soc_mixer_control *)kc->private_value;
 		dobj = &sm->dobj;
+		ret = sof_control_load_volume(scomp, scontrol, kc, hdr, &r);
 		break;
 	case SND_SOC_TPLG_CTL_ENUM:
 	case SND_SOC_TPLG_CTL_BYTES:
@@ -105,17 +156,33 @@ static int sof_control_load(struct snd_soc_component *scomp,
 		return 0;
 	}
 
-	dobj->private = sdev;
-	return 0;
+	if (ret < 0) {
+		kfree(scontrol);
+		return ret;
+	}
+
+	dobj->private = scontrol;
+	scontrol->readback_offset = r.offset;
+	list_add(&scontrol->list, &sdev->kcontrol_list);
+	return ret;
 }
 
 static int sof_control_unload(struct snd_soc_component *scomp,
 	struct snd_soc_dobj *dobj)
 {
-	//dev_dbg(sdev->dev, "added type %d control %s\n", 
-	//	hdr->type, hdr->name);
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct sof_ipc_free fcomp;
+	struct snd_sof_control *scontrol = dobj->private;
 
-	return 0;
+	dev_dbg(sdev->dev, "tplg: unload control name : %s\n", scomp->name);
+
+	fcomp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_FREE;
+	fcomp.hdr.size = sizeof(fcomp);
+	fcomp.id = scontrol->comp_id;
+
+	/* send IPC to the DSP */
+ 	return sof_ipc_tx_message_wait(sdev->ipc, 
+		fcomp.hdr.cmd, &fcomp, sizeof(fcomp), NULL, 0);
 }
 
 static int sof_connect_dai_widget(struct snd_soc_component *scomp,
@@ -126,11 +193,6 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 	struct snd_soc_pcm_runtime *rtd;
 
 	list_for_each_entry(rtd, &card->rtd_list, list) {
-
-		printk(KERN_ERR " * playback rtd name %s is BE %d\n",
-			rtd->dai_link->name, rtd->dai_link->no_pcm);
-		printk(KERN_ERR " * rtd sname %s wid sname  %s\n",
-			rtd->dai_link->stream_name, w->sname);
 
 		if (!strcmp(rtd->dai_link->stream_name, w->sname)) {
 			switch (w->id) {
@@ -199,9 +261,10 @@ static int sof_dai_load(struct snd_soc_component *scomp,
 	dev_dbg(sdev->dev, "tplg: load pcm %d %s to dai %d %s\n", 
 		pcm->pcm_id, pcm->pcm_name, pcm->dai_id, pcm->dai_name);
 
+	spcm->sdev = sdev;
 	spcm->pcm = *pcm;
 	spcm->comp_id = pcm->pcm_id;
-	dai_drv->dobj.private = sdev;
+	dai_drv->dobj.private = spcm;
 	mutex_init(&spcm->mutex);
 	list_add(&spcm->list, &sdev->pcm_list);
 		
