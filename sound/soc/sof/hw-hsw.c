@@ -451,7 +451,7 @@ static int hsw_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	u32 offset;
 
 	/* mailbox must be on 4k boundary */
-	offset = (msg_id & 0x0000FFFF) << 12;
+	offset = MBOX_OFFSET;
 
 	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
 		msg_id, offset);
@@ -500,7 +500,7 @@ static int hsw_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 	/* send the message */
 	hsw_mailbox_write(sdev, sdev->outbox.offset, msg->msg_data, 
 		msg->msg_size);
-	snd_sof_dsp_write64(sdev, HSW_DSP_BAR, SHIM_IPCX, cmd);
+	snd_sof_dsp_write64(sdev, HSW_DSP_BAR, SHIM_IPCX, cmd | SHIM_IPCX_BUSY);
 
 	return 0;
 }

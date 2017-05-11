@@ -76,58 +76,6 @@
 #include "sof-priv.h"
 #include "ops.h"
 
-#if 0
-/* Global Message Types */
-#define SOF_IPC_GLB_NONE			SOF_GLB_TYPE(0x0)
-#define SOF_IPC_GLB_VERSION			SOF_GLB_TYPE(0x1)
-#define SOF_IPC_GLB_COMPOUND			SOF_GLB_TYPE(0x2)
-#define SOF_IPC_GLB_TPLG_MSG			SOF_GLB_TYPE(0x3)
-#define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x4)
-#define SOF_IPC_GLB_COMP_MSG			SOF_GLB_TYPE(0x5)
-#define SOF_IPC_GLB_STREAM_MSG			SOF_GLB_TYPE(0x6)
-#define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x7)
-#define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x8)
-
-/* DSP Command Message Types */
-#define SOF_IPC_TPLG_COMP_NEW			SOF_CMD_TYPE(0x000)
-#define SOF_IPC_TPLG_COMP_FREE			SOF_CMD_TYPE(0x001)
-#define SOF_IPC_TPLG_COMP_CONNECT		SOF_CMD_TYPE(0x002)
-#define SOF_IPC_TPLG_PIPE_NEW			SOF_CMD_TYPE(0x010)
-#define SOF_IPC_TPLG_PIPE_FREE			SOF_CMD_TYPE(0x011)
-#define SOF_IPC_TPLG_PIPE_CONNECT		SOF_CMD_TYPE(0x012)
-#define SOF_IPC_TPLG_PIPE_COMPLETE		SOF_CMD_TYPE(0x013)
-#define SOF_IPC_TPLG_BUFFER_NEW			SOF_CMD_TYPE(0x020)
-#define SOF_IPC_TPLG_BUFFER_FREE		SOF_CMD_TYPE(0x021)
-#define SOF_IPC_PM_CTX_SAVE			SOF_CMD_TYPE(0x030)
-#define SOF_IPC_PM_CTX_RESTORE			SOF_CMD_TYPE(0x031)
-#define SOF_IPC_PM_CTX_SIZE			SOF_CMD_TYPE(0x032)
-#define SOF_IPC_PM_CLK_SET			SOF_CMD_TYPE(0x033)
-#define SOF_IPC_PM_CLK_GET			SOF_CMD_TYPE(0x034)
-#define SOF_IPC_PM_CLK_REQ			SOF_CMD_TYPE(0x035)
-#define SOF_IPC_COMP_SET_VOLUME			SOF_CMD_TYPE(0x040)
-#define SOF_IPC_COMP_GET_VOLUME			SOF_CMD_TYPE(0x041)
-#define SOF_IPC_COMP_SET_MIXER			SOF_CMD_TYPE(0x042)
-#define SOF_IPC_COMP_GET_MIXER			SOF_CMD_TYPE(0x043)
-#define SOF_IPC_COMP_SET_MUX			SOF_CMD_TYPE(0x044)
-#define SOF_IPC_COMP_GET_MUX			SOF_CMD_TYPE(0x045)
-#define SOF_IPC_COMP_SET_SRC			SOF_CMD_TYPE(0x046)
-#define SOF_IPC_COMP_GET_SRC			SOF_CMD_TYPE(0x047)
-#define SOF_IPC_STREAM_PCM_PARAMS		SOF_CMD_TYPE(0x080)
-#define SOF_IPC_STREAM_PCM_FREE			SOF_CMD_TYPE(0x081)
-#define SOF_IPC_STREAM_TRIG_START		SOF_CMD_TYPE(0x082)
-#define SOF_IPC_STREAM_TRIG_STOP		SOF_CMD_TYPE(0x083)
-#define SOF_IPC_STREAM_TRIG_PAUSE		SOF_CMD_TYPE(0x084)
-#define SOF_IPC_STREAM_TRIG_RELEASE		SOF_CMD_TYPE(0x085)
-#define SOF_IPC_STREAM_TRIG_DRAIN		SOF_CMD_TYPE(0x086)
-#define SOF_IPC_STREAM_TRIG_XRUN		SOF_CMD_TYPE(0x087)
-#define SOF_IPC_DAI_SSP_CONFIG			SOF_CMD_TYPE(0x090)
-#define SOF_IPC_DAI_HDA_CONFIG			SOF_CMD_TYPE(0x091)
-#define SOF_IPC_DAI_DMIC_CONFIG			SOF_CMD_TYPE(0x092)
-#define SOF_IPC_DAI_LOOPBACK			SOF_CMD_TYPE(0x093)
-#define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x0b0)
-#define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x0b1)
-#endif
-
 /* IPC message timeout (msecs) */
 #define IPC_TIMEOUT_MSECS	300
 
@@ -178,6 +126,7 @@ static int tx_wait_done(struct snd_sof_ipc *ipc, struct snd_sof_ipc_msg *msg,
 	if (ret == 0) {
 		dev_err(sdev->dev, "error: ipc timed out\n");
 		list_del(&msg->list);
+		snd_sof_dsp_dbg_dump(ipc->sdev, SOF_DBG_REGS | SOF_DBG_MBOX);
 		ret = -ETIMEDOUT;
 	} else {
 		/* copy the data returned from DSP */
@@ -345,9 +294,6 @@ void snd_sof_ipc_process_reply(struct snd_sof_dev *sdev, u32 msg_id)
 	/* wake up and return the error if we have waiters on this message ? */
 	list_del(&msg->list);
 	sof_ipc_tx_msg_reply_complete(sdev->ipc, msg);
-
-	//return 1;
-
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_reply);
 
@@ -420,7 +366,7 @@ EXPORT_SYMBOL(snd_sof_ipc_process_notification);
 
 void snd_sof_ipc_process_msgs(struct snd_sof_dev *sdev)
 {
-//	schedule_work(&sdev->ipc->kwork);
+	schedule_work(&sdev->ipc->kwork);
 }
 EXPORT_SYMBOL(snd_sof_ipc_process_msgs);
 
@@ -616,144 +562,8 @@ long snd_sof_ipc_get_mixer_chan(struct snd_sof_ipc *ipc,
 }
 EXPORT_SYMBOL(snd_sof_ipc_get_mixer_chan);
 
+
 #if 0
-
-int sof_hsw_dsp_load(struct sof_hsw *hsw)
-{
-	struct sof_dsp *dsp = hsw->dsp;
-	struct sof_fw *sof_fw, *t;
-	int ret;
-
-	dev_dbg(hsw->dev, "loading audio DSP....");
-
-	ret = sof_dsp_wake(dsp);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: failed to wake audio DSP\n");
-		return -ENODEV;
-	}
-
-	ret = sof_dsp_dma_get_channel(dsp, 0);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
-		return ret;
-	}
-
-	list_for_each_entry_safe_reverse(sof_fw, t, &dsp->fw_list, list) {
-		ret = sof_fw_reload(sof_fw);
-		if (ret < 0) {
-			dev_err(hsw->dev, "error: SST FW reload failed\n");
-			sof_dsp_dma_put_channel(dsp);
-			return -ENOMEM;
-		}
-	}
-	ret = sof_block_alloc_scratch(hsw->dsp);
-	if (ret < 0)
-		return -EINVAL;
-
-	sof_dsp_dma_put_channel(dsp);
-	return 0;
-}
-
-static int sof_hsw_dsp_restore(struct sof_hsw *hsw)
-{
-	struct sof_dsp *dsp = hsw->dsp;
-	int ret = 0;
-
-	dev_dbg(hsw->dev, "restoring audio DSP....");
-
-	ret = sof_dsp_dma_get_channel(dsp, 0);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: cant allocate dma channel %d\n", ret);
-		return ret;
-	}
-
-	ret = sof_hsw_dx_state_restore(hsw);
-	if (ret < 0) {
-		dev_err(hsw->dev, "error: SST FW context restore failed\n");
-		sof_dsp_dma_put_channel(dsp);
-		return -ENOMEM;
-	}
-	sof_dsp_dma_put_channel(dsp);
-
-	/* wait for DSP boot completion */
-	sof_dsp_boot(dsp);
-
-	return ret;
-}
-
-int sof_hsw_dsp_runtime_suspend(struct sof_hsw *hsw)
-{
-	int ret;
-
-	dev_dbg(hsw->dev, "audio dsp runtime suspend\n");
-
-	ret = sof_hsw_dx_set_state(hsw, SST_HSW_DX_STATE_D3, &hsw->dx);
-	if (ret < 0)
-		return ret;
-
-	sof_dsp_stall(hsw->dsp);
-
-	ret = sof_hsw_dx_state_dump(hsw);
-	if (ret < 0)
-		return ret;
-
-	sof_ipc_drop_all(&hsw->ipc);
-
-	return 0;
-}
-
-int sof_hsw_dsp_runtime_sleep(struct sof_hsw *hsw)
-{
-	struct sof_fw *sof_fw, *t;
-	struct sof_dsp *dsp = hsw->dsp;
-
-	list_for_each_entry_safe(sof_fw, t, &dsp->fw_list, list) {
-		sof_fw_unload(sof_fw);
-	}
-	sof_block_free_scratch(dsp);
-
-	hsw->boot_complete = false;
-
-	sof_dsp_sleep(dsp);
-
-	return 0;
-}
-
-int sof_hsw_dsp_runtime_resume(struct sof_hsw *hsw)
-{
-	struct device *dev = hsw->dev;
-	int ret;
-
-	dev_dbg(dev, "audio dsp runtime resume\n");
-
-	if (hsw->boot_complete)
-		return 1; /* tell caller no action is required */
-
-	ret = sof_hsw_dsp_restore(hsw);
-	if (ret < 0)
-		dev_err(dev, "error: audio DSP boot failure\n");
-
-	sof_hsw_init_module_state(hsw);
-
-	ret = wait_event_timeout(hsw->boot_wait, hsw->boot_complete,
-		msecs_to_jiffies(IPC_BOOT_MSECS));
-	if (ret == 0) {
-		dev_err(hsw->dev, "error: audio DSP boot timeout IPCD 0x%x IPCX 0x%x\n",
-			sof_dsp_shim_read_unlocked(hsw->dsp, SST_IPCD),
-			sof_dsp_shim_read_unlocked(hsw->dsp, SST_IPCX));
-		return -EIO;
-	}
-
-	/* Set ADSP SSP port settings - sadly the FW does not store SSP port
-	   settings as part of the PM context. */
-	ret = sof_hsw_device_set_config(hsw, hsw->dx_dev, hsw->dx_mclk,
-					hsw->dx_mode, hsw->dx_clock_divider);
-	if (ret < 0)
-		dev_err(dev, "error: SSP re-initialization failed\n");
-
-	return ret;
-}
-
 
 static void hsw_tx_data_copy(struct snd_sof_ipc_msg *msg, char *tx_data,
 	size_t tx_size)

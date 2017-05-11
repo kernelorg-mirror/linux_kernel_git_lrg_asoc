@@ -121,6 +121,10 @@ static int sof_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct sof_ipc_pcm_params_reply ipc_params_reply;
 	int ret;
 
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
+
 	/* allocate audio buffer pages */
 	ret = snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
 	if (ret < 0) {
@@ -189,6 +193,10 @@ static int sof_pcm_hw_free(struct snd_pcm_substream *substream)
 	struct sof_ipc_stream stream;
 	int ret;
 
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
+
 	stream.hdr.size = sizeof(stream);
 	stream.hdr.cmd = SOF_IPC_GLB_STREAM_MSG | SOF_IPC_STREAM_PCM_FREE;
 	stream.comp_id = spcm->comp_id;
@@ -208,6 +216,11 @@ static int sof_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct sof_ipc_stream stream;
+
+
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
 
 	stream.hdr.size = sizeof(stream);
 	stream.hdr.cmd = SOF_IPC_GLB_STREAM_MSG;
@@ -249,6 +262,10 @@ static snd_pcm_uframes_t sof_pcm_pointer(struct snd_pcm_substream *substream)
 	struct snd_sof_pcm *spcm = rtd->sof;
 	snd_pcm_uframes_t host, dai;
 
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
+
 	snd_sof_ipc_stream_posn(sdev, spcm, substream->stream, &host, &dai);
 
 	dev_vdbg(sdev->dev, "PCM: DMA position %lu DAI position %lu\n",
@@ -267,6 +284,10 @@ static int sof_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_sof_pcm *spcm = rtd->sof;
 	struct snd_soc_tplg_stream_caps *caps = 
 		&spcm->pcm.caps[substream->stream];
+
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
 
 	mutex_lock(&spcm->mutex);
 
@@ -310,6 +331,10 @@ static int sof_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_sof_dev *sdev =
 		snd_soc_platform_get_drvdata(rtd->platform);
 	struct snd_sof_pcm *spcm = rtd->sof;
+
+	/* nothing todo for BE */
+	if (rtd->dai_link->no_pcm)
+		return 0;
 
 	mutex_lock(&spcm->mutex);
 	pm_runtime_mark_last_busy(sdev->dev);

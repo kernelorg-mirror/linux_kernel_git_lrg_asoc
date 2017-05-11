@@ -30,43 +30,14 @@ static const struct snd_soc_dapm_route sof_nocodec_map[] = {
 	{"ssp2 Rx", NULL, "HiFi Capture"},
 };
 
-static int sof_nocodec_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
-{
-#if 0
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	int ret;
-
-	snd_soc_dai_set_bclk_ratio(codec_dai, 32);
-
-#endif
-	return 0;
-}
-
-
 static int sof_nocodec_codec_fixup(struct snd_soc_pcm_runtime *rtd,
                            struct snd_pcm_hw_params *params)
 {
-#if 0
-       struct snd_interval *rate = hw_param_interval(params,
-                       SNDRV_PCM_HW_PARAM_RATE);
-       struct snd_interval *channels = hw_param_interval(params,
-                                               SNDRV_PCM_HW_PARAM_CHANNELS);
-
-       /* The DSP will covert the FE rate to 48k, stereo, 16bits */
-       rate->min = rate->max = 48000;
-       channels->min = channels->max = 2;
-
-       /* set SSP2 to 16-bit */
-       params_set_format(params, SNDRV_PCM_FORMAT_S16_LE);
-#endif
+	// TODO: read this from topology
        return 0;
 }
 
-static struct snd_soc_ops sof_nocodec_ops = {
-	.hw_params = sof_nocodec_hw_params,
-};
+static struct snd_soc_ops sof_nocodec_ops = {};
 
 static int nocodec_rtd_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -75,7 +46,6 @@ static int nocodec_rtd_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
-//#error need to create sntream name for dummy dai widget
 /* we just set some BEs - FE provided by topology */
 static struct snd_soc_dai_link sof_nocodec_dais[] = {
 	/* Back End DAI links */
@@ -100,14 +70,12 @@ static struct snd_soc_dai_link sof_nocodec_dais[] = {
 	},
 };
 
-
 static struct snd_soc_card sof_nocodec_card = {
 	.name = "sof-nocodec",
 	.dai_link = sof_nocodec_dais,
 	.num_links = ARRAY_SIZE(sof_nocodec_dais),
 		.dapm_routes = sof_nocodec_map,
 	.num_dapm_routes = ARRAY_SIZE(sof_nocodec_map),
-//	.fully_routed = true,
 };
 
 static int sof_nocodec_probe(struct platform_device *pdev)
