@@ -256,9 +256,9 @@ static int byt_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	u32 offset;
 
 	/* mailbox must be on 4k boundary */
-	offset = (msg_id & 0x0000FFFF) << 12;
+	offset = MBOX_OFFSET;
 
-	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset 0x%x\n",
 		msg_id, offset);
 
 	/* copy data from the DSP FW ready offset */

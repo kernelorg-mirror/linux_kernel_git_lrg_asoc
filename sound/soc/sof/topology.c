@@ -87,8 +87,8 @@ static int sof_control_load_volume(struct snd_soc_component *scomp,
 		return -EINVAL;
 
 	/* init the volume control IPC */
-	v.hdr.size = sizeof(v);
-	v.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_TPLG_COMP_NEW;
+	v.comp.hdr.size = sizeof(v);
+	v.comp.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_TPLG_COMP_NEW;
 	v.comp.id = scontrol->comp_id = mc->channel[0].reg;
 	v.comp.size = sizeof(v.comp);
 	v.comp.type = SOF_COMP_VOLUME;
@@ -108,7 +108,7 @@ static int sof_control_load_volume(struct snd_soc_component *scomp,
 
 	/* send IPC to the DSP */
  	return sof_ipc_tx_message_wait(sdev->ipc, 
-		v.hdr.cmd, &v, sizeof(v), r, sizeof(*r));
+		v.comp.hdr.cmd, &v, sizeof(v), r, sizeof(*r));
 }
 
 /* external kcontrol init - used for any driver specific init */

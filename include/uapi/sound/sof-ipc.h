@@ -166,11 +166,6 @@
 
 
 /*
- * Firmware Constants
- */
-#define SOF_IPC_MAX_CHANNELS			8
-
-/*
  * Command Header - Header for all IPC. Identifies IPC message.
  * The size can be greater than the structure size and that means there is
  * extended bespoke data beyond the end of the structure including variable
@@ -262,7 +257,7 @@ struct sof_ipc_dai_dmic_params {
  * Stream configuration.
  */
 
-#define SOF_MAX_CHAN		8
+#define SOF_IPC_MAX_CHANNELS			8
 
 /* channel positions - uses same values as ALSA */
 enum sof_ipc_chmap {
@@ -473,6 +468,7 @@ enum sof_ipc_dai_type {
 
 /* create new generic component - SOF_IPC_TPLG_COMP_NEW */
 struct sof_ipc_comp {
+	struct sof_ipc_hdr hdr;
 	uint32_t id;
 	uint32_t size;
 	enum sof_comp_type type;
@@ -483,12 +479,11 @@ struct sof_ipc_pcm_comp {
 	uint32_t format;	/* data format */
 	uint32_t frames;	/* number of frames to process */
 	uint32_t channels;	/* number of channels */
-	enum sof_ipc_chmap chmap[SOF_MAX_CHAN];	/* channel map */
+	enum sof_ipc_chmap chmap[SOF_IPC_MAX_CHANNELS];	/* channel map */
 } __attribute__((packed));
 
 /* generic host component */
 struct sof_ipc_comp_host {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	enum sof_ipc_stream_direction direction;
@@ -500,7 +495,6 @@ struct sof_ipc_comp_host {
 
 /* generic DAI component */
 struct sof_ipc_comp_dai {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	enum sof_ipc_stream_direction direction;
@@ -513,7 +507,6 @@ struct sof_ipc_comp_dai {
 
 /* generic mixer component */
 struct sof_ipc_comp_mixer {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 }  __attribute__((packed));
@@ -528,7 +521,6 @@ enum sof_volume_ramp {
 
 /* generic volume component */
 struct sof_ipc_comp_volume {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	uint32_t channels;
@@ -540,7 +532,6 @@ struct sof_ipc_comp_volume {
 
 /* generic SRC component */
 struct sof_ipc_comp_src {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 	uint32_t in_mask;	/* SOF_RATE_ supported input rates */
@@ -549,14 +540,12 @@ struct sof_ipc_comp_src {
 
 /* generic MUX component */
 struct sof_ipc_comp_mux {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 } __attribute__((packed));
 
 /* generic tone generator component */
 struct sof_ipc_comp_tone {
-	struct sof_ipc_hdr hdr;
 	struct sof_ipc_comp comp;
 	struct sof_ipc_pcm_comp pcm;
 } __attribute__((packed));
