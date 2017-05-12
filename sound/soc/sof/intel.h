@@ -212,9 +212,12 @@
 /* Legacy HDA registers and bits used - widths are variable - TODO: check*/
 #define HDA_GCAP			0x0
 #define HDA_GCTL			0x8
+#define HDA_GCTL_UNSOL			(1 << 8)   /* accept unsol. response enable */
 #define HDA_LLCH			0x14
 #define HDA_INTCTL			0x20
 #define HDA_INTSTS			0x24
+#define HDA_WAKESTS			0x0E
+#define HDA_WAKESTS_INT_MASK		((1 << HDA_MAX_CODECS) - 1)
 
 /* HDA_GCTL register bist */
 #define HDA_GCTL_RESET			(1 << 0)	
@@ -402,6 +405,32 @@
 #define HDA_ADSP_DPLBASE		0x70
 #define HDA_ADSP_DPUBASE		0x74
 #define HDA_ADSP_DPLBASE_ENABLE		0x1
+#define CORBLBASE		0x40
+#define CORBUBASE		0x44
+#define CORBWP			0x48
+#define CORBRP			0x4a
+#define   CORBRP_RST	(1 << 15)  /* read pointer reset */
+#define CORBCTL			0x4c
+#define   CORBCTL_RUN	(1 << 1)   /* enable DMA */
+#define   CORBCTL_CMEIE	(1 << 0)   /* enable memory error irq */
+#define CORBSTS			0x4d
+#define   CORBSTS_CMEI	(1 << 0)   /* memory error indication */
+#define CORBSIZE		0x4e
+
+#define RIRBLBASE		0x50
+#define RIRBUBASE		0x54
+#define RIRBWP			0x58
+#define   RIRBWP_RST	(1 << 15)  /* write pointer reset */
+#define RINTCNT			0x5a
+#define RIRBCTL			0x5c
+#define   RBCTL_IRQ_EN	(1 << 0)   /* enable IRQ */
+#define   RBCTL_DMA_EN	(1 << 1)   /* enable DMA */
+#define   RBCTL_OVERRUN_EN	(1 << 2)   /* enable overrun irq */
+#define RIRBSTS			0x5d
+#define   RBSTS_IRQ		(1 << 0)   /* response irq */
+#define   RBSTS_OVERRUN	(1 << 2)   /* overrun irq */
+#define RIRBSIZE		0x5e
+#define RIRB_INT_MASK		0x05
 
 /* Stream Registers */
 #define HDA_ADSP_REG_CL_SD_CTL			0x00

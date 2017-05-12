@@ -67,6 +67,7 @@
 #include <uapi/sound/sof-ipc.h>
 #include <uapi/sound/sof-fw.h>
 #include <uapi/sound/asoc.h>
+#include <sound/hdaudio.h>
 #include <sound/compress_driver.h>
 
 /* debug flags */
@@ -204,6 +205,14 @@ struct snd_sof_ipc_msg {
 	bool complete;
 };
 
+struct snd_sof_hda_rb {
+	__le32 *buf;
+	dma_addr_t addr;
+	unsigned short rp, wp;
+	int cmds[HDA_MAX_CODECS];
+	u32 res[HDA_MAX_CODECS];
+};
+
 struct snd_sof_hda_stream {
 	void __iomem *pphc_addr;
 	void __iomem *pplc_addr; // do we need this ?
@@ -218,10 +227,13 @@ struct snd_sof_hda_stream {
 	bool running;
 	struct snd_dma_buffer bdl;
 	void __iomem *sd_addr;	/* stream descriptor pointer */
-	int sd_offset; /* Stream descriptor offset */         
+
+	int sd_offset; /* Stream descriptor offset */ 
+         
 	/* CORB/RIRB and position buffers */
 	struct snd_dma_buffer posbuffer;
 	struct snd_dma_buffer ringbuffer;
+
 	__le32 *posbuf;		/* position buffer pointer */
 	unsigned int frags;	/* number for period in the play buffer */
 	unsigned int format_val;	/* format value to be set in the
@@ -244,6 +256,19 @@ struct snd_sof_hda_stream {
 struct snd_sof_hda_dev {
 	struct snd_sof_hda_stream pstream[SOF_HDA_PLAYBACK_STREAMS];
 	struct snd_sof_hda_stream cstream[SOF_HDA_CAPTURE_STREAMS];
+	
+	int num_capture;
+	int num_playback ;
+	
+	/* CORB/RIRB */
+	struct snd_sof_hda_rb corb;
+	struct snd_sof_hda_rb rirb;
+	        
+	/* CORB/RIRB and position buffers */
+	struct snd_dma_buffer posbuffer;
+	struct snd_dma_buffer ringbuffer;
+
+	int irq;
 };
 
 struct snd_sof_dev {
