@@ -658,7 +658,7 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 	int ret = IRQ_NONE;
 	
-	dev_dbg(sdev->dev, "irq_handler\n");
+	dev_dbg(sdev->dev, "DSP irq_handler\n");
 	
 	spin_lock(&sdev->spinlock);
 
@@ -684,6 +684,8 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 	}
 
 out:
+	// TODO: hack to disable IRQ at this point - fix
+	snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
 	spin_unlock(&sdev->spinlock);
 	return ret;
 }
@@ -695,7 +697,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 	u32 hipcie, hipct, hipcte;
 	irqreturn_t ret = IRQ_NONE;
 	
-	dev_dbg(sdev->dev, "irq thread handler\n");			
+	dev_dbg(sdev->dev, "DSP thread handler\n");
 	
 	/* code loader ? */
 	if (sdev->irq_status & SKL_ADSPIS_CL_DMA)
@@ -774,7 +776,7 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 
 	if (!pm_runtime_active(sdev->dev))
 		return IRQ_NONE;
-	dev_dbg(sdev->dev, "skl_interrupt\n");
+	dev_dbg(sdev->dev, "HDA interrupt\n");
 
 	//spin_lock(&bus->reg_lock);
 
@@ -783,6 +785,9 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 		//spin_unlock(&bus->reg_lock);
 		return IRQ_NONE;
 	}
+
+	// TODO: hack to disable IRQ at this point - fix
+	snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0);
 #if 0
 	//dev_dbg(sdev->dev, "intsts status is %8.8x\n",status); 
 	/* clear rirb int */
@@ -797,7 +802,7 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 	//spin_unlock(&bus->reg_lock);
 	//dev_dbg(sdev->dev, "status is %8.8x\n",snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS)); 
 
-	return snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS) ? IRQ_WAKE_THREAD : IRQ_HANDLED;
+	return status ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
 
 static irqreturn_t skl_threaded_handler(int irq, void *context)
@@ -805,7 +810,7 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 	//struct snd_sof_hda_dev *hdev = &sdev->hda;
 	//u32 status = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS);
-	dev_dbg(sdev->dev, "skl_threaded handler \n");
+	dev_dbg(sdev->dev, "HDA threaded handler \n");
 #if 0
 	for(i = 0; i < SOF_HDA_PLAYBACK_STREAMS; i++) {
 		if(status &  (1 << hdev->pstream[i].index)) {
