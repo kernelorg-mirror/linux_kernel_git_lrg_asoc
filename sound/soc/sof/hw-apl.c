@@ -627,20 +627,17 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	u32 offset;
 
 	/* mailbox must be on 4k boundary */
-	offset = (msg_id & 0x0000FFFF) << 12;
+	offset = 0; // TODO
 
 	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
 		msg_id, offset);
 
 	/* copy data from the DSP FW ready offset */
-	apl_block_read(sdev, fw_ready, sdev->bar[APL_DSP_BAR] + offset,
-		sizeof(*fw_ready));
+	apl_block_read(sdev, offset, fw_ready,	sizeof(*fw_ready));
 
-	snd_sof_dsp_mailbox_init(sdev, 
-		sdev->bar[APL_DSP_BAR] + fw_ready->inbox_offset,
-		fw_ready->inbox_size, 
-		sdev->bar[APL_DSP_BAR] + fw_ready->outbox_offset,
-		fw_ready->outbox_size);
+	snd_sof_dsp_mailbox_init(sdev,
+		fw_ready->inbox_offset, fw_ready->inbox_size, 
+		fw_ready->outbox_offset, fw_ready->outbox_size);
 
 	dev_dbg(sdev->dev, " mailbox upstream 0x%x - size 0x%x\n",
 		fw_ready->inbox_offset, fw_ready->inbox_size);
