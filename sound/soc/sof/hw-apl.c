@@ -734,7 +734,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 
 	/* New message from DSP */
 	if (hipct & SKL_ADSP_REG_HIPCT_BUSY) {
-		dev_dbg(sdev->dev, "handling reply message from DSP\n");
+		dev_dbg(sdev->dev, "handling new message from DSP\n");
 		hipcte = snd_sof_dsp_read(sdev, APL_DSP_BAR,
 			SKL_ADSP_REG_HIPCTE);
 		header = hipct;
@@ -1352,11 +1352,6 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 	return 0;
 }
 
-
-/*
- * Probe and remove.
- */
-
 /*
  * First boot sequence has some extra steps. Core 0 waits for power
  * status on core 1, so power up core 1 also momentarily, keep it in
@@ -1465,6 +1460,77 @@ out:
 	return stream_tag;
 }
 
+/* 
+ *DMA Code Loader for BXT/APL 
+ */
+
+int apl_load_firmware(struct snd_sof_dev *sdev, 
+	const struct firmware *fw)
+{
+	int ret, stream_tag;
+	struct snd_sof_pdata *plat_data = dev_get_platdata(sdev->dev);
+	
+	dev_dbg(sdev->dev, "in apl_load_firmware\n");
+		
+	ret = request_firmware(&plat_data->fw, 
+		plat_data->machine->fw_filename, sdev->dev);
+	if (ret < 0) {
+		dev_err(sdev->dev, "Request firmware failed %d\n", ret);
+		return -EINVAL;
+	}
+	dev_dbg(sdev->dev, "request firmware success\n");
+
+	if (plat_data->fw == NULL)
+		return -EINVAL;
+	
+	stream_tag = apl_init(sdev, plat_data->fw->data, 
+		plat_data->fw->size);
+
+	/* Retry Enabling core and ROM load. Retry seemed to help */
+	if (stream_tag < 0) {
+		dev_dbg(sdev->dev, "retrying apl_init\n");
+		stream_tag = apl_init(sdev, plat_data->fw->data,
+					plat_data->fw->size);
+		if (stream_tag <= 0) {
+			dev_err(sdev->dev, "Error code=0x%x: FW status=0x%x\n",
+			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_ERROR_CODE)
+			,
+			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS))
+			;
+
+			dev_err(sdev->dev, "Core En/ROM load fail:%d\n", 
+				stream_tag);
+			ret = stream_tag;
+			goto irq_err;
+		}
+	}
+	
+	/* At this point DSP ROM has been initialized and should be ready for 
+	 code loading and firmware boot */
+	ret = apl_transfer_fw(sdev, stream_tag);
+	
+	if(ret < 0) {
+		dev_err(sdev->dev, "Load FW failed\n");
+		goto irq_err;
+	} 
+	
+	return ret;
+
+irq_err:
+	free_irq(sdev->ipc_irq, sdev);
+	
+	/* disable DSP */
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
+		HDA_PPCTL_GPROCEN, 0);
+
+	return ret;
+
+}
+
+/*
+ * Probe and remove.
+ */
+ 
 /*
  * We dont need to do a full HDA codec probe as external HDA codec mode is
  * considered legacy and will not be supported under SOF. HDMI/DP HDA will
@@ -1473,8 +1539,7 @@ out:
 static int apl_probe(struct snd_sof_dev *sdev)
 {
 	struct pci_dev *pci = sdev->pci;
-	int ret = 0, stream_tag, i;
-	struct snd_sof_pdata *plat_data;
+	int ret = 0, i;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	struct snd_sof_hda_stream *stream;
 
@@ -1683,52 +1748,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	/* enable DSP IRQ */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, 
 		HDA_PPCTL_PIE, HDA_PPCTL_PIE);
-		
-	plat_data = dev_get_platdata(sdev->dev);
-		
-	ret = request_firmware(&plat_data->fw, 
-		plat_data->machine->fw_filename, sdev->dev);
-	if (ret < 0) {
-		dev_err(sdev->dev, "Request firmware failed %d\n", ret);
-		goto err;
-	}
-	dev_dbg(sdev->dev, "request firmware success\n");
-
-	if (plat_data->fw == NULL)
-		goto err;
-			
-	stream_tag = apl_init(sdev, plat_data->fw->data, 
-		plat_data->fw->size);
-
-	/* Retry Enabling core and ROM load. Retry seemed to help */
-	if (stream_tag < 0) {
-		dev_dbg(sdev->dev, "retrying apl_init\n");
-		stream_tag = apl_init(sdev, plat_data->fw->data,
-					plat_data->fw->size);
-		if (stream_tag <= 0) {
-			dev_err(sdev->dev, "Error code=0x%x: FW status=0x%x\n",
-			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_ERROR_CODE)
-			,
-			snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS))
-			;
-
-			dev_err(sdev->dev, "Core En/ROM load fail:%d\n", 
-				stream_tag);
-			ret = stream_tag;
-			goto irq_err;
-		}
-	}
 	
-	/* At this point DSP ROM has been initialized and should be ready for 
-	 code loading and firmware boot */
-	ret = apl_transfer_fw(sdev, stream_tag);
-	
-	if(ret < 0) {
-		dev_err(sdev->dev, "Load FW failed\n");
-		return ret;
-	} 
-	
-	return 0;
+	return 0;		
 
 irq_err:
 	free_irq(sdev->ipc_irq, sdev);
@@ -1796,6 +1817,9 @@ struct snd_sof_dsp_ops snd_sof_bxt_ops = {
 	.debug_map	= apl_debugfs,
 	.debug_map_count	= ARRAY_SIZE(apl_debugfs),
 	.dbg_dump	= apl_dump,
+	
+	/* firmware loading */
+	.load_firmware = apl_load_firmware,
 
 };
 EXPORT_SYMBOL(snd_sof_bxt_ops);
@@ -1840,8 +1864,7 @@ struct snd_sof_dsp_ops snd_sof_apl_ops = {
 	.dbg_dump	= apl_dump,
 
 	/* firmware loading */
-	
-
+	.load_firmware = apl_load_firmware,
 
 };
 EXPORT_SYMBOL(snd_sof_apl_ops);

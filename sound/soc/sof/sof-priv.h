@@ -141,6 +141,7 @@ struct snd_sof_dsp_ops {
 	void (*dbg_dump)(struct snd_sof_dev *sof_dev, u32 flags);
 
 	/* FW loading */
+	int (*load_firmware)(struct snd_sof_dev *sof_dev, const struct firmware *fw);
 	int (*load_module)(struct snd_sof_dev *sof_dev,
 		struct snd_sof_mod_hdr *hdr);
 	int (*fw_ready)(struct snd_sof_dev *sdev, u32 msg_id);
@@ -341,6 +342,8 @@ void snd_sof_new_platform_drv(struct snd_sof_dev *sdev);
  * Firmware loading.
  */
 int snd_sof_load_firmware(struct snd_sof_dev *sdev,
+	const struct firmware *fw);
+int snd_sof_load_firmware_memcpy(struct snd_sof_dev *sdev,
 	const struct firmware *fw);
 int snd_sof_run_firmware(struct snd_sof_dev *sdev);
 int snd_sof_parse_module_memcpy(struct snd_sof_dev *sdev,

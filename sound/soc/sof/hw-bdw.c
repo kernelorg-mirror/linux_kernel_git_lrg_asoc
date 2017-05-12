@@ -653,6 +653,9 @@ struct snd_sof_dsp_ops snd_sof_bdw_ops = {
 
 	/* Module loading */
 	.load_module    = snd_sof_parse_module_memcpy,
+
+	/*Firmware loading */
+	.load_firmware	= snd_sof_load_firmware_memcpy,
 };
 EXPORT_SYMBOL(snd_sof_bdw_ops);
 

@@ -179,11 +179,11 @@ static int load_modules(struct snd_sof_dev *sdev, const struct firmware *fw)
 	return 0;
 }
 
-int snd_sof_load_firmware(struct snd_sof_dev *sdev,
+int snd_sof_load_firmware_memcpy(struct snd_sof_dev *sdev,
 	const struct firmware *fw)
 {
 	int ret;
-
+	
 	/* make sure the FW header and file is valid */
 	ret = check_header(sdev, fw);
 	if (ret < 0) {
@@ -204,6 +204,24 @@ int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 		dev_err(sdev->dev, "error: invalid FW modules\n");
 		return ret;
 	}
+	
+	return ret;
+}
+EXPORT_SYMBOL(snd_sof_load_firmware_memcpy);
+
+int snd_sof_load_firmware(struct snd_sof_dev *sdev,
+	const struct firmware *fw)
+{
+	int (*load_firmware)(struct snd_sof_dev *sof_dev,
+		const struct firmware *fw);
+	int ret;
+	
+	dev_dbg(sdev->dev, "loading firmware\n");
+	load_firmware = sdev->ops->load_firmware;
+	if (load_firmware == NULL)
+		return -EINVAL;
+	dev_dbg(sdev->dev, "calling apl_load_firmware\n");
+	ret = load_firmware(sdev, fw);
 
 	return ret;
 }
