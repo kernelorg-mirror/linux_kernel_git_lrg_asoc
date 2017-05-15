@@ -350,6 +350,8 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 	dev_dbg(sdev->dev, "in %s\n",__func__);
 	
 	if(start) {
+
+		wait_event_timeout(sdev->waitq, !sdev->code_loading, 300);
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
 					 1 << stream->index,
 					 1 << stream->index);
@@ -470,13 +472,10 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	int ret, timeout = 300, i;
 	u32 val;
 	u32 *bdl;
-<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
 
 	// TODO: what about capture streams
-=======
 	dev_dbg(sdev->dev, "in %s\n", __func__);
 	
->>>>>>> ASoC: SOF: Updated IRQ Handlers
 	/* Get an unused stream */
 	for (i = 0; i < hdev->num_playback; i++) {
 
@@ -685,7 +684,7 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	return 0;
 }
 
-static int ipc_irq_count = 0;
+//static int ipc_irq_count = 0;
 
 /*
  * IPC Doorbell IRQ handler and thread.
@@ -696,11 +695,9 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 	int ret = IRQ_NONE;
 	
-<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
-=======
+
 	dev_dbg(sdev->dev, "in IPC interrupt handler %s\n", __func__);
 	
->>>>>>> ASoC: SOF: Updated IRQ Handlers
 	spin_lock(&sdev->spinlock);
 
 	/* store status */
@@ -728,13 +725,9 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 
 out:
 	// TODO: hack to disable IRQ at this point - fix
-<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
-	if (ipc_irq_count++ > 20)
-		snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
+//	if (ipc_irq_count++ > 20)
+//		snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
 
-=======
-	//snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
->>>>>>> ASoC: SOF: Updated IRQ Handlers
 	spin_unlock(&sdev->spinlock);
 	dev_dbg(sdev->dev, "returning from IPC interrupt handler %s\n", __func__);
 	return ret;
@@ -814,11 +807,17 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 		snd_sof_ipc_process_msgs(sdev);
 	}
 	dev_dbg(sdev->dev, "returning from IPC interrupt thread handler %s\n", __func__);
+	
+	if(sdev->code_loading)	{
+		sdev->code_loading = 0;
+		wake_up(&sdev->waitq);
+	}
+		
 
 	return ret;
 }
 
-static int skl_irq_count = 0;
+//static int skl_irq_count = 0;
 
 static irqreturn_t skl_interrupt(int irq, void *context)
 {
@@ -840,8 +839,8 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 	}
 
 	// TODO: hack to disable IRQ at this point - fix
-	if (skl_irq_count++ > 10)
-		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0);
+//	if (skl_irq_count++ > 10)
+//		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0);
 
 #if 0
 	//dev_dbg(sdev->dev, "intsts status is %8.8x\n",status); 
@@ -1470,7 +1469,7 @@ static int apl_init(struct snd_sof_dev *sdev,
 			const void *fwdata, u32 fwsize)
 {
 	int stream_tag, ret, i;
-	u32 hipcie, status;
+	u32 hipcie;
 
 	dev_dbg(sdev->dev, "in %s\n", __func__);
 	// Prepare DMA for code loader use
@@ -1538,9 +1537,12 @@ step5:
 	/* Step 6: Enable Interrupt */
 	apl_ipc_int_enable(sdev);
 	apl_ipc_op_int_enable(sdev);
-
+	
 	/* Step 7: Wait for ROM init */
-	for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
+	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS, 
+					SKL_FW_STS_MASK, 
+					SKL_FW_INIT, BXT_INIT_TIMEOUT) ;
+	/*for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
 
 		status = snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS)
 		;
@@ -1551,10 +1553,10 @@ step5:
 			goto out;
 		}
 		mdelay(1);
-	}
-
-	dev_err(sdev->dev, "error: timeout for ROM init,\
-		HIPCIE: 0x%x status 0x%x\n", hipcie, status);
+	}*/
+	if(ret >= 0)
+		goto out;
+		
 	ret = -EIO;
 
 err:
@@ -1579,6 +1581,9 @@ int apl_load_firmware(struct snd_sof_dev *sdev,
 	struct snd_sof_pdata *plat_data = dev_get_platdata(sdev->dev);
 	
 	dev_dbg(sdev->dev, "in %s\n", __func__);
+	
+	/* set code loading condition to true */
+	sdev->code_loading = 1;
 		
 	ret = request_firmware(&plat_data->fw, 
 		plat_data->machine->fw_filename, sdev->dev);
@@ -1858,6 +1863,9 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	/* enable DSP IRQ */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, 
 		HDA_PPCTL_PIE, HDA_PPCTL_PIE);
+		
+	/* Inititalize waitq for code loading */
+	init_waitqueue_head(&sdev->waitq);
 	
 	return 0;		
 

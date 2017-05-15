@@ -259,7 +259,7 @@ struct snd_sof_hda_dev {
 	struct snd_sof_hda_stream cstream[SOF_HDA_CAPTURE_STREAMS];
 	
 	int num_capture;
-	int num_playback ;
+	int num_playback;
 	
 	/* CORB/RIRB */
 	struct snd_sof_hda_rb corb;
@@ -270,6 +270,7 @@ struct snd_sof_hda_dev {
 	struct snd_dma_buffer ringbuffer;
 
 	int irq;
+
 };
 
 struct snd_sof_dev {
@@ -321,6 +322,10 @@ struct snd_sof_dev {
 	/* IPC timeouts in ms */
 	int ipc_timeout;
 	int boot_timeout;
+	
+	/* Wait queue for code loading */
+	wait_queue_head_t waitq;
+	int code_loading;
 
 	void *private;			/* core does not touch this */
 };

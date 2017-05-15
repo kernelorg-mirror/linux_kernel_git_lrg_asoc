@@ -76,8 +76,11 @@ int snd_sof_pci_update_bits_unlocked(struct snd_sof_dev *sdev, u32 offset,
 	new = (old & (~mask)) | (value & mask);
 
 	change = (old != new);
-	if (change)
+	if (change) {
 		pci_write_config_dword(sdev->pci, offset, new);
+		dev_dbg(sdev->dev, "Debug PCIW: %8.8x at  %8.8x\n",value,
+offset);
+	}
 
 	return change;
 }
