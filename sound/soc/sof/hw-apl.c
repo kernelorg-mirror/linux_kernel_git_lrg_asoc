@@ -470,7 +470,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	struct pci_dev *pci = sdev->pci;
 	int ret, timeout = 300, i;
-	u32 val;
+	u32 val, mask;
 	u32 *bdl;
 
 	// TODO: what about capture streams
@@ -493,8 +493,8 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		return -ENODEV;
 		
 	/* Decouple Stream */
-	//int mask = 0x1 << (int) stream->index;
-        //snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, mask, mask);
+	mask = 0x1 << stream->index;
+	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, mask, mask);
 
 	/* Allocate DMA Buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, &pci->dev, size, dmab);
@@ -1368,6 +1368,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 				HDA_PPHC_INTERVAL * i;
 
 		stream->pplc_addr = sdev->bar[APL_PP_BAR] + HDA_PPLC_BASE +
+				HDA_PPLC_MULTI * num_total +
 				HDA_PPLC_INTERVAL * i;
 
 		/* do we support SPIB */
