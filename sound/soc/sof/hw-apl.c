@@ -232,18 +232,23 @@ static void apl_mailbox_read(struct snd_sof_dev *sdev, u32 offset,
 
 static void apl_ipc_int_enable(struct snd_sof_dev *sdev)
 {
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC,
 		SKL_ADSPIC_IPC, SKL_ADSPIC_IPC);
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 }
 
 static void apl_ipc_int_disable(struct snd_sof_dev *sdev)
 {
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
 		SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_IPC, 0);
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 }
 
 static void apl_ipc_op_int_enable(struct snd_sof_dev *sdev)
 {
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 	/* enable IPC DONE interrupt */
 	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
 		SKL_ADSP_REG_HIPCCTL_DONE, SKL_ADSP_REG_HIPCCTL_DONE);
@@ -251,6 +256,7 @@ static void apl_ipc_op_int_enable(struct snd_sof_dev *sdev)
 	/* Enable IPC BUSY interrupt */
 	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
 		SKL_ADSP_REG_HIPCCTL_BUSY, SKL_ADSP_REG_HIPCCTL_BUSY);
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 }
 
 #if 0
@@ -286,6 +292,7 @@ static int apl_setup_spib(struct snd_sof_dev *sdev,
 				struct snd_sof_hda_stream *stream, int enable, u32 value)
 {
 	u32 mask = 0;
+	dev_dbg(sdev->dev, "in %s\n",__func__);
 
 	/* enable/disable SPIB for this hdac stream */
 	if(!sdev->bar[APL_SPIB_BAR]) {
@@ -303,7 +310,7 @@ static int apl_setup_spib(struct snd_sof_dev *sdev,
 				
 	/* set the spib value */			
 	apl_write(sdev, stream->spib_addr, value);
-	
+	dev_dbg(sdev->dev, "returning from %s\n",__func__);
 	return 0;
 }
 
@@ -339,6 +346,8 @@ static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
 static int apl_trigger(struct snd_sof_dev *sdev, 
 			struct snd_sof_hda_stream *stream, int start)
 {	
+
+	dev_dbg(sdev->dev, "in %s\n",__func__);
 	
 	if(start) {
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
@@ -366,7 +375,7 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
 					0x0);
 	}
-
+	dev_dbg(sdev->dev, "returning from %s\n",__func__);
 	return 0;
 }
 
@@ -376,6 +385,8 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
+	
+	dev_dbg(sdev->dev, "in %s\n",__func__);
 	
 	/* Get stream with stream_tag */
 	stream = &hdev->pstream[stream_tag - 1];
@@ -391,6 +402,7 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 	apl_trigger(sdev, stream, false);
 	
 	apl_dsp_cleanup(sdev, &sdev->dmab, stream);
+	dev_dbg(sdev->dev, "returning from %s\n",__func__);
 
 	return ret;
 }
@@ -405,6 +417,7 @@ static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 {
 	__le32 *bdl = *bdlp;
 	//u32 remain;
+	dev_dbg(sdev->dev, "in %s\n",__func__);
 
 	while (size > 0) {
 		dma_addr_t addr;
@@ -444,6 +457,7 @@ static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 		ofs += chunk;
 	}
 	*bdlp = bdl;
+	dev_dbg(sdev->dev, "returning from %s\n",__func__);
 	return ofs;
 }
 
@@ -456,8 +470,13 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	int ret, timeout = 300, i;
 	u32 val;
 	u32 *bdl;
+<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
 
 	// TODO: what about capture streams
+=======
+	dev_dbg(sdev->dev, "in %s\n", __func__);
+	
+>>>>>>> ASoC: SOF: Updated IRQ Handlers
 	/* Get an unused stream */
 	for (i = 0; i < hdev->num_playback; i++) {
 
@@ -606,15 +625,15 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 					& 0xffff) + 1;
 	else
 		stream->fifo_size = 0;
-	
-	dev_dbg(sdev->dev, "calling setup_spib\n");
 
 	apl_setup_spib(sdev, stream, 1, size);
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 
 	return stream->stream_tag;
 
 error:
 	snd_dma_free_pages(dmab);
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 	return ret;
 }
 
@@ -677,6 +696,11 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 	int ret = IRQ_NONE;
 	
+<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
+=======
+	dev_dbg(sdev->dev, "in IPC interrupt handler %s\n", __func__);
+	
+>>>>>>> ASoC: SOF: Updated IRQ Handlers
 	spin_lock(&sdev->spinlock);
 
 	/* store status */
@@ -704,10 +728,15 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 
 out:
 	// TODO: hack to disable IRQ at this point - fix
+<<<<<<< 66da4602315404d9c6cb32397e29d00ab76a16b9
 	if (ipc_irq_count++ > 20)
 		snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
 
+=======
+	//snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
+>>>>>>> ASoC: SOF: Updated IRQ Handlers
 	spin_unlock(&sdev->spinlock);
+	dev_dbg(sdev->dev, "returning from IPC interrupt handler %s\n", __func__);
 	return ret;
 }
 
@@ -718,7 +747,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 	u32 hipcie, hipct, hipcte;
 	irqreturn_t ret = IRQ_NONE;
 	
-	dev_dbg(sdev->dev, "DSP thread handler\n");
+	dev_dbg(sdev->dev, "in IPC thread handler %s\n", __func__);
 	
 	/* code loader ? */
 	if (sdev->irq_status & SKL_ADSPIS_CL_DMA)
@@ -742,7 +771,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 			SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE, 0);
 
 		/* clear DONE bit - tell DSP we have completed the operation */
-		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCIE,
+		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCIE,
 			SKL_ADSP_REG_HIPCIE_DONE, SKL_ADSP_REG_HIPCIE_DONE);
 
 		/* unmask Done interrupt */
@@ -773,7 +802,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 		}
 
 		/* clear  busy interrupt */
-		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCT,
+		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCT,
 			SKL_ADSP_REG_HIPCT_BUSY, SKL_ADSP_REG_HIPCT_BUSY);
 
 		ret = IRQ_HANDLED;
@@ -784,7 +813,7 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 		/* continue to send any remaining messages... */
 		snd_sof_ipc_process_msgs(sdev);
 	}
-	dev_dbg(sdev->dev, "returning IRQ_HANDLED\n");
+	dev_dbg(sdev->dev, "returning from IPC interrupt thread handler %s\n", __func__);
 
 	return ret;
 }
@@ -799,6 +828,8 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 	if (!pm_runtime_active(sdev->dev))
 		return IRQ_NONE;
 
+	dev_dbg(sdev->dev, "in HDA interrupt handler %s\n", __func__);
+
 	//spin_lock(&bus->reg_lock);
 
 	status = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS);
@@ -811,6 +842,7 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 	// TODO: hack to disable IRQ at this point - fix
 	if (skl_irq_count++ > 10)
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0);
+
 #if 0
 	//dev_dbg(sdev->dev, "intsts status is %8.8x\n",status); 
 	/* clear rirb int */
@@ -824,6 +856,7 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 #endif
 	//spin_unlock(&bus->reg_lock);
 	//dev_dbg(sdev->dev, "status is %8.8x\n",snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS)); 
+	dev_dbg(sdev->dev, "returning from HDA interrupt handler %s\n", __func__);
 
 	return status ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
@@ -835,6 +868,7 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 	u32 status = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS);
 	u32 sd_status;
 	int i;
+	dev_dbg(sdev->dev, "in HDA interrupt thread handler %s\n", __func__);
 
 	dev_dbg(sdev->dev, "HDA threaded handler status 0x%x\n", status);
 
@@ -867,7 +901,7 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 		
 	}
 
-	/* check playback streams */
+	/* check capture streams */
 	for (i = 0; i < hdev->num_capture; i++) {
 
 		/* is IRQ for this stream ? */
@@ -896,6 +930,7 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 		
 	}
 
+	dev_dbg(sdev->dev, "retuning from HDA interrupt thread handler %s\n", __func__);
 
 	return IRQ_HANDLED;
 }
@@ -1173,6 +1208,7 @@ static int apl_link_reset(struct snd_sof_dev *sdev)
 {
 	unsigned long timeout;
 	u32 gctl = 0;
+	dev_dbg(sdev->dev, "HDA controller reset %s\n",__func__);
 
 	/* reset the HDA controller */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_RESET, 0);
@@ -1190,6 +1226,7 @@ static int apl_link_reset(struct snd_sof_dev *sdev)
 	/* reset failed */
 	dev_err(sdev->dev, "error: failed to reset HDA controller gctl 0x%x\n",
 		gctl);
+	dev_dbg(sdev->dev, "HDA controller reset %s\n",__func__);
 	return -EIO;
 
 clear:
@@ -1212,6 +1249,7 @@ clear:
 			usleep_range(1000, 1200);
 			/* Accept unsolicited responses */
         		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_UNSOL, HDA_GCTL_UNSOL);
+        		dev_dbg(sdev->dev, "HDA controller reset end %s\n",__func__);
 			return 0;
 		}
 	}
@@ -1219,6 +1257,7 @@ clear:
 	/* reset failed */
 	dev_err(sdev->dev, "error: failed to ready HDA controller gctl 0x%x\n",
 		gctl);
+	dev_dbg(sdev->dev, "HDA controller reset end %s\n",__func__);	
 	return -EIO;
 }
 
@@ -1433,7 +1472,7 @@ static int apl_init(struct snd_sof_dev *sdev,
 	int stream_tag, ret, i;
 	u32 hipcie, status;
 
-	dev_dbg(sdev->dev, "started DSP prepare\n");
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 	// Prepare DMA for code loader use
 	stream_tag = apl_prepare(sdev, 0x40, fwsize, &sdev->dmab);
 	
@@ -1496,11 +1535,9 @@ step5:
 	}
 	dev_dbg(sdev->dev, "core set up end\n");
 
-	dev_dbg(sdev->dev, "enabling ipc ints\n");
 	/* Step 6: Enable Interrupt */
 	apl_ipc_int_enable(sdev);
 	apl_ipc_op_int_enable(sdev);
-	dev_dbg(sdev->dev, "enabling ipc ints end\n");
 
 	/* Step 7: Wait for ROM init */
 	for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
@@ -1524,9 +1561,10 @@ err:
 	apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
 	//sdev->dsp_ops.cleanup(sdev->dev, &sdev->dmab, stream_tag);
 	apl_disable_core(sdev, SKL_DSP_CORE_MASK(0) | SKL_DSP_CORE_MASK(1));
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 	return ret;
 out:
-	dev_dbg(sdev->dev, "finished prepare DSP\n");
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 	return stream_tag;
 }
 
@@ -1540,7 +1578,7 @@ int apl_load_firmware(struct snd_sof_dev *sdev,
 	int ret, stream_tag;
 	struct snd_sof_pdata *plat_data = dev_get_platdata(sdev->dev);
 	
-	dev_dbg(sdev->dev, "in apl_load_firmware\n");
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 		
 	ret = request_firmware(&plat_data->fw, 
 		plat_data->machine->fw_filename, sdev->dev);
@@ -1583,7 +1621,7 @@ int apl_load_firmware(struct snd_sof_dev *sdev,
 		dev_err(sdev->dev, "Load FW failed\n");
 		goto irq_err;
 	} 
-	
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 	return ret;
 
 irq_err:
@@ -1592,7 +1630,7 @@ irq_err:
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
-
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 	return ret;
 
 }
@@ -1612,6 +1650,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	int ret = 0, i;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
 	struct snd_sof_hda_stream *stream;
+	
+	dev_dbg(sdev->dev, "in %s\n", __func__);
 
 	/* HDA base */
 	sdev->bar[APL_HDA_BAR] = pci_ioremap_bar(pci, APL_HDA_BAR);
@@ -1677,7 +1717,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	 */
 	snd_sof_pci_update_bits(sdev, PCI_CGCTL,
 		PCI_CGCTL_MISCBDCGE_MASK, 0);
-	dev_dbg(sdev->dev, "HDA controller reset begin\n");	
+
 	/*Clear WAKESTS*/
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_WAKESTS, HDA_WAKESTS_INT_MASK, HDA_WAKESTS_INT_MASK);
 	
@@ -1687,7 +1727,7 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dev_err(&pci->dev, "error: failed to reset HDA controller\n");
 		goto err;
 	}
-	dev_dbg(sdev->dev, "HDA controller reset end\n");
+
 	dev_dbg(sdev->dev, "clear interrupts begin\n");
 	for( i = 0 ; i < hdev->num_capture ; i++ ) {
 		stream = &hdev->cstream[i];
@@ -1827,6 +1867,8 @@ err:
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
+		
+	dev_dbg(sdev->dev, "returning from %s\n", __func__);
 
 	return ret;
 }

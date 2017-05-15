@@ -205,7 +205,7 @@ int snd_sof_dsp_register_poll(struct snd_sof_dev *sdev, u32 bar, u32 offset,
 			done = true;
 			break;
 		}
-		mdelay(1);
+		msleep(1);
 	}
 
 	if (done ==  false) {
