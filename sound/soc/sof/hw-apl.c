@@ -81,8 +81,9 @@
 #define APL_SPIB_BAR			2
 #define APL_DRSM_BAR			3
 #define APL_DSP_BAR			4
-#define SKL_EXT_MANIFEST_HEADER_MAGIC   0x31454124
 
+#define MBOX_OFFSET 0x80000;
+#define MBOX_DUMP_SIZE 0x30;
 
 static bool is_apl_core_enable(struct snd_sof_dev *sdev,
 	unsigned int core_mask);
@@ -98,14 +99,6 @@ static const struct snd_sof_debugfs_map apl_debugfs[] = {
 //	{"pci", APL_PCI_BAR, 0, 0x150},
 };
 
-struct skl_ext_manifest_hdr {
-	u32 id;
-	u32 len;
-	u16 version_major;
-	u16 version_minor;
-	u32 entries;
-};
-
 static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 {
 	u32 reg;
@@ -115,10 +108,6 @@ static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 		for (i = 0; i < 0x120; i += 4 ) {
 			dev_dbg(sdev->dev, "hda 0x%2.2x value 0x%8.8x\n",
 				i, snd_sof_dsp_read(sdev, APL_HDA_BAR, i));
-		}
-		for( i = 0; i < 0x14; i += 4 ) {
-			dev_dbg(sdev->dev, "SRAM0 0x%2.2x value 0x%8.8x\n",
-				i, snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_SRAM0_BASE + i));
 		}
 		for (i = 0; i < 0xc; i += 4 ) {
 			dev_dbg(sdev->dev, "spib 0x%2.2x value 0x%8.8x\n",
@@ -133,18 +122,16 @@ static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 				i, snd_sof_dsp_read(sdev, APL_PP_BAR, i));
 		}
 	}
-
 #if 0
 	if (flags & SOF_DBG_MBOX) {
-		for (i = MBOX_OFFSET; i < MBOX_OFFSET + MBOX_DUMP_SIZE; i += 4) 
+		for (i = MBOX_OFFSET; i < MBOX_OFFSET + MBOX_DUMP_SIZE; i += 4)
 		{
 			dev_dbg(sdev->dev, "mbox: 0x%2.2x value 0x%8.8x\n",
-				i - MBOX_OFFSET,
-				readl(sdev->bar[BYT_DSP_BAR] + i));
+				i, snd_sof_dsp_read(sdev, 
+					APL_DSP_BAR, i));
 		}
 	}
 #endif
-
 	if (flags & SOF_DBG_PCI) {
 		for (i = 0; i < 0x150; i += 4) {
 			pci_read_config_dword(sdev->pci, i, &reg);
@@ -161,13 +148,11 @@ static void apl_dump(struct snd_sof_dev *sdev, u32 flags)
 static void apl_write(struct snd_sof_dev *sdev, void __iomem *addr,
 	u32 value)
 {
-	//dev_dbg(sdev->dev, "Debug W: %8.8x at %p \n", value, addr);
 	writel(value, addr);
 }
 
 static u32 apl_read(struct snd_sof_dev *sdev, void __iomem *addr)
 {
-	//	dev_dbg(sdev->dev, "Debug R: %8.8x at %p \n", readl(addr), addr);
 	return readl(addr);
 }
 
@@ -237,88 +222,35 @@ static void apl_mailbox_read(struct snd_sof_dev *sdev, u32 offset,
 }
 
 /*
- * Interrupts
- */
-
-static void apl_ipc_int_enable(struct snd_sof_dev *sdev)
-{
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC,
-		SKL_ADSPIC_IPC, SKL_ADSPIC_IPC);
-}
-
-static void apl_ipc_int_disable(struct snd_sof_dev *sdev)
-{
-	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-		SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_IPC, 0);
-}
-
-static void apl_ipc_op_int_enable(struct snd_sof_dev *sdev)
-{
-	/* enable IPC DONE interrupt */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
-		SKL_ADSP_REG_HIPCCTL_DONE, SKL_ADSP_REG_HIPCCTL_DONE);
-
-	/* Enable IPC BUSY interrupt */
-	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
-		SKL_ADSP_REG_HIPCCTL_BUSY, SKL_ADSP_REG_HIPCCTL_BUSY);
-}
-
-#if 0
-static void apl_ipc_op_int_disable(struct snd_sof_dev *sdev)
-{
-	/* disable IPC DONE interrupt */
-	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-		SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE, 0);
-
-	/* Disable IPC BUSY interrupt */
-	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-		SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_BUSY, 0);
-}
-#endif
-
-/*
  * Code loader
  */
-#if 0
-static void apl_cldma_int_enable(struct snd_sof_dev *sdev)
-{
-	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-		SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_CL_DMA, SKL_ADSPIC_CL_DMA);
-}
-#endif
-void apl_cldma_int_disable(struct snd_sof_dev *sdev)
-{
-	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-		SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_CL_DMA, 0);
-}
 
 static int apl_setup_spib(struct snd_sof_dev *sdev, 
-				struct snd_sof_hda_stream *stream, int enable, u32 value)
+	struct snd_sof_hda_stream *stream, int enable, u32 value)
 {
 	u32 mask = 0;
 
-	/* enable/disable SPIB for this hdac stream */
-	if(!sdev->bar[APL_SPIB_BAR]) {
+	/* Enable/disable SPIB for this hdac stream */
+	if (sdev->bar[APL_SPIB_BAR] == NULL) {
 		dev_err(sdev->dev, "Address of SPB capability is NULL\n");
-		return -1; // TODO: Fix return value
+		return -EINVAL; 
 	}
 	
 	mask |= (1 << stream->index);
 	
 	/* Enable/Disable SPIB for the stream */
 	snd_sof_dsp_update_bits(sdev, APL_SPIB_BAR,
-				HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL, 
-				mask,
-				enable << stream->index);
+		HDA_ADSP_REG_CL_SPBFIFO_SPBFCCTL, mask, 
+		enable << stream->index);
 				
-	/* set the spib value */			
+	/* Set the spib value */			
 	apl_write(sdev, stream->spib_addr, value);
 
 	return 0;
 }
 
 static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
-		struct snd_dma_buffer *dmab, struct snd_sof_hda_stream *stream)
+	struct snd_dma_buffer *dmab, struct snd_sof_hda_stream *stream)
 {
 	
 	apl_setup_spib(sdev, stream, 0, 0);
@@ -327,17 +259,13 @@ static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
 	stream->running = 0;
 	stream->substream = NULL;
 	
-	/*Reset BDL address*/
+	/* Reset BDL address */
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->
-				sd_offset + HDA_ADSP_REG_CL_SD_BDLPL,
-				0);
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL, 0);
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU,
-				0);
-	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset,
-				0);
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU, 0);
+
+	snd_sof_dsp_write(sdev, APL_HDA_BAR, stream->sd_offset, 0);
 	snd_dma_free_pages(dmab);
 	dmab->area = NULL;
 	stream->bufsize = 0;
@@ -346,61 +274,59 @@ static int apl_dsp_cleanup(struct snd_sof_dev *sdev,
 	return 0;
 }
  
-static int apl_trigger(struct snd_sof_dev *sdev, 
-			struct snd_sof_hda_stream *stream, int start)
+static void apl_trigger(struct snd_sof_dev *sdev, 
+	struct snd_sof_hda_stream *stream, int cmd)
 {	
-	if(start) {
-
-		wait_event_timeout(sdev->waitq, !sdev->code_loading, 300);
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+		if (sdev->code_loading)
+			wait_event_timeout(sdev->waitq, !sdev->code_loading, 300);
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
-					 1 << stream->index,
-					 1 << stream->index);
-					 
+			1 << stream->index, 1 << stream->index);
+
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
-					 HDA_SD_CTL_DMA_START |\
-					 HDA_CL_DMA_SD_INT_MASK, 
-					 HDA_SD_CTL_DMA_START |\
-					 HDA_CL_DMA_SD_INT_MASK);
+			HDA_SD_CTL_DMA_START | HDA_CL_DMA_SD_INT_MASK, 
+			HDA_SD_CTL_DMA_START | HDA_CL_DMA_SD_INT_MASK);
+
 		stream->running = true;
-	}				
-	else {
+		break;
+
+	case SNDRV_PCM_TRIGGER_STOP:
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
-					 HDA_SD_CTL_DMA_START |\
-					 HDA_CL_DMA_SD_INT_MASK, 
-					 0x0);
-		snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-					stream->sd_offset + 
-					HDA_ADSP_REG_CL_SD_STS,
-					HDA_CL_DMA_SD_INT_MASK); /* to be sure */
+			HDA_SD_CTL_DMA_START | HDA_CL_DMA_SD_INT_MASK, 0x0);
+
+		snd_sof_dsp_write(sdev, APL_HDA_BAR, stream->sd_offset + 
+			HDA_ADSP_REG_CL_SD_STS, HDA_CL_DMA_SD_INT_MASK); 
+
 		stream->running = false; 
 
-		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL,
-					0x0);
-	}
+		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0x0);
+		break;
 
-	return 0;
+	default:
+		dev_dbg(sdev->dev, "unknown command\n");
+		break;
+	}
 }
 
 static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 {
-	int ret;
-
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
-	
+	int ret;
+
 	/* Get stream with stream_tag */
 	stream = &hdev->pstream[stream_tag - 1];
 	if (!stream)
 		return -ENODEV;
-	
-	apl_trigger(sdev, stream, true);
-	
+
+	apl_trigger(sdev, stream, SNDRV_PCM_TRIGGER_START);
+
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS, 
-					SKL_FW_STS_MASK, 
-					BXT_ROM_INIT, BXT_BASEFW_TIMEOUT) ;
-	
-	apl_trigger(sdev, stream, false);
-	
+		SKL_FW_STS_MASK, BXT_ROM_INIT, BXT_BASEFW_TIMEOUT);
+
+	apl_trigger(sdev, stream, SNDRV_PCM_TRIGGER_STOP);
+
 	apl_dsp_cleanup(sdev, &sdev->dmab, stream);
 
 	return ret;
@@ -411,11 +337,10 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
  * set up a BDL entry
  */
 static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
-		      struct snd_sof_hda_stream *stream, __le32 **bdlp,
-		      int ofs, int size, int with_ioc)
+	struct snd_sof_hda_stream *stream, __le32 **bdlp,
+	int ofs, int size, int with_ioc)
 {
 	__le32 *bdl = *bdlp;
-	//u32 remain;
 
 	while (size > 0) {
 		dma_addr_t addr;
@@ -426,26 +351,16 @@ static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 
 		addr = snd_sgbuf_get_addr(dmab, ofs);
 
-		/* program the address field of the BDL entry */
+		/* Program the address field of the BDL entry */
 		bdl[0] = cpu_to_le32(lower_32_bits(addr)); 
 		bdl[1] = cpu_to_le32(upper_32_bits(addr));
 
-		/* program the size field of the BDL entry */
-		chunk = snd_sgbuf_get_chunk_size(dmab, ofs, size);
+		/* Program the size field of the BDL entry */
+		chunk = snd_sgbuf_get_chunk_size(dmab, ofs, size);	
 
-		/* one BDLE cannot cross 4K boundary on CTHDA chips */
-		//if (bus->align_bdle_4k) {
-#if 0		
-			remain = 0x1000 - (ofs & 0xfff);
-
-			if (chunk > remain)
-				chunk = remain;
-#endif
-		//}	
-	
 		bdl[2] = cpu_to_le32(chunk);
 
-		/* program the IOC to enable interrupt
+		/* Program the IOC to enable interrupt
 		 * only when the whole fragment is processed
 		 */
 		size -= chunk;
@@ -459,7 +374,7 @@ static int setup_bdle(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 }
 
 static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
-			unsigned int size, struct snd_dma_buffer *dmab)
+	unsigned int size, struct snd_dma_buffer *dmab)
 {
 	struct snd_sof_hda_stream *stream = NULL;
 	struct snd_sof_hda_dev *hdev = &sdev->hda;
@@ -469,149 +384,133 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 	u32 *bdl;
 
 	// TODO: what about capture streams
-	
-	/* Get an unused Playback stream */
+
+	/* Get an unused playback stream for code loading */
 	for (i = 0; i < hdev->num_playback; i++) {
-
 		if (!hdev->pstream[i].open) {
-
 			hdev->pstream[i].open = true;
 			stream = &hdev->pstream[i];
-
-			dev_dbg(sdev->dev, "stream tag is %d and stream index is %d\n",
-				stream->stream_tag, stream->index);
 			break;
 		}
 	}
+
 	if (!stream)
 		return -ENODEV;
-		
-	/* Decouple Stream */
+	
+	/* Decouple host and link DMA */
 	mask = 0x1 << stream->index;
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, mask, mask);
 
 	/* Allocate DMA Buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV_SG, &pci->dev, size, dmab);
-
 	if (ret < 0) {
-		dev_err(sdev->dev, " Mem alloc buffer for base fw failed: %x\n", ret);
+		dev_err(sdev->dev, " Memory alloc failed: %x\n", ret);
 		return ret;
 	}
 
 	stream->format_val = format;
 	stream->bufsize = size;
-	
-	/*Clear Stream Status*/
-	
+
+	/* Clear Stream Status */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
-	 			HDA_CL_DMA_SD_INT_MASK |\
-	 			HDA_SD_CTL_DMA_START, 0);
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset +\
-				HDA_ADSP_REG_CL_SD_STS,
-	 			HDA_CL_DMA_SD_INT_MASK, 
-	 			HDA_CL_DMA_SD_INT_MASK); /* to be sure */
-	
-	/*Stream Reset*/
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				0x1, 0x1);
+		HDA_CL_DMA_SD_INT_MASK | HDA_SD_CTL_DMA_START, 0);
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR,
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,
+	 	HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
+
+	/* Stream Reset */
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 0x1, 0x1);
 	do {
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
-		if( val & 0x1 )
+		if (val & 0x1)
 			break;
-	}while(--timeout);
-	
+	}while (--timeout);
+	if (timeout == 0) {
+		dev_err(sdev->dev, "Stream reset failed\n");
+		return -EINVAL;
+	}	
+
 	timeout = 300;
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				0x1, 0x0);
-	
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 0x1, 0x0);
 	/* Wait for hardware to report that stream is out of reset */
 	do {
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
-		if(!(val & 0x1)){
+		if (!(val & 0x1)) {
 			break;
 		}
-	}while(--timeout);
-	
-	if(stream->posbuf)
+	}while (--timeout);
+	if (timeout == 0) {
+		dev_err(sdev->dev, "Timeout waiting for stream reset \n");
+		return -EINVAL;
+	}
+
+	if (stream->posbuf)
 		*stream->posbuf = 0;
-	
+
 	/* Reset BDl Address */
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL, 
-				0x0);
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL, 0x0);
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU, 
-				0x0);
-				
-	/*Clear Stream Status*/
-	
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU, 0x0);
+			
+	/* Clear Stream Status */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
-	 			HDA_CL_DMA_SD_INT_MASK |\
-	 			HDA_SD_CTL_DMA_START, 0);
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset +\
-				HDA_ADSP_REG_CL_SD_STS,
-	 			HDA_CL_DMA_SD_INT_MASK, 
-	 			HDA_CL_DMA_SD_INT_MASK); /* to be sure */
-	
+	 	HDA_CL_DMA_SD_INT_MASK | HDA_SD_CTL_DMA_START, 0);
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, 
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,
+	 	HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK); 
+
 	stream->frags = 0;		
-	
+
 	bdl = (u32 *)stream->bdl.area;
-		
-	if((ret = setup_bdle(sdev, dmab, stream, &bdl, 0, size, 1) < 0)) {
+	
+	if ((ret = setup_bdle(sdev, dmab, stream, &bdl, 0, size, 1) < 0)) {
 		dev_dbg(sdev->dev, "set up bdle fail\n");
 		goto error;
 	}
-	
-	/* Set up Stream Descriptor for DMA */
-		
+
+	/* Set up Stream Descriptor for DMA */	
 	/* Program Stream Tag */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
-				HDA_CL_SD_CTL_STREAM_TAG_MASK, 
-				stream->stream_tag <<\
-				HDA_CL_SD_CTL_STREAM_TAG_SHIFT);
-				
+		HDA_CL_SD_CTL_STREAM_TAG_MASK, 
+		stream->stream_tag << HDA_CL_SD_CTL_STREAM_TAG_SHIFT);
+			
 	/* Program Cyclic Buffer Length */
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_CBL, 
-				stream->bufsize);
-	
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_CBL, stream->bufsize);
+
 	/* Program Stream Format */ 
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_FORMAT, 
-				0xffff, stream->format_val);
-	val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset + HDA_ADSP_REG_CL_SD_FORMAT);
-				
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_FORMAT, 
+		0xffff, stream->format_val);
+			
 	/* Program Last Valid Index */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_LVI, 
-				0xffff, (stream->frags - 1));
-	val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset + HDA_ADSP_REG_CL_SD_LVI);
-				
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_LVI, 
+		0xffff, (stream->frags - 1));
+			
 	/* Program BDL Address */
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL, 
-				(u32)stream->bdl.addr);
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPL, 
+		(u32)stream->bdl.addr);
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, 
-				stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU,
-				upper_32_bits(stream->bdl.addr));
-	
+		stream->sd_offset + HDA_ADSP_REG_CL_SD_BDLPU,
+		upper_32_bits(stream->bdl.addr));
+
 	/* Enable Position Buffer */
 
-	if(!(snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE) &\
-		HDA_ADSP_DPLBASE_ENABLE))
+	if (!(snd_sof_dsp_read(sdev, APL_HDA_BAR, 
+		HDA_ADSP_DPLBASE) & HDA_ADSP_DPLBASE_ENABLE))
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_ADSP_DPLBASE, 
-			(u32)hdev->posbuffer.addr |\
-			HDA_ADSP_DPLBASE_ENABLE);
-			
+			(u32)hdev->posbuffer.addr | HDA_ADSP_DPLBASE_ENABLE);
+		
 	/* Set Interrupt Enable bits */
 
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 
-				HDA_CL_DMA_SD_INT_MASK,
-				HDA_CL_DMA_SD_INT_MASK);
+		HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
 
-				
 	/* Read FIFOSIZE */
-	if(stream->direction == SNDRV_PCM_STREAM_PLAYBACK)
+	if (stream->direction == SNDRV_PCM_STREAM_PLAYBACK)
 		stream->fifo_size = (snd_sof_dsp_read(sdev, APL_HDA_BAR, 
 					stream->sd_offset + 
 					HDA_ADSP_REG_CL_SD_FIFOSIZE)
@@ -626,21 +525,6 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 error:
 	snd_dma_free_pages(dmab);
 	return ret;
-}
-
-void apl_cldma_do_irq(struct snd_sof_dev *sdev)
-{
-	u32 status;
-
-	status = snd_sof_dsp_read(sdev, APL_DSP_BAR, HDA_ADSP_REG_CL_SD_STS);
-
-//	if (status & SKL_CL_DMA_SD_INT_COMPLETE)
-//		ctx->cl_dev.wake_status = SKL_CL_DMA_BUF_COMPLETE;
-//	else
-//		ctx->cl_dev.wake_status = SKL_CL_DMA_ERR;
-
-	//ctx->cl_dev.wait_condition = true;
-	//wake_up(&ctx->cl_dev.wait_queue);
 }
 
 /*
@@ -669,7 +553,6 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 		fw_ready->inbox_offset, fw_ready->inbox_size);
 	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
 		fw_ready->outbox_offset, fw_ready->outbox_size);
-	
 	dev_info(sdev->dev, " Firmware info: vesion %d:%d build %d on %s:%s\n",
 		v->major, v->minor, v->build, v->date, v->time);
 
@@ -686,17 +569,12 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = (struct snd_sof_dev *) context;
 	int ret = IRQ_NONE;
-	
 
-	dev_dbg(sdev->dev, "in IPC interrupt handler %s\n", __func__);
-	
 	spin_lock(&sdev->spinlock);
 
 	/* store status */
 	sdev->irq_status = snd_sof_dsp_read(sdev, APL_DSP_BAR,
 		SKL_ADSP_REG_ADSPIS);
-
-	dev_dbg(sdev->dev, "DSP irq_handler status 0x%llx\n", sdev->irq_status);
 
 	/* invalid message ? */
 	if (sdev->irq_status == 0xffffffff)
@@ -704,24 +582,13 @@ static irqreturn_t apl_irq_handler(int irq, void *context)
 
 	/* IPC message ? */
 	if (sdev->irq_status & SKL_ADSPIS_IPC) {
-		apl_ipc_int_disable(sdev);
-		ret = IRQ_WAKE_THREAD;
-	}
-
-	/* code loader ? */
-	if (sdev->irq_status & SKL_ADSPIS_CL_DMA) {
-		dev_dbg(sdev->dev, "cl dma interrupt\n");
-		apl_cldma_int_disable(sdev);
+		snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
+			SKL_ADSP_REG_ADSPIC, SKL_ADSPIC_IPC, 0);
 		ret = IRQ_WAKE_THREAD;
 	}
 
 out:
-	// TODO: hack to disable IRQ at this point - fix
-//	if (ipc_irq_count++ > 20)
-//		snd_sof_dsp_write(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC, 0);
-
 	spin_unlock(&sdev->spinlock);
-	dev_dbg(sdev->dev, "returning from IPC interrupt handler %s\n", __func__);
 	return ret;
 }
 
@@ -731,12 +598,6 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 	u64 header = 0;
 	u32 hipcie, hipct, hipcte;
 	irqreturn_t ret = IRQ_NONE;
-	
-	dev_dbg(sdev->dev, "in IPC thread handler %s\n", __func__);
-	
-	/* code loader ? */
-	if (sdev->irq_status & SKL_ADSPIS_CL_DMA)
-		apl_cldma_do_irq(sdev);
 
 	/* Here we handle IPC interrupts only */
 	if (!(sdev->irq_status & SKL_ADSPIS_IPC))
@@ -748,16 +609,15 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 
 	hipcte = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCTE);
 
-	
-	/* reply message from DSP */
+	/* Reply message from DSP */
 	if (hipcie & SKL_ADSP_REG_HIPCIE_DONE) {
-		dev_dbg(sdev->dev, "handling reply message from DSP\n");
 		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
 			SKL_ADSP_REG_HIPCCTL, SKL_ADSP_REG_HIPCCTL_DONE, 0);
 
 		/* clear DONE bit - tell DSP we have completed the operation */
-		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCIE,
-			SKL_ADSP_REG_HIPCIE_DONE, SKL_ADSP_REG_HIPCIE_DONE);
+		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, 
+			SKL_ADSP_REG_HIPCIE, SKL_ADSP_REG_HIPCIE_DONE, 
+			SKL_ADSP_REG_HIPCIE_DONE);
 
 		/* unmask Done interrupt */
 		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
@@ -769,7 +629,6 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 
 	/* New message from DSP */
 	if (hipct & SKL_ADSP_REG_HIPCT_BUSY) {
-		dev_dbg(sdev->dev, "handling new message from DSP\n");
 		hipcte = snd_sof_dsp_read(sdev, APL_DSP_BAR,
 			SKL_ADSP_REG_HIPCTE);
 		header = hipct;
@@ -786,30 +645,28 @@ static irqreturn_t apl_irq_thread(int irq, void *context)
 			snd_sof_ipc_process_notification(sdev, header);
 		}
 
-		/* clear  busy interrupt */
-		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCT,
-			SKL_ADSP_REG_HIPCT_BUSY, SKL_ADSP_REG_HIPCT_BUSY);
+		/* clear busy interrupt */
+		snd_sof_dsp_update_bits_forced(sdev, APL_DSP_BAR, 
+			SKL_ADSP_REG_HIPCT, SKL_ADSP_REG_HIPCT_BUSY, 
+			SKL_ADSP_REG_HIPCT_BUSY);
 
 		ret = IRQ_HANDLED;
 	}
 
 	if (ret == IRQ_HANDLED) {
-		apl_ipc_int_enable(sdev);
+		snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC,
+			SKL_ADSPIC_IPC, SKL_ADSPIC_IPC);
 		/* continue to send any remaining messages... */
 		snd_sof_ipc_process_msgs(sdev);
 	}
-	dev_dbg(sdev->dev, "returning from IPC interrupt thread handler %s\n", __func__);
-	
-	if(sdev->code_loading)	{
+
+	if (sdev->code_loading)	{
 		sdev->code_loading = 0;
 		wake_up(&sdev->waitq);
 	}
-		
 
 	return ret;
 }
-
-//static int skl_irq_count = 0;
 
 static irqreturn_t skl_interrupt(int irq, void *context)
 {
@@ -819,35 +676,11 @@ static irqreturn_t skl_interrupt(int irq, void *context)
 	if (!pm_runtime_active(sdev->dev))
 		return IRQ_NONE;
 
-	dev_dbg(sdev->dev, "in HDA interrupt handler %s\n", __func__);
-
-	//spin_lock(&bus->reg_lock);
-
 	status = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS);
-	dev_dbg(sdev->dev, "HDA interrupt status 0x%x\n", status);
+
 	if (status == 0 || status == 0xffffffff) {
-		//spin_unlock(&bus->reg_lock);
 		return IRQ_NONE;
 	}
-
-	// TODO: hack to disable IRQ at this point - fix
-//	if (skl_irq_count++ > 10)
-//		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0);
-
-#if 0
-	//dev_dbg(sdev->dev, "intsts status is %8.8x\n",status); 
-	/* clear rirb int */
-	status = snd_sof_dsp_read(sdev, APL_HDA_BAR, RIRBSTS) & 0xff;
-	//dev_dbg(sdev->dev, "rirb status is %8.8x\n", status); 
-	if (status & RIRB_INT_MASK) {
-		if (status & RIRB_INT_RESPONSE)
-			snd_hdac_bus_update_rirb(bus);
-		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, RIRBSTS, RIRB_INT_MASK, RIRB_INT_MASK);
-	}
-#endif
-	//spin_unlock(&bus->reg_lock);
-	//dev_dbg(sdev->dev, "status is %8.8x\n",snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS)); 
-	dev_dbg(sdev->dev, "returning from HDA interrupt handler %s\n", __func__);
 
 	return status ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
@@ -859,9 +692,6 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 	u32 status = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_INTSTS);
 	u32 sd_status;
 	int i;
-	dev_dbg(sdev->dev, "in HDA interrupt thread handler %s\n", __func__);
-
-	dev_dbg(sdev->dev, "HDA threaded handler status 0x%x\n", status);
 
 	/* check playback streams */
 	for (i = 0; i < hdev->num_playback; i++) {
@@ -889,7 +719,7 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 			/* update buffer position to ALSA */
 			snd_pcm_period_elapsed(hdev->pstream[i].substream);
 		}
-		
+	
 	}
 
 	/* check capture streams */
@@ -918,10 +748,8 @@ static irqreturn_t skl_threaded_handler(int irq, void *context)
 			/* update buffer position to ALSA */
 			snd_pcm_period_elapsed(hdev->cstream[i].substream);
 		}
-		
+	
 	}
-
-	dev_dbg(sdev->dev, "retuning from HDA interrupt thread handler %s\n", __func__);
 
 	return IRQ_HANDLED;
 }
@@ -938,8 +766,8 @@ apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
 
 	/* set reset bits for cores */
 	snd_sof_dsp_update_bits_unlocked(sdev, APL_DSP_BAR,
-			SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CRST_MASK(core_mask),
-			SKL_ADSPCS_CRST_MASK(core_mask));
+		SKL_ADSP_REG_ADSPCS, SKL_ADSPCS_CRST_MASK(core_mask),
+		SKL_ADSPCS_CRST_MASK(core_mask));
 
 	/* poll with timeout to check if operation successful */
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
@@ -949,7 +777,8 @@ apl_dsp_core_reset_enter(struct snd_sof_dev *sdev, unsigned int core_mask)
 	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
 	if ((adspcs & SKL_ADSPCS_CRST_MASK(core_mask)) !=
 		SKL_ADSPCS_CRST_MASK(core_mask)) {
-		dev_err(sdev->dev, "reset enter failed: core_mask %x adspcs 0x%x\n", 
+		dev_err(sdev->dev, 
+			"reset enter failed: core_mask %x adspcs 0x%x\n", 
 			core_mask, adspcs);
 		ret = -EIO;
 	}
@@ -973,15 +802,14 @@ static int apl_dsp_core_reset_leave(struct snd_sof_dev *sdev,
 
 	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
 	if ((adspcs & SKL_ADSPCS_CRST_MASK(core_mask)) != 0) {
-		dev_err(sdev->dev, "reset leave failed: core_mask %x adspcs 0x%x\n",
+		dev_err(sdev->dev, 
+			"reset leave failed: core_mask %x adspcs 0x%x\n",
 			core_mask, adspcs);
 		ret = -EIO;
 	}
 
 	return ret;
 }
-
-
 
 static int apl_reset_core(struct snd_sof_dev *sdev, unsigned int core_mask)
 {
@@ -1029,8 +857,8 @@ static int apl_core_power_up(struct snd_sof_dev *sdev, unsigned int core_mask)
 
 	/* update bits */
 	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
-			SKL_ADSPCS_SPA_MASK(core_mask),
-			SKL_ADSPCS_SPA_MASK(core_mask));
+		SKL_ADSPCS_SPA_MASK(core_mask),
+		SKL_ADSPCS_SPA_MASK(core_mask));
 
 	/* poll with timeout to check if operation successful */
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS,
@@ -1043,7 +871,8 @@ static int apl_core_power_up(struct snd_sof_dev *sdev, unsigned int core_mask)
 	adspcs = snd_sof_dsp_read(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPCS);
 	if ((adspcs & SKL_ADSPCS_CPA_MASK(core_mask)) !=
 		SKL_ADSPCS_CPA_MASK(core_mask)) {
-		dev_err(sdev->dev, "error: power up core failed core_mask %xadspcs 0x%x	\n",
+		dev_err(sdev->dev, 
+			"error: power up core failed core_mask %xadspcs 0x%x\n",
 			core_mask, adspcs);
 		ret = -EIO;
 	}
@@ -1064,7 +893,6 @@ static int apl_core_power_down(struct snd_sof_dev *sdev, unsigned int core_mask)
 }
 
 #if 0
-
 static int apl_set_dsp_D0(struct snd_sof_dev *sdev, unsigned int core_id)
 {
 	unsigned int core_mask = SKL_DSP_CORE_MASK(core_id);
@@ -1124,7 +952,6 @@ static int apl_enable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
 
 	return apl_run_core(sdev, core_mask);
 }
-
 #endif
 
 static int apl_disable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
@@ -1187,7 +1014,6 @@ static bool apl_is_dsp_busy(struct snd_sof_dev *sdev)
 
 static int apl_tx_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 {
-
 	return 0;
 }
 
@@ -1211,6 +1037,7 @@ static int apl_link_reset(struct snd_sof_dev *sdev)
 		gctl = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL);
 		if ((gctl & HDA_GCTL_RESET) == 0)
 			goto clear;
+
 	}
 
 	/* reset failed */
@@ -1219,11 +1046,11 @@ static int apl_link_reset(struct snd_sof_dev *sdev)
 	return -EIO;
 
 clear:
-	/*delay for >= 100us for codec PLL to settle per spec
+	/* delay for >= 100us for codec PLL to settle per spec
 	 * Rev 0.9 section 5.5.1
 	 */		
 	usleep_range(500, 1000);
-	
+
 	/* now take controller out of reset */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_RESET,
 		HDA_GCTL_RESET);
@@ -1234,10 +1061,13 @@ clear:
 		gctl = snd_sof_dsp_read(sdev, APL_HDA_BAR, HDA_GCTL);
 		usleep_range(500, 1000);
 		if ((gctl & HDA_GCTL_RESET) == 1) {
-			/* Brent Chartrand said to wait >= 540us for codecs to initialize */
+			/* Brent Chartrand said to wait >= 540us for 
+			 * codecs to initialize 
+			 */
 			usleep_range(1000, 1200);
 			/* Accept unsolicited responses */
-        		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, HDA_GCTL_UNSOL, HDA_GCTL_UNSOL);
+        		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_GCTL, 
+        			HDA_GCTL_UNSOL, HDA_GCTL_UNSOL);
 			return 0;
 		}
 	}
@@ -1292,7 +1122,6 @@ static int apl_get_caps(struct snd_sof_dev *sdev)
 		offset = cap & HDA_CAP_NEXT_MASK;
 	} while (count++ <= HDA_MAX_CAPS && offset);
 
-
 	return ret;
 }
 
@@ -1311,7 +1140,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 	num_capture = (gcap >> 8) & 0x0f;
 	num_playback = (gcap >> 12) & 0x0f;
 	num_total = num_playback + num_capture;
-	
+
 	hdev->num_capture = num_capture;
 	hdev->num_playback = num_playback;
 
@@ -1323,41 +1152,39 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 			num_playback);
 		return -EINVAL;
 	}
+
 	if (num_capture >= SOF_HDA_CAPTURE_STREAMS) {
 		dev_err(sdev->dev, "error: too many capture streams %d\n",
 			num_playback);
 		return -EINVAL;
 	}
-	
+
 	/* Allocate memory for the position buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 8, 
-					&hdev->posbuffer);
-	if(ret < 0) {
+		&hdev->posbuffer);
+	if (ret < 0) {
 		dev_err(sdev->dev, "Failed posbuffer DMA alloc\n");
 		return -ENOMEM;
 	}
-	
-	/*Allocate memory for ring buffer */
+
+	/* Allocate memory for ring buffer */
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 
-					PAGE_SIZE, 
-					&hdev->ringbuffer);
-	if(ret < 0) {
+		PAGE_SIZE, &hdev->ringbuffer);
+	if (ret < 0) {
 		dev_err(sdev->dev, "Failed ringbuffer DMA alloc\n");
 		return -ENOMEM;
 	}
-	
-	
-				
+
 	/* create capture streams */
 	for (i = 0; i < num_capture; i++) {
+	
 		stream = &hdev->cstream[i];
 
 		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
-				HDA_PPHC_INTERVAL * i;
+			HDA_PPHC_INTERVAL * i;
 
 		stream->pplc_addr = sdev->bar[APL_PP_BAR] + HDA_PPLC_BASE +
-				HDA_PPLC_MULTI * num_total +
-				HDA_PPLC_INTERVAL * i;
+			HDA_PPLC_MULTI * num_total + HDA_PPLC_INTERVAL * i;
 
 		/* do we support SPIB */
 		if (sdev->bar[APL_SPIB_BAR]) {
@@ -1374,7 +1201,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		if (sdev->bar[APL_DRSM_BAR])
 			stream->drsm_addr = sdev->bar[APL_DRSM_BAR] +
 				HDA_DRSM_BASE + HDA_DRSM_INTERVAL * i;
-		
+
 		stream->sd_offset = 0x20 * i + HDA_ADSP_LOADER_BASE;
 		stream->sd_addr = sdev->bar[APL_HDA_BAR] + 
 					stream->sd_offset;
@@ -1384,30 +1211,30 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_CAPTURE;
 		stream->index = i;
-		
+
 		/* Alloc Memory for Stream BDL */ 
 		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, 
-						BDL_SIZE, &stream->bdl);
-		if(ret < 0) {
+			BDL_SIZE, &stream->bdl);
+		if (ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
 			return -ENOMEM;
 		}
 		stream->posbuf = (__le32 *)(hdev->posbuffer.area +
-				(stream->index) * 8);
-	
+			(stream->index) * 8);
+
 	}
 
 	/* create playback streams */
 	for (i = num_capture; i < num_total; i++) {
+
 		stream = &hdev->pstream[i - num_capture];
 
 		/* we always have DSP support */
 		stream->pphc_addr = sdev->bar[APL_PP_BAR] + HDA_PPHC_BASE +
-				HDA_PPHC_INTERVAL * i;
+			HDA_PPHC_INTERVAL * i;
 
 		stream->pplc_addr = sdev->bar[APL_PP_BAR] + HDA_PPLC_BASE +
-				HDA_PPLC_MULTI * num_total +
-				HDA_PPLC_INTERVAL * i;
+			HDA_PPLC_MULTI * num_total + HDA_PPLC_INTERVAL * i;
 
 		/* do we support SPIB */
 		if (sdev->bar[APL_SPIB_BAR]) {
@@ -1424,7 +1251,7 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		if (sdev->bar[APL_DRSM_BAR])
 			stream->drsm_addr = sdev->bar[APL_DRSM_BAR] +
 				HDA_DRSM_BASE + HDA_DRSM_INTERVAL * i;
-				
+			
 		stream->sd_offset = 0x20 * i + HDA_ADSP_LOADER_BASE;
 		stream->sd_addr = sdev->bar[APL_HDA_BAR] + 
 					stream->sd_offset;
@@ -1433,19 +1260,20 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
 		stream->running = false;
 		stream->direction = SNDRV_PCM_STREAM_PLAYBACK;
 		stream->index = i;
-		
+	
 		/* Alloc Memory for Stream BDL */ 
-		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev, BDL_SIZE, 
-						&stream->bdl);
-		if(ret < 0) {
+		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci->dev,
+			BDL_SIZE, &stream->bdl);
+		if (ret < 0) {
 			dev_err(sdev->dev, "Failed Stream BDL DMA alloc\n");
 			return -ENOMEM;
 		}				
-		
-		stream->posbuf = (__le32 *)(hdev->posbuffer.area +
-				 (stream->index) * 8);
-	}
 	
+		stream->posbuf = (__le32 *)(hdev->posbuffer.area +
+			(stream->index) * 8);
+		
+	}
+
 	return 0;
 }
 
@@ -1455,20 +1283,20 @@ static int apl_stream_init(struct snd_sof_dev *sdev)
  * reset/stall and then turn it off
  */
 static int apl_init(struct snd_sof_dev *sdev,
-			const void *fwdata, u32 fwsize)
+	const void *fwdata, u32 fwsize)
 {
 	int stream_tag, ret, i;
 	u32 hipcie;
 
 	// Prepare DMA for code loader use
 	stream_tag = apl_prepare(sdev, 0x40, fwsize, &sdev->dmab);
-	
+
 	if (stream_tag <= 0) {
 		dev_err(sdev->dev, "Failed to prepare DMA FW loading err: %x\n",
-				stream_tag);
+			stream_tag);
 		return stream_tag;
 	}
- 
+
 	memcpy(sdev->dmab.area, fwdata, fwsize);
 
 	/* Step 1: Power up core 0 and core 1 */
@@ -1500,9 +1328,9 @@ static int apl_init(struct snd_sof_dev *sdev,
 
 		if (hipcie & SKL_ADSP_REG_HIPCIE_DONE) {
 			snd_sof_dsp_update_bits(sdev, APL_DSP_BAR,
-					SKL_ADSP_REG_HIPCIE,
-					SKL_ADSP_REG_HIPCIE_DONE,
-					SKL_ADSP_REG_HIPCIE_DONE);
+				SKL_ADSP_REG_HIPCIE,
+				SKL_ADSP_REG_HIPCIE_DONE,
+				SKL_ADSP_REG_HIPCIE_DONE);
 			goto step5;
 		}
 		mdelay(1);
@@ -1521,28 +1349,23 @@ step5:
 	}
 
 	/* Step 6: Enable Interrupt */
-	apl_ipc_int_enable(sdev);
-	apl_ipc_op_int_enable(sdev);
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_ADSPIC,
+		SKL_ADSPIC_IPC, SKL_ADSPIC_IPC);
 	
+	/* enable IPC DONE interrupt */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
+		SKL_ADSP_REG_HIPCCTL_DONE, SKL_ADSP_REG_HIPCCTL_DONE);
+
+	/* Enable IPC BUSY interrupt */
+	snd_sof_dsp_update_bits(sdev, APL_DSP_BAR, SKL_ADSP_REG_HIPCCTL,
+		SKL_ADSP_REG_HIPCCTL_BUSY, SKL_ADSP_REG_HIPCCTL_BUSY);
+
 	/* Step 7: Wait for ROM init */
 	ret = snd_sof_dsp_register_poll(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS, 
-					SKL_FW_STS_MASK, 
-					SKL_FW_INIT, BXT_INIT_TIMEOUT) ;
-	/*for (i = BXT_INIT_TIMEOUT; i > 0; i--) {
-
-		status = snd_sof_dsp_read(sdev, APL_DSP_BAR, BXT_ADSP_FW_STATUS)
-		;
-
-		if ((status & SKL_FW_STS_MASK) == SKL_FW_INIT) {
-			dev_info(sdev->dev, "ROM loaded, continue FW loading\n")
-			;
-			goto out;
-		}
-		mdelay(1);
-	}*/
-	if(ret >= 0)
+		SKL_FW_STS_MASK, SKL_FW_INIT, BXT_INIT_TIMEOUT) ;
+	if (ret >= 0)
 		goto out;
-		
+	
 	ret = -EIO;
 
 err:
@@ -1550,6 +1373,7 @@ err:
 	//sdev->dsp_ops.cleanup(sdev->dev, &sdev->dmab, stream_tag);
 	apl_disable_core(sdev, SKL_DSP_CORE_MASK(0) | SKL_DSP_CORE_MASK(1));
 	return ret;
+
 out:
 	return stream_tag;
 }
@@ -1561,42 +1385,27 @@ out:
 int apl_load_firmware(struct snd_sof_dev *sdev, 
 	const struct firmware *fw)
 {
-	int ret, stream_tag;
 	struct snd_sof_pdata *plat_data = dev_get_platdata(sdev->dev);
-	struct skl_ext_manifest_hdr *hdr;
 	struct firmware stripped_firmware;
-	
+	int ret, stream_tag;
+
 	/* set code loading condition to true */
 	sdev->code_loading = 1;
 		
 	ret = request_firmware(&plat_data->fw, 
 		plat_data->machine->fw_filename, sdev->dev);
+
 	if (ret < 0) {
 		dev_err(sdev->dev, "Request firmware failed %d\n", ret);
 		return -EINVAL;
 	}
-	dev_dbg(sdev->dev, "request firmware success\n");
 
 	if (plat_data->fw == NULL)
 		return -EINVAL;
-		
-	if (fw->size < sizeof(hdr)) {
-                dev_dbg(sdev->dev, "%s: Firmware file small, no hdr\n", __func__);
-                return -EINVAL;
-        }
-        /*TODO: No need for stripping header with SOF */
-        
-        stripped_firmware.data = plat_data->fw->data;
-        stripped_firmware.size = plat_data->fw->size; 
 
-	hdr = (struct skl_ext_manifest_hdr *)stripped_firmware.data;
+	stripped_firmware.data = plat_data->fw->data;
+	stripped_firmware.size = plat_data->fw->size; 
 
-	if (hdr->id == SKL_EXT_MANIFEST_HEADER_MAGIC) {
-                stripped_firmware.size -= hdr->len;
-                stripped_firmware.data += hdr->len;
-        }
-
-	
 	stream_tag = apl_init(sdev, stripped_firmware.data, 
 		stripped_firmware.size);
 
@@ -1617,26 +1426,27 @@ int apl_load_firmware(struct snd_sof_dev *sdev,
 			goto irq_err;
 		}
 	}
-	
+
 	/* At this point DSP ROM has been initialized and should be ready for 
-	 code loading and firmware boot */
+	 * code loading and firmware boot 
+	 */
 	ret = apl_transfer_fw(sdev, stream_tag);
-	
-	if(ret < 0) {
+	if (ret < 0) {
 		dev_err(sdev->dev, "Load FW failed\n");
 		goto irq_err;
 	} 
+
 	dev_dbg(sdev->dev, "Firmware download successful\n");
 	return ret;
 
 irq_err:
+	apl_dump(sdev, SOF_DBG_REGS | SOF_DBG_PCI);
 	free_irq(sdev->ipc_irq, sdev);
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
 	dev_err(sdev->dev, "Load FW failed\n");
 	return ret;
-
 }
 
 /*
@@ -1686,21 +1496,21 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		dma_set_mask(&pci->dev, DMA_BIT_MASK(32));
 		dma_set_coherent_mask(&pci->dev, DMA_BIT_MASK(32));
 	}
-	
+
 	/* get controller capabilities */
 	ret = apl_get_caps(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to find DSP capability\n");
 		goto irq_err;
 	}
-	
+
 	/* init streams */
 	ret = apl_stream_init(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to init streams\n");
 		goto irq_err;
 	}
-		
+	
 	/*
 	 * Clear bits 0-2 of PCI register TCSEL (at offset 0x44)
 	 * TCSEL == Traffic Class Select Register, which sets PCI express QOS
@@ -1718,39 +1528,44 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	snd_sof_pci_update_bits(sdev, PCI_CGCTL,
 		PCI_CGCTL_MISCBDCGE_MASK, 0);
 
-	/*Clear WAKESTS*/
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_WAKESTS, HDA_WAKESTS_INT_MASK, HDA_WAKESTS_INT_MASK);
-	
-	ret = apl_link_reset(sdev);
+	/* Clear WAKESTS */
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_WAKESTS, 
+		HDA_WAKESTS_INT_MASK, HDA_WAKESTS_INT_MASK);
 
+	/* Reset HDA Controller */
+	ret = apl_link_reset(sdev);
 	if (ret < 0) {
 		dev_err(&pci->dev, "error: failed to reset HDA controller\n");
 		goto err;
 	}
 
-	for( i = 0 ; i < hdev->num_capture ; i++ ) {
+	/* Clear Stream status */
+	for ( i = 0 ; i < hdev->num_capture ; i++ ) {
 		stream = &hdev->cstream[i];
-		if(stream)
-			snd_sof_dsp_update_bits(sdev, APL_HDA_BAR,\
-			stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,\
-			HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
+		if (stream)
+			snd_sof_dsp_update_bits(sdev, APL_HDA_BAR,
+				stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,
+				HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
 	} 
-	for( i = 0 ; i < hdev->num_playback ; i++ ) {
+	for ( i = 0 ; i < hdev->num_playback ; i++ ) {
 		stream = &hdev->pstream[i];
-		if(stream)
-			snd_sof_dsp_update_bits(sdev, APL_HDA_BAR,\
-			stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,\
-			HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
+		if (stream)
+			snd_sof_dsp_update_bits(sdev, APL_HDA_BAR,
+				stream->sd_offset + HDA_ADSP_REG_CL_SD_STS,
+				HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
 	} 
-	
-	/*Clear WAKESTS*/
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_WAKESTS, HDA_WAKESTS_INT_MASK, HDA_WAKESTS_INT_MASK);
-	
-	/*Clear RIRBSTS */
-	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, RIRBSTS, RIRB_INT_MASK, RIRB_INT_MASK);
-	
-	/*Clear INTSTS */
-	snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTSTS, HDA_INT_CTRL_EN | HDA_INT_ALL_STREAM);	
+
+	/* Clear WAKESTS */
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_WAKESTS, 
+		HDA_WAKESTS_INT_MASK, HDA_WAKESTS_INT_MASK);
+
+	/* Clear RIRBSTS */
+	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, RIRBSTS, RIRB_INT_MASK, 
+		RIRB_INT_MASK);
+
+	/* Clear INTSTS */
+	snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTSTS, 
+		HDA_INT_CTRL_EN | HDA_INT_ALL_STREAM);	
 
 	/* enable CIE and GIE interrupts */
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
@@ -1758,12 +1573,8 @@ static int apl_probe(struct snd_sof_dev *sdev)
 		HDA_INT_CTRL_EN | HDA_INT_GLOBAL_EN);
 
 	/* register our IRQ */
-	
 	ret = request_threaded_irq(sdev->pci->irq, skl_interrupt,
-			skl_threaded_handler,
-			IRQF_SHARED,
-			"AudioHDA", sdev);
-
+		skl_threaded_handler, IRQF_SHARED, "AudioHDA", sdev);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to register HDA IRQ %d\n",
 			sdev->ipc_irq);
@@ -1772,11 +1583,9 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	sdev->hda.irq = pci->irq;
 	
 	sdev->ipc_irq = pci->irq;
-
 	dev_dbg(sdev->dev, "using PCI IRQ %d\n", sdev->ipc_irq);
 	ret = request_threaded_irq(sdev->ipc_irq, apl_irq_handler,
 		apl_irq_thread, IRQF_SHARED, "AudioDSP", sdev);
-
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to register PCI IRQ %d\n",
 			sdev->ipc_irq);
@@ -1796,10 +1605,10 @@ static int apl_probe(struct snd_sof_dev *sdev)
 	/* enable DSP IRQ */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL, 
 		HDA_PPCTL_PIE, HDA_PPCTL_PIE);
-		
+	
 	/* Inititalize waitq for code loading */
 	init_waitqueue_head(&sdev->waitq);
-	
+
 	return 0;		
 
 irq_err:
@@ -1808,7 +1617,6 @@ err:
 	/* disable DSP */
 	snd_sof_dsp_update_bits(sdev, APL_PP_BAR, HDA_REG_PP_PPCTL,
 		HDA_PPCTL_GPROCEN, 0);
-
 	return ret;
 }
 
