@@ -88,7 +88,7 @@ static int sof_control_load_volume(struct snd_soc_component *scomp,
 
 	/* init the volume control IPC */
 	v.comp.hdr.size = sizeof(v);
-	v.comp.hdr.cmd = SOF_IPC_GLB_COMP_MSG | SOF_IPC_TPLG_COMP_NEW;
+	v.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	v.comp.id = scontrol->comp_id = mc->channel[0].reg;
 	v.comp.size = sizeof(v.comp);
 	v.comp.type = SOF_COMP_VOLUME;
@@ -210,6 +210,41 @@ static int sof_connect_dai_widget(struct snd_soc_component *scomp,
 	return 0;
 }
 
+#if 0
+/* generic DAI component */
+struct sof_ipc_comp_dai {
+	struct sof_ipc_comp comp;
+	struct sof_ipc_pcm_comp pcm;
+	enum sof_ipc_stream_direction direction;
+	uint32_t index;
+	enum sof_ipc_dai_type type;
+	uint32_t dmac_id;
+	uint32_t dmac_chan;
+	uint32_t dmac_config; /* DMA engine specific */
+}  __attribute__((packed));
+#endif
+
+static int sof_widget_load_dai(struct snd_soc_component *scomp,
+	struct snd_sof_widget *swidget, struct snd_soc_dapm_widget *w,
+	struct snd_soc_tplg_dapm_widget *tw, struct sof_ipc_comp_reply *r)
+{
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct sof_ipc_comp_dai dai;
+
+	/* configure dai IPC message */
+	dai.comp.hdr.size = sizeof(dai.comp.hdr);
+	dai.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
+	dai.comp.id = swidget->comp_id ;
+	dai.comp.size = sizeof(dai.comp);
+	dai.comp.type = SOF_COMP_DAI;
+	//dai.comp.
+
+	/* get the rest fromprivate data i.e. tuples */
+
+	return sof_ipc_tx_message_wait(sdev->ipc, 
+		dai.comp.hdr.cmd, &dai, sizeof(dai), r, sizeof(*r));
+}
+
 static int sof_widget_load(struct snd_soc_component *scomp,
 	struct snd_soc_dapm_widget *w,
 	struct snd_soc_tplg_dapm_widget *tw)
@@ -223,21 +258,40 @@ static int sof_widget_ready(struct snd_soc_component *scomp,
 	struct snd_soc_tplg_dapm_widget *tw)
 {
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
+	struct snd_sof_widget *swidget;
+	struct sof_ipc_comp_reply reply;
+	int ret = 0;
 
 	dev_dbg(sdev->dev, "tplg: ready widget id %d name : %s stream %s\n",
 		tw->id, tw->name, tw->sname ? tw->sname : "none");
+
+	swidget = kzalloc(sizeof(*swidget), GFP_KERNEL);
+	if (swidget == NULL)
+		return -ENOMEM;
+
+	swidget->sdev = sdev;
+	swidget->widget = w;
+	swidget->comp_id = w->reg;
+	w->dobj.private = swidget;
+	mutex_init(&swidget->mutex);
+	list_add(&swidget->list, &sdev->widget_list);
+
 
 	/* handle any special case widgets */
 	switch (w->id) {
 	case snd_soc_dapm_dai_in:
 	case snd_soc_dapm_dai_out:
-		sof_connect_dai_widget(scomp, w, tw);
+		ret = sof_widget_load_dai(scomp, swidget, w, tw, &reply);
+		if (ret == 0)
+			sof_connect_dai_widget(scomp, w, tw);
 		break;
 	default:
 		break;
 	}
 
-	return 0;
+	/* check IPC return value */
+
+	return ret;
 }
 
 static int sof_widget_unload(struct snd_soc_component *scomp,
@@ -245,6 +299,7 @@ static int sof_widget_unload(struct snd_soc_component *scomp,
 {
 	return 0;
 }
+
 
 /* FE DAI - used for any driver specific init */
 static int sof_dai_load(struct snd_soc_component *scomp,

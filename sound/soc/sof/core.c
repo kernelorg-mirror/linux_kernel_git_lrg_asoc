@@ -97,6 +97,7 @@ static int sof_probe(struct platform_device *pdev)
 	sdev->pdata = plat_data;
 	INIT_LIST_HEAD(&sdev->pcm_list);
 	INIT_LIST_HEAD(&sdev->kcontrol_list);
+	INIT_LIST_HEAD(&sdev->widget_list);
 	dev_set_drvdata(&pdev->dev, sdev);
 
 	/* set up platform driver */

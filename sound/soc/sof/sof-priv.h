@@ -191,6 +191,15 @@ struct snd_sof_control {
 	struct list_head list;	/* list in sdev control list */
 };
 
+struct snd_sof_widget {
+	struct snd_sof_dev *sdev;
+	int comp_id;
+
+	struct snd_soc_dapm_widget *widget;
+	struct mutex mutex;
+	struct list_head list;	/* list in sdev widget list */
+};
+
 struct snd_sof_ipc_msg {
 	struct list_head list;
 
@@ -317,6 +326,7 @@ struct snd_sof_dev {
 	struct snd_soc_tplg_ops *tplg_ops;
 	struct list_head pcm_list;
 	struct list_head kcontrol_list;
+	struct list_head widget_list;
 	struct snd_soc_component *component;
 
 	/* IPC timeouts in ms */
