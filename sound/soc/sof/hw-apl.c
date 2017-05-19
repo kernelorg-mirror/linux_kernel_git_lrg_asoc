@@ -309,12 +309,16 @@ static int apl_cl_trigger(struct snd_sof_dev *sdev,
 static int apl_trigger(struct snd_sof_dev *sdev, 
 	struct snd_sof_hda_stream *stream, int cmd)
 {	
-	int ret;
+	int ret = 0;
 
+	/* code loader is special case that reuses stream ops */
 	if (sdev->code_loading && cmd == SNDRV_PCM_TRIGGER_START)
 		return apl_cl_trigger(sdev, stream);
 
+	/* cmd must be for audio stream */
 	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 	case SNDRV_PCM_TRIGGER_START:
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, HDA_INTCTL,
 			1 << stream->index, 1 << stream->index);
@@ -324,9 +328,9 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 			HDA_SD_CTL_DMA_START | HDA_CL_DMA_SD_INT_MASK);
 
 		stream->running = true;
-		ret = 0;
 		break;
-
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_STOP:
 		snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset,
 			HDA_SD_CTL_DMA_START | HDA_CL_DMA_SD_INT_MASK, 0x0);
@@ -335,23 +339,7 @@ static int apl_trigger(struct snd_sof_dev *sdev,
 			HDA_ADSP_REG_CL_SD_STS, HDA_CL_DMA_SD_INT_MASK); 
 
 		stream->running = false; 
-
 		snd_sof_dsp_write(sdev, APL_HDA_BAR, HDA_INTCTL, 0x0);
-		ret = 0;
-		break;
-
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		break;
-
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		break;
-
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-		break;
-
-	case SNDRV_PCM_TRIGGER_RESUME:
-		break;
-
 	default:
 		dev_err(sdev->dev, "error: unknown command: %d\n", cmd);
 		ret = -EINVAL;
@@ -408,7 +396,7 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
 
 /*
  * set up Buffer Descriptor List (BDL) for host memory transfer
- * BDL describes the location of the individual buffers
+ * BDL describes the location of the individual buffers and is little endian.
  */
 static int apl_cl_setup_bdl(struct snd_sof_dev *sdev, 
 	struct snd_dma_buffer *dmab,
@@ -422,7 +410,7 @@ static int apl_cl_setup_bdl(struct snd_sof_dev *sdev,
 		int chunk;
 
 		if (stream->frags >= APL_MAX_BDL_ENTRIES) {
-			dev_err(sdev->dev, "stream frags exceeded max BDL entries\n");
+			dev_err(sdev->dev, "error: stream frags exceeded\n");
 			return -EINVAL;
 		}
 
@@ -446,6 +434,7 @@ static int apl_cl_setup_bdl(struct snd_sof_dev *sdev,
 		stream->frags++;
 		offset += chunk;
 	}
+
 	*bdlp = bdl;
 	return offset;
 }
@@ -513,7 +502,7 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
 		if (val & 0x1)
 			break;
-	}while (--timeout);
+	} while (--timeout);
 	if (timeout == 0) {
 		dev_err(sdev->dev, "error: stream reset failed\n");
 		return -EINVAL;
@@ -521,14 +510,15 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 
 	timeout = APL_STREAM_RESET_TIMEOUT;
 	snd_sof_dsp_update_bits(sdev, APL_HDA_BAR, stream->sd_offset, 0x1, 0x0);
-	udelay(3);
+
 	/* wait for hardware to report that stream is out of reset */
+	udelay(3);
 	do {
 		val = snd_sof_dsp_read(sdev, APL_HDA_BAR, stream->sd_offset);
 		if ((val & 0x1) == 0) {
 			break;
 		}
-	}while (--timeout);
+	} while (--timeout);
 	if (timeout == 0) {
 		dev_err(sdev->dev, "error: timeout waiting for stream reset\n");
 		return -EINVAL;
@@ -598,12 +588,12 @@ static int apl_prepare(struct snd_sof_dev *sdev, unsigned int format,
 		HDA_CL_DMA_SD_INT_MASK, HDA_CL_DMA_SD_INT_MASK);
 
 	/* read FIFO size */
-	if (stream->direction == SNDRV_PCM_STREAM_PLAYBACK)
-		stream->fifo_size = (snd_sof_dsp_read(sdev, APL_HDA_BAR, 
-					stream->sd_offset + 
-					HDA_ADSP_REG_CL_SD_FIFOSIZE)
-					& 0xffff) + 1;
-	else
+	if (stream->direction == SNDRV_PCM_STREAM_PLAYBACK) {
+		stream->fifo_size = snd_sof_dsp_read(sdev, APL_HDA_BAR, 
+			stream->sd_offset + HDA_ADSP_REG_CL_SD_FIFOSIZE)
+			& 0xffff;
+		stream->fifo_size += 1;
+	} else
 		stream->fifo_size = 0;
 
 	apl_spib_config(sdev, stream, APL_SPIB_ENABLE, size);
@@ -646,8 +636,6 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 
 	return 0;
 }
-
-//static int ipc_irq_count = 0;
 
 /*
  * IPC Doorbell IRQ handler and thread.
@@ -1058,14 +1046,14 @@ static int apl_disable_core(struct snd_sof_dev *sdev, unsigned int core_mask)
 	ret = apl_core_power_down(sdev, core_mask);
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: dsp core power down fail mask %x: %d\n",
-							core_mask, ret);
+			core_mask, ret);
 		return ret;
 	}
 
 	/* make sure we are in OFF state */
 	if (is_apl_core_enable(sdev, core_mask)) {
 		dev_err(sdev->dev, "error: dsp core disable fail mask %x: %d\n",
-							core_mask, ret);
+			core_mask, ret);
 		ret = -EIO;
 	}
 
@@ -1168,8 +1156,8 @@ static int apl_get_caps(struct snd_sof_dev *sdev)
 	do {
 		cap = snd_sof_dsp_read(sdev, APL_HDA_BAR, offset);
 
-		dev_dbg(sdev->dev, "checking for capabilities at offset 0x%x\n"
-			,offset & HDA_CAP_NEXT_MASK);
+		dev_dbg(sdev->dev, "checking for capabilities at offset 0x%x\n",
+			offset & HDA_CAP_NEXT_MASK);
 
 		feature = (cap & HDA_CAP_ID_MASK) >> HDA_CAP_ID_OFF;
 
