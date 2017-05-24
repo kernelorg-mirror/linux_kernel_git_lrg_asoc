@@ -511,6 +511,7 @@ enum snd_soc_dapm_type {
 	snd_soc_dapm_dai_link,		/* link between two DAI structures */
 	snd_soc_dapm_kcontrol,		/* Auto-disabled kcontrol */
 	snd_soc_dapm_buffer,		/* DSP/CODEC internal buffer */
+	snd_soc_dapm_effect,		/* DSP/CODEC effect component */
 };
 
 enum snd_soc_dapm_subclass {

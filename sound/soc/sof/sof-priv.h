@@ -304,6 +304,7 @@ struct snd_sof_dev {
 	struct snd_sof_mailbox outbox;
 	u64 irq_status;
 	int ipc_irq;
+	u32 next_comp_id; /* monotonic - reset during S3 */
 
 	/* front end - platform specific */
 	union {

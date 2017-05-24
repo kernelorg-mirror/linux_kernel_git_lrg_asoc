@@ -211,19 +211,12 @@ EXPORT_SYMBOL(snd_sof_load_firmware_memcpy);
 
 int snd_sof_load_firmware(struct snd_sof_dev *sdev,
 	const struct firmware *fw)
-{
-	int (*load_firmware)(struct snd_sof_dev *sof_dev,
-		const struct firmware *fw);
-	int ret;
-	
+{	
 	dev_dbg(sdev->dev, "loading firmware\n");
-	load_firmware = sdev->ops->load_firmware;
-	if (load_firmware == NULL)
-		return -EINVAL;
-	dev_dbg(sdev->dev, "calling apl_load_firmware\n");
-	ret = load_firmware(sdev, fw);
 
-	return ret;
+	if (sdev->ops->load_firmware)
+		return sdev->ops->load_firmware(sdev, fw);
+	return 0;
 }
 EXPORT_SYMBOL(snd_sof_load_firmware);
 

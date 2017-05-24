@@ -164,6 +164,9 @@
 // TODO: remove
 #define IPC_INTL_STATUS_MASK			(0x3 << 30)
 
+/* maximum message size for mailbox Tx/Tx */
+#define SOF_IPC_MSG_MAX_SIZE			128
+
 
 /*
  * Command Header - Header for all IPC. Identifies IPC message.
@@ -419,25 +422,6 @@ struct sof_ipc_ctrl_get_values {
 } __attribute__((packed));
 
 /*
- * Component Buffers
- */
-
-struct sof_ipc_period {
-	uint32_t size;		/* period size in bytes */
-	uint32_t number;	/* number of periods */
-	uint32_t preload_count;	/* how many periods to preload */
-} __attribute__((packed));
-
-/* create new component buffer - SOF_IPC_TPLG_BUFFER_NEW */
-struct sof_ipc_buffer {
-	struct sof_ipc_hdr hdr;
-	uint32_t buffer_id;
-	uint32_t size;		/* buffer size in bytes */
-	struct sof_ipc_period sink_period;
-	struct sof_ipc_period source_period;
-} __attribute__((packed));
-
-/*
  * Component
  */
 
@@ -455,7 +439,33 @@ enum sof_comp_type {
 	SOF_COMP_SPLITTER,
 	SOF_COMP_TONE,
 	SOF_COMP_SWITCH,
+	SOF_COMP_BUFFER,
 };
+
+/* create new generic component - SOF_IPC_TPLG_COMP_NEW */
+struct sof_ipc_comp {
+	struct sof_ipc_hdr hdr;
+	uint32_t id;
+	enum sof_comp_type type;
+} __attribute__((packed));
+
+/*
+ * Component Buffers
+ */
+
+struct sof_ipc_period {
+	uint32_t size;		/* period size in bytes */
+	uint32_t number;	/* number of periods */
+	uint32_t preload_count;	/* how many periods to preload */
+} __attribute__((packed));
+
+/* create new component buffer - SOF_IPC_TPLG_BUFFER_NEW */
+struct sof_ipc_buffer {
+	struct sof_ipc_comp comp;
+	uint32_t buffer_id;
+	uint32_t size;		/* buffer size in bytes */
+	struct sof_ipc_period period;
+} __attribute__((packed));
 
 /* types of DAI */
 enum sof_ipc_dai_type {
@@ -465,14 +475,6 @@ enum sof_ipc_dai_type {
 };
 
 #define SOF_IPC_MAX_COMP_SIZE	256
-
-/* create new generic component - SOF_IPC_TPLG_COMP_NEW */
-struct sof_ipc_comp {
-	struct sof_ipc_hdr hdr;
-	uint32_t id;
-	uint32_t size;
-	enum sof_comp_type type;
-} __attribute__((packed));
 
 /* generic PCM component data */
 struct sof_ipc_pcm_comp {
@@ -642,9 +644,9 @@ struct sof_ipc_fw_version {
 	uint16_t major;
 	uint16_t minor;
 	uint16_t build;
-	uint8_t date[11];
-	uint8_t time[8];
-	uint8_t tag[5];
+	uint8_t date[12];
+	uint8_t time[10];
+	uint8_t tag[6];
 } __attribute__((packed));
 
 
