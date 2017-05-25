@@ -89,8 +89,6 @@
 #define SOF_IPC_GLB_PM_MSG			SOF_GLB_TYPE(0x3)
 #define SOF_IPC_GLB_COMP_MSG			SOF_GLB_TYPE(0x4)
 #define SOF_IPC_GLB_STREAM_MSG			SOF_GLB_TYPE(0x5)
-#define SOF_IPC_GLB_DAI_MSG			SOF_GLB_TYPE(0x6)
-#define SOF_IPC_GLB_HOST_MSG			SOF_GLB_TYPE(0x7)
 
 /*
  * DSP Command Message Types
@@ -112,22 +110,26 @@
 #define SOF_IPC_TPLG_BUFFER_FREE		SOF_CMD_TYPE(0x021)
 
 /* PM */
-#define SOF_IPC_PM_CTX_SAVE			SOF_CMD_TYPE(0x030)
-#define SOF_IPC_PM_CTX_RESTORE			SOF_CMD_TYPE(0x031)
-#define SOF_IPC_PM_CTX_SIZE			SOF_CMD_TYPE(0x032)
-#define SOF_IPC_PM_CLK_SET			SOF_CMD_TYPE(0x033)
-#define SOF_IPC_PM_CLK_GET			SOF_CMD_TYPE(0x034)
-#define SOF_IPC_PM_CLK_REQ			SOF_CMD_TYPE(0x035)
+#define SOF_IPC_PM_CTX_SAVE			SOF_CMD_TYPE(0x000)
+#define SOF_IPC_PM_CTX_RESTORE			SOF_CMD_TYPE(0x001)
+#define SOF_IPC_PM_CTX_SIZE			SOF_CMD_TYPE(0x002)
+#define SOF_IPC_PM_CLK_SET			SOF_CMD_TYPE(0x003)
+#define SOF_IPC_PM_CLK_GET			SOF_CMD_TYPE(0x004)
+#define SOF_IPC_PM_CLK_REQ			SOF_CMD_TYPE(0x005)
 
-/* component */
-#define SOF_IPC_COMP_SET_VOLUME			SOF_CMD_TYPE(0x040)
-#define SOF_IPC_COMP_GET_VOLUME			SOF_CMD_TYPE(0x041)
-#define SOF_IPC_COMP_SET_MIXER			SOF_CMD_TYPE(0x042)
-#define SOF_IPC_COMP_GET_MIXER			SOF_CMD_TYPE(0x043)
-#define SOF_IPC_COMP_SET_MUX			SOF_CMD_TYPE(0x044)
-#define SOF_IPC_COMP_GET_MUX			SOF_CMD_TYPE(0x045)
-#define SOF_IPC_COMP_SET_SRC			SOF_CMD_TYPE(0x046)
-#define SOF_IPC_COMP_GET_SRC			SOF_CMD_TYPE(0x047)
+/* component - multiple different types */
+#define SOF_IPC_COMP_SET_VOLUME			SOF_CMD_TYPE(0x000)
+#define SOF_IPC_COMP_GET_VOLUME			SOF_CMD_TYPE(0x001)
+#define SOF_IPC_COMP_SET_MIXER			SOF_CMD_TYPE(0x002)
+#define SOF_IPC_COMP_GET_MIXER			SOF_CMD_TYPE(0x003)
+#define SOF_IPC_COMP_SET_MUX			SOF_CMD_TYPE(0x004)
+#define SOF_IPC_COMP_GET_MUX			SOF_CMD_TYPE(0x005)
+#define SOF_IPC_COMP_SET_SRC			SOF_CMD_TYPE(0x006)
+#define SOF_IPC_COMP_GET_SRC			SOF_CMD_TYPE(0x007)
+#define SOF_IPC_COMP_SSP_CONFIG			SOF_CMD_TYPE(0x008)
+#define SOF_IPC_COMP_HDA_CONFIG			SOF_CMD_TYPE(0x009)
+#define SOF_IPC_COMP_DMIC_CONFIG		SOF_CMD_TYPE(0x010)
+#define SOF_IPC_COMP_LOOPBACK			SOF_CMD_TYPE(0x011)
 
 /* stream */
 #define SOF_IPC_STREAM_PCM_PARAMS		SOF_CMD_TYPE(0x001)
@@ -143,14 +145,6 @@
 #define SOF_IPC_STREAM_VORBIS_PARAMS		SOF_CMD_TYPE(0x010)
 #define SOF_IPC_STREAM_VORBIS_FREE		SOF_CMD_TYPE(0x011)
 
-/* DAI */
-#define SOF_IPC_DAI_SSP_CONFIG			SOF_CMD_TYPE(0x090)
-#define SOF_IPC_DAI_HDA_CONFIG			SOF_CMD_TYPE(0x091)
-#define SOF_IPC_DAI_DMIC_CONFIG			SOF_CMD_TYPE(0x092)
-#define SOF_IPC_DAI_LOOPBACK			SOF_CMD_TYPE(0x093)
-
-/* Host Command Message Types */
-#define SOF_IPC_HOST_POSN			SOF_CMD_TYPE(0x000)
 
 /* Get message component id */
 #define SOF_IPC_MESSAGE_ID(x)			(x & 0xffff)
@@ -161,12 +155,9 @@
 /* Firmware Ready Message */
 #define SOF_FW_READY				(0x1 << 29)
 
-// TODO: remove
-#define IPC_INTL_STATUS_MASK			(0x3 << 30)
 
 /* maximum message size for mailbox Tx/Tx */
 #define SOF_IPC_MSG_MAX_SIZE			128
-
 
 /*
  * Command Header - Header for all IPC. Identifies IPC message.
@@ -453,18 +444,11 @@ struct sof_ipc_comp {
  * Component Buffers
  */
 
-struct sof_ipc_period {
-	uint32_t size;		/* period size in bytes */
-	uint32_t number;	/* number of periods */
-	uint32_t preload_count;	/* how many periods to preload */
-} __attribute__((packed));
-
 /* create new component buffer - SOF_IPC_TPLG_BUFFER_NEW */
 struct sof_ipc_buffer {
 	struct sof_ipc_comp comp;
-	uint32_t buffer_id;
 	uint32_t size;		/* buffer size in bytes */
-	struct sof_ipc_period period;
+	uint32_t preload_count;	/* how many periods to preload */
 } __attribute__((packed));
 
 /* types of DAI */

@@ -331,16 +331,9 @@ static void sof_buffer_get_words(struct snd_soc_component *scomp,
 			buffer->size = elem->value;
 			break;
 		case SOF_TKN_BUF_PRELOAD:
-			buffer->period.preload_count = elem->value;
+			buffer->preload_count = elem->value;
 			break;
-		case SOF_TKN_BUF_PER_SIZE:
-			buffer->period.size = elem->value;
-			break;
-		case SOF_TKN_BUF_PER_COUNT:
-			buffer->period.number = elem->value;
-			break;
-		case SOF_TKN_BUF_PER_MIN_SIZE:
-		case SOF_TKN_BUF_PER_MAX_SIZE:
+		// TODO buffer type, i.e. LP/HP etc
 		default:
 			/* non fatal */
 			dev_info(sdev->dev, "info: unexpected buffer token %d\n",

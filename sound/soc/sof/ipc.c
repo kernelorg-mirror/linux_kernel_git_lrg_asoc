@@ -355,8 +355,6 @@ void snd_sof_ipc_process_notification(struct snd_sof_dev *sdev, u32 msg_id)
 	case SOF_IPC_GLB_PM_MSG:
 	case SOF_IPC_GLB_COMP_MSG:
 	case SOF_IPC_GLB_STREAM_MSG:
-	case SOF_IPC_GLB_DAI_MSG:
-	case SOF_IPC_GLB_HOST_MSG:
 	default:
 		dev_err(sdev->dev, "unknown DSP notification 0x%x\n", cmd);
 		break;
