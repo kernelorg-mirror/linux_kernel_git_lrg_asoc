@@ -115,6 +115,7 @@ static int tx_wait_done(struct snd_sof_ipc *ipc, struct snd_sof_ipc_msg *msg,
 	void *reply_data)
 {
 	struct snd_sof_dev *sdev = ipc->sdev;
+	struct sof_ipc_hdr *hdr = (struct sof_ipc_hdr *)msg->msg_data;
 	unsigned long flags;
 	int ret;
 
@@ -124,7 +125,8 @@ static int tx_wait_done(struct snd_sof_ipc *ipc, struct snd_sof_ipc_msg *msg,
 
 	spin_lock_irqsave(&sdev->spinlock, flags);
 	if (ret == 0) {
-		dev_err(sdev->dev, "error: ipc timed out\n");
+		dev_err(sdev->dev, "error: ipc timed out for 0x%x size 0x%x\n",
+			hdr->cmd, hdr->size);
 		list_del(&msg->list);
 		snd_sof_dsp_dbg_dump(ipc->sdev, SOF_DBG_REGS | SOF_DBG_MBOX);
 		ret = -ETIMEDOUT;

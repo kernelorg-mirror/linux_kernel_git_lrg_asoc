@@ -632,7 +632,7 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	dev_dbg(sdev->dev, " mailbox downstream 0x%x - size 0x%x\n",
 		fw_ready->outbox_offset, fw_ready->outbox_size);
 
-	dev_info(sdev->dev, " Firmware info: vesion %d:%d-%s build %d on %s:%s\n", 
+	dev_info(sdev->dev, " Firmware info: version %d:%d-%s build %d on %s:%s\n", 
 		v->major, v->minor, v->tag, v->build, v->date, v->time);
 
 	return 0;

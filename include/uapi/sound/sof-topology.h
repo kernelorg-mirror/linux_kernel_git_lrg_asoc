@@ -58,6 +58,8 @@
 
 /*
  * Topology IDs and tokens.
+ *
+ * ** MUST BE ALIGNED WITH TOPOLOGY CONFIGURATION TOKEN VALUES **
  */
 
 #ifndef __INCLUDE_UAPI_SOF_TOPOLGOY_H__
@@ -75,12 +77,7 @@
 
 /* buffers */
 #define SOF_TKN_BUF_SIZE	 		100
-
 #define SOF_TKN_BUF_PRELOAD	 		101
-#define SOF_TKN_BUF_PER_SIZE 			102
-#define SOF_TKN_BUF_PER_COUNT 			103
-#define SOF_TKN_BUF_PER_MIN_SIZE 		104
-#define SOF_TKN_BUF_PER_MAX_SIZE 		105
 
 /* DAI */
 #define SOF_TKN_DAI_DMAC 			151
@@ -92,6 +89,7 @@
 #define SOF_TKN_SCHED_PRIORITY 			201
 #define SOF_TKN_SCHED_MIPS 			202
 
+/* volume */
 #define SOF_TKN_VOLUME_RAMP_STEP_TYPE 		250
 #define SOF_TKN_VOLUME_RAMP_STEP_MS 		251
 

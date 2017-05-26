@@ -88,6 +88,7 @@ static int sof_control_load_volume(struct snd_soc_component *scomp,
 		return -EINVAL;
 
 	/* init the volume control IPC */
+	memset(&v, 0, sizeof(v));
 	v.comp.hdr.size = sizeof(v);
 	v.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	v.comp.id = scontrol->comp_id = sdev->next_comp_id++;
@@ -248,15 +249,14 @@ static int sof_widget_dai_get_data(struct snd_soc_component *scomp,
 {
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_tplg_private *private = &tw->priv;
-	struct snd_soc_tplg_vendor_array *array;
+	struct snd_soc_tplg_vendor_array *array = private->array;
 	int size = private->size, asize;
 
 	/* private data can be made up of multiple arrays */
 	while (size) {
 
-		array = private->array;
 		asize = array->size;
-printk(KERN_ERR "size 0x%x asize 0x%x\n", size, asize);
+
 		/* validate size */
 		size -= asize;
 		if (size < 0) {
@@ -297,6 +297,7 @@ static int sof_widget_load_dai(struct snd_soc_component *scomp,
 	int ret;
 
 	/* configure dai IPC message */
+	memset(&dai, 0, sizeof(dai));
 	dai.comp.hdr.size = sizeof(dai);
 	dai.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	dai.comp.id = swidget->comp_id ;
@@ -350,13 +351,12 @@ static int sof_widget_buffer_get_data(struct snd_soc_component *scomp,
 {
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_tplg_private *private = &tw->priv;
-	struct snd_soc_tplg_vendor_array *array;
+	struct snd_soc_tplg_vendor_array *array = private->array;
 	int size = private->size, asize;
 
 	/* private data can be made up of multiple arrays */
 	while (size) {
 
-		array = private->array;
 		asize = array->size;
 
 		/* validate size */
@@ -399,6 +399,7 @@ static int sof_widget_load_buffer(struct snd_soc_component *scomp,
 	int ret;
 
 	/* configure dai IPC message */
+	memset(&buffer, 0, sizeof(buffer));
 	buffer.comp.hdr.size = sizeof(buffer);
 	buffer.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_BUFFER_NEW;
 	buffer.comp.id = swidget->comp_id ;
@@ -445,13 +446,12 @@ static int sof_widget_mixer_get_data(struct snd_soc_component *scomp,
 {
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct snd_soc_tplg_private *private = &tw->priv;
-	struct snd_soc_tplg_vendor_array *array;
+	struct snd_soc_tplg_vendor_array *array = private->array;
 	int size = private->size, asize;
 
 	/* private data can be made up of multiple arrays */
 	while (size) {
 
-		array = private->array;
 		asize = array->size;
 
 		/* validate size */
@@ -494,6 +494,7 @@ static int sof_widget_load_mixer(struct snd_soc_component *scomp,
 	int ret;
 
 	/* configure mixer IPC message */
+	memset(&mixer, 0, sizeof(mixer));
 	mixer.comp.hdr.size = sizeof(mixer);
 	mixer.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	mixer.comp.id = swidget->comp_id;
@@ -551,12 +552,12 @@ static int sof_widget_pga_get_data(struct snd_soc_component *scomp,
 
 	/* skip widget private data as its not used for volume */
 	private = (void*)private + private->size;
+	array = private->array;
 	size = private->size;
 
 	/* private data can be made up of multiple arrays */
 	while (size) {
 
-		array = private->array;
 		asize = array->size;
 
 		/* validate size */
@@ -605,6 +606,7 @@ static int sof_widget_load_pga(struct snd_soc_component *scomp,
 	}
 
 	/* configure dai IPC message */
+	memset(&volume, 0, sizeof(volume));
 	volume.comp.hdr.size = sizeof(volume);
 	volume.comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	volume.comp.id = swidget->comp_id;
@@ -663,6 +665,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp,
 		break;
 	case snd_soc_dapm_mux:
 	case snd_soc_dapm_demux:
+		break;
 	case snd_soc_dapm_mixer:
 		ret = sof_widget_load_mixer(scomp, swidget, tw, &reply);
 		break;
@@ -675,6 +678,7 @@ static int sof_widget_ready(struct snd_soc_component *scomp,
 	case snd_soc_dapm_siggen:
 	case snd_soc_dapm_dai_link:
 	case snd_soc_dapm_kcontrol:
+		break;
 	case snd_soc_dapm_buffer:
 		ret = sof_widget_load_buffer(scomp, swidget, tw, &reply);
 		break;
