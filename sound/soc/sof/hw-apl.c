@@ -88,6 +88,8 @@
 #define APL_MBOX_OFFSET 		0x80000
 #define APL_MBOX_DUMP_SIZE 		0x30
 
+#define APL_MBOX_UPLINK_OFFSET	0x81000
+
 #define APL_BDL_ARRAY_ADDR_L			0
 #define APL_BDL_ARRAY_ADDR_U			1
 #define APL_BDL_ARRAY_SIZE			2
@@ -615,9 +617,9 @@ static int apl_fw_ready(struct snd_sof_dev *sdev, u32 msg_id)
 	u32 offset;
 
 	/* mailbox must be on 4k boundary */
-	offset = 0; // TODO
+	offset = APL_MBOX_UPLINK_OFFSET;
 
-	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset %d\n",
+	dev_dbg(sdev->dev, "ipc: DSP is ready 0x%8.8x offset 0x%x\n",
 		msg_id, offset);
 
 	/* copy data from the DSP FW ready offset */
