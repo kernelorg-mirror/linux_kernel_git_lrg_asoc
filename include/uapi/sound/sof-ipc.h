@@ -458,8 +458,6 @@ enum sof_ipc_dai_type {
 	SOF_DAI_INTEL_HDA,
 };
 
-#define SOF_IPC_MAX_COMP_SIZE	256
-
 /* generic PCM component data */
 struct sof_ipc_pcm_comp {
 	uint32_t format;	/* data format */
@@ -559,11 +557,12 @@ struct sof_ipc_comp_reply {
 /* new pipeline - SOF_IPC_TPLG_PIPE_NEW */
 struct sof_ipc_pipe_new {
 	struct sof_ipc_hdr hdr;
+	uint32_t comp_id;	/* component at start of pipeline */ 
 	uint32_t pipeline_id;
 	uint32_t core;		/* core we run on */
-	uint32_t schedule_us;	/* schedule evey us */
-	uint32_t priority;		/* priority level 0 (low) to 10 (max)*/
-	uint32_t low_latency;	/* data is copied from end to end in single tick */
+	uint32_t deadline;	/* execution completion deadline in us*/
+	uint32_t priority;	/* priority level 0 (low) to 10 (max) */
+	uint32_t mips;		/* worst case instruction count per period */
 }  __attribute__((packed));
 
 /* pipeline construction complete - SOF_IPC_TPLG_PIPE_COMPLETE */
@@ -623,6 +622,12 @@ struct sof_ipc_pm_ctx {
  * Firmware boot and version
  */
 
+/* extended data types that can be appended onto end of sof_ipc_fw_ready */
+enum sof_ipc_ext_data {
+	SOF_IPC_EXT_DMA_BUFFER = 0,
+	SOF_IPC_EXT_WINDOW,
+};
+
 /* FW version - SOF_IPC_GLB_VERSION */
 struct sof_ipc_fw_version {
 	uint16_t major;
@@ -633,7 +638,6 @@ struct sof_ipc_fw_version {
 	uint8_t tag[6];
 } __attribute__((packed));
 
-
 /* FW ready Message - sent by firmware when boot has completed */
 struct sof_ipc_fw_ready {
 	struct sof_ipc_hdr hdr;
@@ -642,15 +646,52 @@ struct sof_ipc_fw_ready {
 	uint32_t inbox_size;
 	uint32_t outbox_size;
 	struct sof_ipc_fw_version version;
-	/* TODO: capabilities and features */
+
+	/* header to first extended capability/platform structure */
+	struct sof_ipc_hdr ext_hdr;
 } __attribute__((packed));
 
-/* sent by the driver once FW has booted */
-struct sof_ipc_platform_data {
+/*
+ * Extended Firmware data. All optional, depends on platform/arch.
+ */
+
+enum sof_ipc_region {
+	SOF_IPC_REGION_INBOX	= 0,
+	SOF_IPC_REGION_OUTBOX,
+	SOF_IPC_REGION_TRACE,
+	SOF_IPC_REGION_DEBUG,
+	SOF_IPC_REGION_STREAM,
+};
+
+struct sof_ipc_dma_buffer_elem {
+	enum sof_ipc_region type;
+	uint32_t id;	/* platform specific - used to map to host memory */
+	struct sof_ipc_host_buffer buffer;
+};
+
+/* extended data DMA buffers for IPC, trace and debug */
+struct sof_ipc_dma_buffer_data {
 	struct sof_ipc_hdr hdr;
-	struct sof_ipc_host_buffer ipc_buffer;	/* for DMA IPC mode */
-	struct sof_ipc_host_buffer trace_buffer;	/* trace buffer */
-	struct sof_ipc_host_buffer dbg_buffer;	/* debug buffer */
+	enum sof_ipc_ext_data type;			/* SOF_IPC_EXT_DMA_BUFFER */
+	uint32_t num_buffers;
+	struct sof_ipc_dma_buffer_elem buffer[0];	/* host files in buffer[n].buffer */
+}  __attribute__((packed));
+
+
+struct sof_ipc_window_elem {
+	enum sof_ipc_region type;
+	uint32_t id;	/* platform specific window ID - used to map to host memory */
+	uint32_t offset;/* offset in window for region, as window can be partitioned */
+	uint32_t flags;	/* R, W, RW, etc - to define */
+	uint32_t size;
+};
+
+/* extended data memory windows for IPC, trace and debug */
+struct sof_ipc_window {
+	struct sof_ipc_hdr hdr;
+	enum sof_ipc_ext_data type;			/* SOF_IPC_EXT_DMA_BUFFER */
+	uint32_t num_windows;
+	struct sof_ipc_window_elem window[0];
 }  __attribute__((packed));
 
 #endif

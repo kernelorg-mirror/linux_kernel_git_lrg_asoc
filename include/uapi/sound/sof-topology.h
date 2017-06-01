@@ -88,9 +88,14 @@
 #define SOF_TKN_SCHED_DEADLINE 			200
 #define SOF_TKN_SCHED_PRIORITY 			201
 #define SOF_TKN_SCHED_MIPS 			202
+#define SOF_TKN_SCHED_CORE 			203
 
 /* volume */
 #define SOF_TKN_VOLUME_RAMP_STEP_TYPE 		250
 #define SOF_TKN_VOLUME_RAMP_STEP_MS 		251
+
+/* SRC */
+#define SOF_TKN_SRC_RATE_IN			300
+#define SOF_TKN_SRC_RATE_OUT			301
 
 #endif
