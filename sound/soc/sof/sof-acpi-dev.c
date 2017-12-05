@@ -64,20 +64,17 @@
 #include <linux/firmware.h>
 #include <sound/pcm.h>
 #include <sound/sof.h>
+#include <sound/soc-acpi.h>
 #include <linux/acpi.h>
 #include <acpi/acpi_bus.h>
 #include <asm/cpu_device_id.h>
 #include <asm/iosf_mbi.h>
 #include "sof-priv.h"
 
-/* machine driver reuse - platform data */
-#include "../intel/common/sst-acpi.h"
-
-
 static struct platform_device * 
 	mfld_new_mach_data(struct snd_sof_pdata *sof_pdata)
 {
-	struct sst_acpi_mach pmach;
+	struct snd_soc_acpi_mach pmach;
 	struct device *dev = &sof_pdata->pdev->dev;
 	const struct snd_sof_machine *mach = sof_pdata->machine;
 	struct platform_device *pdev = NULL;
@@ -226,10 +223,10 @@ static int sof_acpi_probe(struct platform_device *pdev)
 	if (mach->new_mach_data)
 		sof_pdata->pdev_mach = mach->new_mach_data(sof_pdata);
 	else
-		/* register machine driver, pass machine info as pdata */
+		/* register machine driver without plat data*/
 		sof_pdata->pdev_mach =
 			platform_device_register_data(dev, mach->drv_name, -1,
-						      (const void *)mach, sizeof(*mach));
+				NULL, 0);
 	if (IS_ERR(sof_pdata->pdev_mach))
 		return PTR_ERR(sof_pdata->pdev_mach);
 	dev_dbg(dev, "created machine %s\n",
