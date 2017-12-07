@@ -269,8 +269,8 @@ static const struct sof_dev_desc byt_desc = {
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_CANNONLAKE)
 static const struct snd_sof_machine sof_cnl_machines[] = {
-	{ "INT34C2", "cnl_alc700_i2s", "intel/dsp_fw_cnl.bin",
-		"intel/sof-cnl.tplg", "0000:00:0e.0", &snd_sof_cnl_ops },
+	{ "INT34C2", "cnl_alc700_i2s", "intel/reef-cnl.ri",
+		"intel/reef-cnl.tplg", "0000:00:0e.0", &snd_sof_cnl_ops },
 };
 
 static const struct sof_dev_desc cnl_desc = {
@@ -280,8 +280,8 @@ static const struct sof_dev_desc cnl_desc = {
 	.resindex_imr_base	= -1,
 	.irqindex_host_ipc	= -1,
 	.resindex_dma_base	= -1,
-	.nocodec_fw_filename = "intel/dsp_fw_cnl.bin",
-	.nocodec_tplg_filename = "intel/sof-cnl.tplg"
+	.nocodec_fw_filename = "intel/reef-cnl.ri",
+	.nocodec_tplg_filename = "intel/reef-cnl.tplg"
 };
 #endif
 
