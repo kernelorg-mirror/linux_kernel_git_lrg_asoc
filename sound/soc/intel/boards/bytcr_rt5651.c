@@ -38,6 +38,7 @@ enum {
 	BYT_RT5651_DMIC_MAP,
 	BYT_RT5651_IN1_MAP,
 	BYT_RT5651_IN2_MAP,
+	BYT_RT5651_IN3_MAP,
 };
 
 #define BYT_RT5651_MAP(quirk)	((quirk) & GENMASK(7, 0))
@@ -62,6 +63,8 @@ static void log_quirks(struct device *dev)
 		dev_info(dev, "quirk IN1_MAP enabled");
 	if (BYT_RT5651_MAP(byt_rt5651_quirk) == BYT_RT5651_IN2_MAP)
 		dev_info(dev, "quirk IN2_MAP enabled");
+	if (BYT_RT5651_MAP(byt_rt5651_quirk) == BYT_RT5651_IN3_MAP)
+		dev_info(dev, "quirk IN3_MAP enabled");
 	if (byt_rt5651_quirk & BYT_RT5651_DMIC_EN)
 		dev_info(dev, "quirk DMIC enabled");
 	if (byt_rt5651_quirk & BYT_RT5651_MCLK_EN)
@@ -138,14 +141,14 @@ static const struct snd_soc_dapm_route byt_rt5651_audio_map[] = {
 	{"Headset Mic", NULL, "Platform Clock"},
 	{"Internal Mic", NULL, "Platform Clock"},
 	{"Speaker", NULL, "Platform Clock"},
-
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"AIF1 Playback", NULL, "ssp2 Tx"},
 	{"ssp2 Tx", NULL, "codec_out0"},
 	{"ssp2 Tx", NULL, "codec_out1"},
 	{"codec_in0", NULL, "ssp2 Rx"},
 	{"codec_in1", NULL, "ssp2 Rx"},
 	{"ssp2 Rx", NULL, "AIF1 Capture"},
-
+#endif
 	{"Headset Mic", NULL, "micbias1"}, /* lowercase for rt5651 */
 	{"Headphone", NULL, "HPOL"},
 	{"Headphone", NULL, "HPOR"},
@@ -169,6 +172,12 @@ static const struct snd_soc_dapm_route byt_rt5651_intmic_in2_map[] = {
 	{"Internal Mic", NULL, "micbias1"},
 	{"IN1P", NULL, "Headset Mic"},
 	{"IN2P", NULL, "Internal Mic"},
+};
+
+static const struct snd_soc_dapm_route byt_rt5651_intmic_in3_map[] = {
+	{"Internal Mic", NULL, "micbias1"},
+	{"IN3P", NULL, "Headset Mic"},
+	{"IN1P", NULL, "Internal Mic"},
 };
 
 static const struct snd_kcontrol_new byt_rt5651_controls[] = {
@@ -247,8 +256,7 @@ static const struct dmi_system_id byt_rt5651_quirk_table[] = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Circuitco"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Minnowboard Max B3 PLATFORM"),
 		},
-		.driver_data = (void *)(BYT_RT5651_DMIC_MAP |
-					BYT_RT5651_DMIC_EN),
+		.driver_data = (void *)(BYT_RT5651_IN3_MAP),
 	},
 	{
 		.callback = byt_rt5651_quirk_cb,
@@ -280,6 +288,10 @@ static int byt_rt5651_init(struct snd_soc_pcm_runtime *runtime)
 	case BYT_RT5651_IN2_MAP:
 		custom_map = byt_rt5651_intmic_in2_map;
 		num_routes = ARRAY_SIZE(byt_rt5651_intmic_in2_map);
+		break;
+	case BYT_RT5651_IN3_MAP:
+		custom_map = byt_rt5651_intmic_in3_map;
+		num_routes = ARRAY_SIZE(byt_rt5651_intmic_in3_map);
 		break;
 	default:
 		custom_map = byt_rt5651_intmic_dmic_map;
@@ -458,7 +470,11 @@ static struct snd_soc_dai_link byt_rt5651_dais[] = {
 
 /* SoC card */
 static struct snd_soc_card byt_rt5651_card = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	.name = "bytcr-rt5651",
+#else
+	.name = "bytcr_rt5651",
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = byt_rt5651_dais,
 	.num_links = ARRAY_SIZE(byt_rt5651_dais),

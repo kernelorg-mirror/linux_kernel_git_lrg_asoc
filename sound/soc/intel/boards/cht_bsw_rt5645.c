@@ -119,6 +119,7 @@ static const struct snd_soc_dapm_widget cht_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Int Mic", NULL),
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
+	SND_SOC_DAPM_LINE("Line Out", NULL),
 	SND_SOC_DAPM_SUPPLY("Platform Clock", SND_SOC_NOPM, 0, 0,
 			platform_clock_control, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 };
@@ -132,10 +133,13 @@ static const struct snd_soc_dapm_route cht_rt5645_audio_map[] = {
 	{"Headphone", NULL, "HPOR"},
 	{"Ext Spk", NULL, "SPOL"},
 	{"Ext Spk", NULL, "SPOR"},
+	{"Line Out", NULL, "LOUTL"},
+	{"Line Out", NULL, "LOUTR"},
 	{"Headphone", NULL, "Platform Clock"},
 	{"Headset Mic", NULL, "Platform Clock"},
 	{"Int Mic", NULL, "Platform Clock"},
 	{"Ext Spk", NULL, "Platform Clock"},
+	{"Line Out", NULL, "Platform Clock"},
 };
 
 static const struct snd_soc_dapm_route cht_rt5650_audio_map[] = {
@@ -147,42 +151,53 @@ static const struct snd_soc_dapm_route cht_rt5650_audio_map[] = {
 	{"Headphone", NULL, "HPOR"},
 	{"Ext Spk", NULL, "SPOL"},
 	{"Ext Spk", NULL, "SPOR"},
+	{"Line Out", NULL, "LOUTL"},
+	{"Line Out", NULL, "LOUTR"},
 	{"Headphone", NULL, "Platform Clock"},
 	{"Headset Mic", NULL, "Platform Clock"},
 	{"Int Mic", NULL, "Platform Clock"},
 	{"Ext Spk", NULL, "Platform Clock"},
+	{"Line Out", NULL, "Platform Clock"},
 };
 
 static const struct snd_soc_dapm_route cht_rt5645_ssp2_aif1_map[] = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"AIF1 Playback", NULL, "ssp2 Tx"},
 	{"ssp2 Tx", NULL, "codec_out0"},
 	{"ssp2 Tx", NULL, "codec_out1"},
 	{"codec_in0", NULL, "ssp2 Rx" },
 	{"codec_in1", NULL, "ssp2 Rx" },
 	{"ssp2 Rx", NULL, "AIF1 Capture"},
+#endif
 };
 
 static const struct snd_soc_dapm_route cht_rt5645_ssp2_aif2_map[] = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"AIF2 Playback", NULL, "ssp2 Tx"},
 	{"ssp2 Tx", NULL, "codec_out0"},
 	{"ssp2 Tx", NULL, "codec_out1"},
 	{"codec_in0", NULL, "ssp2 Rx" },
 	{"codec_in1", NULL, "ssp2 Rx" },
 	{"ssp2 Rx", NULL, "AIF2 Capture"},
+#endif
 };
 
 static const struct snd_soc_dapm_route cht_rt5645_ssp0_aif1_map[] = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"AIF1 Playback", NULL, "ssp0 Tx"},
 	{"ssp0 Tx", NULL, "modem_out"},
 	{"modem_in", NULL, "ssp0 Rx" },
 	{"ssp0 Rx", NULL, "AIF1 Capture"},
+#endif
 };
 
 static const struct snd_soc_dapm_route cht_rt5645_ssp0_aif2_map[] = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	{"AIF2 Playback", NULL, "ssp0 Tx"},
 	{"ssp0 Tx", NULL, "modem_out"},
 	{"modem_in", NULL, "ssp0 Rx" },
 	{"ssp0 Rx", NULL, "AIF2 Capture"},
+#endif
 };
 
 static const struct snd_kcontrol_new cht_mc_controls[] = {
@@ -466,7 +481,11 @@ static struct snd_soc_dai_link cht_dailink[] = {
 
 /* SoC card */
 static struct snd_soc_card snd_soc_card_chtrt5645 = {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 	.name = "chtrt5645",
+#else
+	.name = "cht-bsw-rt5645",
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = cht_dailink,
 	.num_links = ARRAY_SIZE(cht_dailink),
@@ -578,11 +597,13 @@ static int snd_cht_mc_probe(struct platform_device *pdev)
 	 * (will be overridden if DMI quirk is detected)
 	 */
 	if (is_valleyview()) {
+#if !IS_ENABLED(CONFIG_SND_SOC_SOF_INTEL)
 		struct sst_platform_info *p_info = mach->pdata;
 		const struct sst_res_info *res_info = p_info->res_info;
 
 		if (res_info->acpi_ipc_irq_index == 0)
 			is_bytcr = true;
+#endif
 	}
 
 	if (is_bytcr) {
