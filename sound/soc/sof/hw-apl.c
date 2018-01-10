@@ -590,17 +590,22 @@ static int apl_transfer_fw(struct snd_sof_dev *sdev, int stream_tag)
  * set up Buffer Descriptor List (BDL) for host memory transfer
  * BDL describes the location of the individual buffers and is little endian.
  */
-static int apl_cl_setup_bdl(struct snd_sof_dev *sdev, 
+static int apl_stream_setup_bdl(struct snd_sof_dev *sdev,
 	struct snd_dma_buffer *dmab,
 	struct snd_sof_hda_stream *stream, __le32 **bdlp,
-	int size)
+	int size, struct snd_pcm_hw_params *params)
 {
 	__le32 *bdl = *bdlp;
 	int offset = 0;
+	int chunk = PAGE_SIZE, entry_size;
+	dma_addr_t addr;
+
+	if (stream->substream && params) {
+		chunk = params_period_bytes(params);
+		dev_dbg(sdev->dev, "period_bytes:0x%x\n", chunk);
+	}
 
 	while (size > 0) {
-		dma_addr_t addr;
-		int chunk;
 
 		if (stream->frags >= APL_MAX_BDL_ENTRIES) {
 			dev_err(sdev->dev, "error: stream frags exceeded\n");
@@ -613,25 +618,26 @@ static int apl_cl_setup_bdl(struct snd_sof_dev *sdev,
 		bdl[APL_BDL_ARRAY_ADDR_L] = cpu_to_le32(lower_32_bits(addr)); 
 		bdl[APL_BDL_ARRAY_ADDR_U] = cpu_to_le32(upper_32_bits(addr));
 
-		/* program BDL size */
-//		chunk = snd_sgbuf_get_chunk_size(dmab, offset, size);
-		chunk = 4096; /* need make sure we have at least 2 BDL items */
+		entry_size = size > chunk ? chunk : size;
 
-		bdl[APL_BDL_ARRAY_SIZE] = cpu_to_le32(chunk);
+		/* program BDL size */
+		entry_size = snd_sgbuf_get_chunk_size(dmab, offset, entry_size);
+
+		bdl[APL_BDL_ARRAY_SIZE] = cpu_to_le32(entry_size);
 
 		/* program the IOC to enable interrupt
 		 * when the whole fragment is processed
 		 */
-		size -= chunk;
+		size -= entry_size;
 		if (size)
 			bdl[APL_BDL_ARRAY_IOC] = 0;
 		else
 			bdl[APL_BDL_ARRAY_IOC] = cpu_to_le32(0x01);
 		bdl += 4;
 		stream->frags++;
-		offset += chunk;
-		dev_dbg(sdev->dev, "bdl, frags:%d, chunk size:0x%x;\n",
-				stream->frags, chunk);
+		offset += entry_size;
+		dev_dbg(sdev->dev, "bdl, frags:%d, entry size:0x%x;\n",
+				stream->frags, entry_size);
 	}
 
 	*bdlp = bdl;
@@ -723,6 +729,8 @@ static int apl_stream_prepare(struct snd_sof_dev *sdev,
 	u32 val, mask;
 	u32 *bdl, size = params_buffer_bytes(params);
 
+	stream->substream = substream;
+
 	if (stream == NULL) {
 		dev_err(sdev->dev, "error: no stream available\n");
 		return -ENODEV;
@@ -794,7 +802,7 @@ static int apl_stream_prepare(struct snd_sof_dev *sdev,
 	stream->frags = 0;
 
 	bdl = (u32 *)stream->bdl.area;
-	ret = apl_cl_setup_bdl(sdev, dmab, stream, &bdl, size);
+	ret = apl_stream_setup_bdl(sdev, dmab, stream, &bdl, size, params);
 	if (ret < 0) {
 		dev_dbg(sdev->dev, "error: set up bdl fail\n");
 		goto error;
@@ -986,7 +994,7 @@ has_stream:
 	stream->frags = 0;
 
 	bdl = (u32 *)stream->bdl.area;
-	ret = apl_cl_setup_bdl(sdev, dmab, stream, &bdl, size);
+	ret = apl_stream_setup_bdl(sdev, dmab, stream, &bdl, size, NULL);
 	if (ret < 0) {
 		dev_dbg(sdev->dev, "error: set up bdl fail\n");
 		goto error;
