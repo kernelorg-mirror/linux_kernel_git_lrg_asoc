@@ -857,7 +857,8 @@ static int apl_stream_prepare(struct snd_sof_dev *sdev,
 	} else
 		stream->fifo_size = 0;
 
-	apl_spib_config(sdev, stream, APL_SPIB_ENABLE, size);
+	/* disable SPIB, to enable buffer wrap for stream */
+	apl_spib_config(sdev, stream, APL_SPIB_DISABLE, 0);
 
 	snd_sof_dsp_write(sdev, APL_HDA_BAR, stream->sd_offset +
 			SOF_HDA_PPHC_BASE + SOF_HDA_PPHC_INTERVAL *
