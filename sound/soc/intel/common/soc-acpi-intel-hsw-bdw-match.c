@@ -50,7 +50,7 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_broadwell_machines[] = {
 	},
 	{
 		.id = "INT33CA",
-		.drv_name = "haswell-audio",
+		.drv_name = "bdw-rt5640",
 		.fw_filename = "intel/IntcSST2.bin",
 		.sof_fw_filename = "intel/reef-bdw.ri",
 		.sof_tplg_filename = "intel/reef-bdw-rt5640.tplg",
