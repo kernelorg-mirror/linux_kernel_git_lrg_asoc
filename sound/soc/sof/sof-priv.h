@@ -57,7 +57,14 @@ struct snd_sof_ipc;
 struct snd_sof_debugfs_map;
 struct snd_soc_tplg_ops;
 struct snd_soc_component;
+struct sof_intel_hda_dev;
+struct snd_sof_pdata;
 
+/*
+ * SOF DSP HW abstraction operations.
+ * Used to abstract DSP HW architecture and any IO busses between host CPU
+ * and DSP device(s).
+ */
 struct snd_sof_dsp_ops {
 	/* probe and remove */
 	int (*remove)(struct snd_sof_dev *sof_dev);
@@ -95,9 +102,9 @@ struct snd_sof_dsp_ops {
 
 	/* mailbox */
 	void (*mailbox_read)(struct snd_sof_dev *sof_dev, u32 offset,
-			     void __iomem *addr, size_t bytes);
+			     void *addr, size_t bytes);
 	void (*mailbox_write)(struct snd_sof_dev *sof_dev, u32 offset,
-			      void __iomem *addr, size_t bytes);
+			      void *addr, size_t bytes);
 
 	/* ipc */
 	int (*send_msg)(struct snd_sof_dev *sof_dev,
@@ -124,6 +131,10 @@ struct snd_sof_dsp_ops {
 			     struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params);
 
+	/* host stream trigger */
+	int (*pcm_trigger)(struct snd_sof_dev *sdev,
+			   struct snd_pcm_substream *substream, int cmd);
+
 	/* FW loading */
 	int (*load_firmware)(struct snd_sof_dev *sof_dev,
 			     const struct firmware *fw);
@@ -141,21 +152,36 @@ struct snd_sof_dsp_ops {
 	int num_drv;
 };
 
-struct snd_sof_pdata;
+/* DSP architecture specific callbacks for oops and stack dumps */
+struct sof_arch_ops {
+	void (*dsp_oops)(struct snd_sof_dev *sdev, void *oops);
+	void (*dsp_stack)(struct snd_sof_dev *sdev, void *oops,
+			  u32 *stack, u32 stack_words);
+};
 
+/* DSP device HW descriptor mapping between bus ID and ops */
 struct sof_ops_table {
 	const struct sof_dev_desc *desc;
 	struct snd_sof_dsp_ops *ops;
 	struct platform_device *(*new_data)(struct snd_sof_pdata *pdata);
 };
 
-struct snd_sof_dfsentry {
+/* FS entry for debug files that can expose DSP memories, registers */
+struct snd_sof_dfsentry_io {
+	struct dentry *dfsentry;
+	size_t size;
+	void __iomem *buf;
+	struct snd_sof_dev *sdev;
+};
+
+struct snd_sof_dfsentry_buf {
 	struct dentry *dfsentry;
 	size_t size;
 	void *buf;
 	struct snd_sof_dev *sdev;
 };
 
+/* Debug mapping for any DSP memory or registers that can used for debug */
 struct snd_sof_debugfs_map {
 	const char *name;
 	u32 bar;
@@ -163,64 +189,13 @@ struct snd_sof_debugfs_map {
 	u32 size;
 };
 
+/* mailbox descriptor, used for host <-> DSP IPC */
 struct snd_sof_mailbox {
 	u32 offset;
 	size_t size;
 };
 
-struct snd_sof_pcm_stream {
-	u32 comp_id;
-	struct snd_dma_buffer page_table;
-	struct sof_ipc_stream_posn posn;
-	struct snd_pcm_substream *substream;
-};
-
-struct snd_sof_pcm {
-	struct snd_sof_dev *sdev;
-	struct snd_soc_tplg_pcm pcm;
-	struct snd_sof_pcm_stream stream[2];
-	u32 posn_offset[2];
-	struct mutex mutex;
-	struct list_head list;	/* list in sdev pcm list */
-};
-
-struct snd_sof_control {
-	struct snd_sof_dev *sdev;
-	int comp_id;
-	int num_channels;
-	u32 readback_offset; /* offset to mmaped data if used */
-	struct sof_ipc_ctrl_data *control_data;
-	u32 size;	/* cdata size */
-	enum sof_ipc_ctrl_cmd cmd;
-	u32 *volume_table; /* volume table computed from tlv data*/
-
-	struct mutex mutex;
-	struct list_head list;	/* list in sdev control list */
-};
-
-struct snd_sof_widget {
-	struct snd_sof_dev *sdev;
-	int comp_id;
-	int pipeline_id;
-	int complete;
-	int id;
-
-	struct snd_soc_dapm_widget *widget;
-	struct mutex mutex;
-	struct list_head list;	/* list in sdev widget list */
-
-	void *private;			/* core does not touch this */
-};
-
-struct snd_sof_dai {
-	struct snd_sof_dev *sdev;
-	const char *name;
-
-	struct sof_ipc_comp_dai comp_dai;
-	struct sof_ipc_dai_config dai_config;
-	struct list_head list;	/* list in sdev dai list */
-};
-
+/* IPC message descriptor for host <-> DSP IO */
 struct snd_sof_ipc_msg {
 	struct list_head list;
 
@@ -235,7 +210,63 @@ struct snd_sof_ipc_msg {
 	bool complete;
 };
 
-struct sof_intel_hda_dev;
+/* PCM stream, mapped to FW component  */
+struct snd_sof_pcm_stream {
+	u32 comp_id;
+	struct snd_dma_buffer page_table;
+	struct sof_ipc_stream_posn posn;
+	struct snd_pcm_substream *substream;
+};
+
+/* ASLA SOF PCM device */
+struct snd_sof_pcm {
+	struct snd_sof_dev *sdev;
+	struct snd_soc_tplg_pcm pcm;
+	struct snd_sof_pcm_stream stream[2];
+	u32 posn_offset[2];
+	struct mutex mutex;
+	struct list_head list;	/* list in sdev pcm list */
+};
+
+/* ALSA SOF Kcontrol device */
+struct snd_sof_control {
+	struct snd_sof_dev *sdev;
+	int comp_id;
+	int num_channels;
+	u32 readback_offset; /* offset to mmaped data if used */
+	struct sof_ipc_ctrl_data *control_data;
+	u32 size;	/* cdata size */
+	enum sof_ipc_ctrl_cmd cmd;
+	u32 *volume_table; /* volume table computed from tlv data*/
+
+	struct mutex mutex;
+	struct list_head list;	/* list in sdev control list */
+};
+
+/* ASoC SOF DAPM widget */
+struct snd_sof_widget {
+	struct snd_sof_dev *sdev;
+	int comp_id;
+	int pipeline_id;
+	int complete;
+	int id;
+
+	struct snd_soc_dapm_widget *widget;
+	struct mutex mutex;
+	struct list_head list;	/* list in sdev widget list */
+
+	void *private;		/* core does not touch this */
+};
+
+/* ASoC DAI device */
+struct snd_sof_dai {
+	struct snd_sof_dev *sdev;
+	const char *name;
+
+	struct sof_ipc_comp_dai comp_dai;
+	struct sof_ipc_dai_config dai_config;
+	struct list_head list;	/* list in sdev dai list */
+};
 
 /*
  * SOF Device Level.
@@ -258,6 +289,7 @@ struct snd_sof_dev {
 	struct snd_sof_pdata *pdata;
 	const struct snd_sof_dsp_ops *ops;
 	struct sof_intel_hda_dev *hda;	/* for HDA based DSP HW */
+	const struct sof_arch_ops *arch_ops;
 
 	/* IPC */
 	struct snd_sof_ipc *ipc;
@@ -371,6 +403,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_comp(struct snd_sof_dev *sdev,
 					   int *direction);
 struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_sof_dev *sdev,
 					     unsigned int pcm_id);
+void sof_ipc_drop_all(struct snd_sof_ipc *ipc);
 
 /*
  * Stream IPC
@@ -438,4 +471,21 @@ int snd_sof_bytes_get(struct snd_kcontrol *kcontrol,
 int snd_sof_bytes_put(struct snd_kcontrol *kcontrol,
 		      struct snd_ctl_elem_value *ucontrol);
 
+/*
+ * DSP Architectures.
+ */
+static inline void sof_stack(struct snd_sof_dev *sdev, void *oops, u32 *stack,
+			     u32 stack_words)
+{
+	if (sdev->arch_ops->dsp_stack)
+		sdev->arch_ops->dsp_stack(sdev, oops, stack, stack_words);
+}
+
+static inline void sof_oops(struct snd_sof_dev *sdev, void *oops)
+{
+	if (sdev->arch_ops->dsp_oops)
+		sdev->arch_ops->dsp_oops(sdev, oops);
+}
+
+extern const struct sof_arch_ops sof_xtensa_arch_ops;
 #endif

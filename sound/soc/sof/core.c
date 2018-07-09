@@ -8,6 +8,7 @@
  * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
@@ -33,7 +34,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_dai(struct snd_sof_dev *sdev,
 	struct snd_sof_pcm *spcm = NULL;
 
 	list_for_each_entry(spcm, &sdev->pcm_list, list) {
-		if (spcm->pcm.dai_id == rtd->dai_link->id)
+		if (le32_to_cpu(spcm->pcm.dai_id) == rtd->dai_link->id)
 			return spcm;
 	}
 
@@ -86,7 +87,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_sof_dev *sdev,
 	struct snd_sof_pcm *spcm = NULL;
 
 	list_for_each_entry(spcm, &sdev->pcm_list, list) {
-		if (spcm->pcm.pcm_id == pcm_id)
+		if (le32_to_cpu(spcm->pcm.pcm_id) == pcm_id)
 			return spcm;
 	}
 
@@ -122,6 +123,11 @@ struct snd_sof_dai *snd_sof_find_dai(struct snd_sof_dev *sdev,
 	return NULL;
 }
 
+static inline unsigned int sof_get_pages(size_t size)
+{
+	return (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+}
+
 /*
  * FW Panic/fault handling.
  */
@@ -144,62 +150,6 @@ static const struct sof_panic_msg panic_msg[] = {
 	{SOF_IPC_PANIC_STACK, "stack overflow"},
 	{SOF_IPC_PANIC_IDLE, "can't enter idle"},
 };
-
-/* only need xtensa atm */
-static void sof_arch_dsp_oops(struct snd_sof_dev *sdev, void *oops)
-{
-	struct sof_ipc_dsp_oops_xtensa *xoops = oops;
-
-	dev_err(sdev->dev, "error: DSP Firmware Oops\n");
-	dev_err(sdev->dev, "EXCCAUSE 0x%8.8x EXCVADDR 0x%8.8x PS       0x%8.8x SAR     0x%8.8x\n",
-		xoops->exccause, xoops->excvaddr, xoops->ps, xoops->sar);
-	dev_err(sdev->dev, "EPC1     0x%8.8x EPC2     0x%8.8x EPC3     0x%8.8x EPC4    0x%8.8x",
-		xoops->epc1, xoops->epc2, xoops->epc3, xoops->epc4);
-	dev_err(sdev->dev, "EPC5     0x%8.8x EPC6     0x%8.8x EPC7     0x%8.8x DEPC    0x%8.8x",
-		xoops->epc5, xoops->epc6, xoops->epc7, xoops->depc);
-	dev_err(sdev->dev, "EPS2     0x%8.8x EPS3     0x%8.8x EPS4     0x%8.8x EPS5    0x%8.8x",
-		xoops->eps2, xoops->eps3, xoops->eps4, xoops->eps5);
-	dev_err(sdev->dev, "EPS6     0x%8.8x EPS7     0x%8.8x INTENABL 0x%8.8x INTERRU 0x%8.8x",
-		xoops->eps6, xoops->eps7, xoops->intenable, xoops->interrupt);
-}
-
-static void sof_dsp_dump_stack(struct snd_sof_dev *sdev, void *oops,
-			       u32 *stack, u32 stack_words)
-{
-	struct sof_ipc_dsp_oops_xtensa *xoops = oops;
-	u32 stack_ptr = xoops->stack;
-	int i;
-
-	dev_err(sdev->dev, "stack dump from 0x%8.8x\n", stack_ptr);
-
-	for (i = 0; i <= stack_words - 4; i += 4) {
-		dev_err(sdev->dev, "0x%8.8x: 0x%8.8x 0x%8.8x 0x%8.8x 0x%8.8x\n",
-			stack_ptr + i, stack[i], stack[i + 1], stack[i + 2],
-			stack[i + 3]);
-	}
-
-	/* deal with any remaining words */
-	switch (stack_words - i) {
-	case 0:
-		break;
-	case 1:
-		dev_err(sdev->dev, "0x%8.8x: 0x%8.8x\n",
-			stack_ptr + stack_words - 1, stack[stack_words - 1]);
-		break;
-	case 2:
-		dev_err(sdev->dev, "0x%8.8x: 0x%8.8x 0x%8.8x\n",
-			stack_ptr + stack_words - 2, stack[stack_words - 2],
-			stack[stack_words - 1]);
-		break;
-	case 3:
-		dev_err(sdev->dev, "0x%8.8x: 0x%8.8x 0x%8.8x 0x%8.8x\n",
-			stack_ptr + stack_words - 3, stack[stack_words - 3],
-			stack[stack_words - 2], stack[stack_words - 1]);
-		break;
-	default:
-		break;
-	}
-}
 
 int snd_sof_get_status(struct snd_sof_dev *sdev, u32 panic_code,
 		       u32 tracep_code, void *oops, void *stack,
@@ -232,8 +182,8 @@ int snd_sof_get_status(struct snd_sof_dev *sdev, u32 panic_code,
 	dev_err(sdev->dev, "error: trace point %8.8x\n", tracep_code);
 
 out:
-	sof_arch_dsp_oops(sdev, oops);
-	sof_dsp_dump_stack(sdev, oops, stack, stack_words);
+	sof_oops(sdev, oops);
+	sof_stack(sdev, oops, stack, stack_words);
 	return -EFAULT;
 }
 EXPORT_SYMBOL(snd_sof_get_status);
@@ -406,6 +356,12 @@ static int sof_remove(struct platform_device *pdev)
 	snd_sof_remove(sdev);
 	return 0;
 }
+
+void snd_sof_shutdown(struct device *dev)
+{
+}
+EXPORT_SYMBOL(snd_sof_shutdown);
+
 
 static struct platform_driver sof_driver = {
 	.driver = {
